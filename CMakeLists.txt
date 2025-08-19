@@ -21,6 +21,7 @@ set(SOURCES
     src/nejicast.cpp
     src/common/file.cpp
     src/hw/g1/g1.cpp
+    src/hw/holly/bus.cpp
 )
 
 # Set header files
@@ -29,6 +30,7 @@ set(HEADERS
     include/common/file.hpp
     include/common/types.hpp
     include/hw/g1/g1.hpp
+    include/hw/holly/bus.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
