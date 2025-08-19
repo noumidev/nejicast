@@ -19,9 +19,14 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 # Set source files
 set(SOURCES
     src/nejicast.cpp
+    src/common/file.cpp
 )
 
 # Set header files
-set(HEADERS)
+set(HEADERS
+    include/common/config.hpp
+    include/common/file.hpp
+    include/common/types.hpp
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
