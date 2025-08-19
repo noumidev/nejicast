@@ -3,6 +3,8 @@
  * Copyright (C) 2025  noumidev
  */
 
+#pragma once
+
 #include <vector>
 
 #include <common/types.hpp>
