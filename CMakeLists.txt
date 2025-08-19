@@ -26,6 +26,7 @@ set(SOURCES
 
 # Set header files
 set(HEADERS
+    include/nejicast.hpp
     include/common/config.hpp
     include/common/file.hpp
     include/common/types.hpp
