@@ -23,12 +23,14 @@ constexpr usize PAGE_MASK = PAGE_SIZE - 1;
 namespace MemoryBase {
     enum : u32 {
         BootRom = 0x00000000,
+        G1      = 0x005F7400,
     };
 }
 
 namespace MemorySize {
     enum : u32 {
         BootRom = 0x00200000,
+        Io      = 0x00000100,
     };
 }
 
@@ -102,6 +104,11 @@ T read(const u32 addr) {
         return data;
     }
 
+    switch (addr & ~(MemorySize::Io - 1)) {
+        case MemoryBase::G1:
+            return hw::g1::read<T>(addr);
+    }
+
     std::printf("Unmapped read%zu @ %08X\n", 8 * sizeof(T), addr);
     exit(1);
 }
@@ -120,6 +127,11 @@ void write(const u32 addr, const T data) {
     if (ctx.wr_table[page] != nullptr) {
         std::memcpy(&ctx.wr_table[page][offset], &data, sizeof(data));
         return;
+    }
+
+    switch (addr & ~(MemorySize::Io - 1)) {
+        case MemoryBase::G1:
+            return hw::g1::write<T>(addr, data);
     }
 
     std::printf("Unmapped write%zu @ %08X = %0*X\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), data);

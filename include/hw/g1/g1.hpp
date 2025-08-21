@@ -14,6 +14,12 @@ void initialize(const char* boot_path);
 void reset();
 void shutdown();
 
+template<typename T>
+T read(const u32 addr);
+
+template<typename T>
+void write(const u32 addr, const T data);
+
 u8* get_boot_rom_ptr();
 
 }
