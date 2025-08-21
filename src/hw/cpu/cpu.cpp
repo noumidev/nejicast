@@ -7,8 +7,10 @@
 
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <hw/holly/bus.hpp>
@@ -27,9 +29,8 @@ static inline u32 get_mask(const u32 start, const u32 end) {
     return (UINT32_MAX << start) & (UINT32_MAX >> ((8 * sizeof(u32) - 1) - end));
 }
 
-[[maybe_unused]]
 static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
-    return (n & get_mask(start, end)) >> end;
+    return (n & get_mask(start, end)) >> start;
 }
 
 // Register file macros
@@ -76,32 +77,6 @@ struct {
 
     i64 cycles;
 } ctx;
-
-template<typename T>
-void fillTableEntries(T table[], const char* pattern, T func) {
-    usize mask = 0;
-    usize value = 0;
-
-    const usize length = std::strlen(pattern);
-
-    for (usize i = 0; i < length; i++) {
-        const usize shifted_bit = 1 << (length - i - 1);
-
-        const char bit = pattern[i];
-        if (bit == '0') {
-            mask |= shifted_bit;
-        } else if (bit == '1') {
-            mask |= shifted_bit;
-            value |= shifted_bit;
-        }
-    }
-
-    for (usize i = 0; i < (1 << length); i++) {
-        if ((i & mask) == value) {
-            table[i] = func;
-        }
-    }
-}
 
 static void dump_registers() {
     u32* bank_0 = (SR.select_bank) ? BANKED_GPRS : GPRS; 
@@ -179,7 +154,7 @@ constexpr u32 P0_MASK = 0x7FFFFFFF;
 constexpr u32 PRIV_MASK = 0x1FFFFFFF;
 
 template<typename T>
-T read(const u32 addr) {
+static T read(const u32 addr) {
     assert(SR.is_privileged);
     
     u32 masked_addr = addr & PRIV_MASK;
@@ -217,7 +192,7 @@ static u16 fetch_instr() {
 }
 
 template<typename T>
-void write(const u32 addr, const T data) {
+static void write(const u32 addr, const T data) {
     assert(SR.is_privileged);
     
     u32 masked_addr = addr & PRIV_MASK;
@@ -242,7 +217,98 @@ void write(const u32 addr, const T data) {
     }
 }
 
-i64 i_undefined(const u16 instr) {
+template<typename T>
+static void fill_table_with_pattern(T table[], const char* pattern, T func) {
+    usize mask = 0;
+    usize value = 0;
+
+    const usize length = std::strlen(pattern);
+
+    for (usize i = 0; i < length; i++) {
+        const usize shifted_bit = 1 << (length - i - 1);
+
+        const char bit = pattern[i];
+        if (bit == '0') {
+            mask |= shifted_bit;
+        } else if (bit == '1') {
+            mask |= shifted_bit;
+            value |= shifted_bit;
+        }
+    }
+
+    for (usize i = 0; i < (1 << length); i++) {
+        if ((i & mask) == value) {
+            table[i] = func;
+        }
+    }
+}
+
+enum class Size {
+    Byte,
+    Word,
+    Long,
+};
+
+static i64 i_movi(const u16 instr) {
+    GPRS[N] = (i8)IMM;
+
+    return 1;
+}
+
+template<Size size>
+static i64 i_movl4(const u16 instr) {
+    switch (size) {
+        case Size::Byte:
+            GPRS[0] = (i8)read<u8>(GPRS[M] + D);
+            break;
+        case Size::Word:
+            GPRS[0] = (i16)read<u16>(GPRS[M] + (D << 1));
+            break;
+        case Size::Long:
+            GPRS[N] = read<u32>(GPRS[M] + (D << 2));
+            break;
+    }
+
+    return 2;
+}
+
+template<u32 amount>
+static i64 i_shll(const u16 instr) {
+    if constexpr (amount == 1) {
+        // SHLL sets T flag
+        SR.t = GPRS[N] >> 31;
+    }
+
+    GPRS[N] <<= amount;
+
+    return 1;
+}
+
+template<u32 amount>
+static i64 i_shlr(const u16 instr) {
+    if constexpr (amount == 1) {
+        // SHLR sets T flag
+        SR.t = GPRS[N] & 1;
+    }
+
+    GPRS[N] >>= amount;
+
+    return 1;
+}
+
+template<Size size>
+static i64 i_swap(const u16 instr) {
+    switch (size) {
+        case Size::Word:
+            // Swap 16-bit halves
+            GPRS[N] = (GPRS[M] << 16) | (GPRS[M] >> 16);
+            break;
+    }
+
+    return 1;
+}
+
+static i64 i_undefined(const u16 instr) {
     std::printf("Undefined SH-4 instruction %04X\n", instr);
 
     dump_registers();
@@ -251,6 +317,20 @@ i64 i_undefined(const u16 instr) {
 
 static void initialize_instr_table() {
     ctx.instr_table.fill(i_undefined);
+
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000000", i_shll<1>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000001", i_shlr<1>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001000", i_shll<2>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001001", i_shlr<2>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011000", i_shll<8>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011001", i_shlr<8>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101000", i_shll<16>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101001", i_shlr<16>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0101xxxxxxxxxxxx", i_movl4<Size::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<Size::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000100xxxxxxxx", i_movl4<Size::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000101xxxxxxxx", i_movl4<Size::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1110xxxxxxxxxxxx", i_movi);
 }
 
 constexpr u32 INITIAL_PC = 0xA0000000;
