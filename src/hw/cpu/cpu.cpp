@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/cpu/ocio.hpp>
 #include <hw/holly/bus.hpp>
 
 namespace hw::cpu {
@@ -37,10 +38,15 @@ static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
 #define PC          ctx.pc
 #define CPC         ctx.current_pc
 #define NPC         ctx.next_pc
+#define SPC         ctx.spc
 #define GPRS        ctx.gprs
 #define BANKED_GPRS ctx.banked_gprs
+#define SGR         ctx.sgr
 #define SR          ctx.sr
 #define SSR         ctx.ssr
+#define GBR         ctx.gbr
+#define VBR         ctx.vbr
+#define DBR         ctx.dbr
 
 constexpr usize NUM_REGS = 16;
 constexpr usize NUM_BANKED_REGS = 8;
@@ -50,9 +56,14 @@ constexpr usize INSTR_TABLE_SIZE = 0x10000;
 struct {
     // PC and delay slot helpers
     u32 pc, current_pc, next_pc;
+    u32 spc;
 
     // GPRs, banked GPRs
     u32 gprs[NUM_REGS], banked_gprs[NUM_BANKED_REGS];
+    u32 sgr;
+
+    // Base registers
+    u32 gbr, vbr, dbr;
 
     union {
         u32 raw;
@@ -66,10 +77,11 @@ struct {
             u32 m               :  1;
             u32                 :  5;
             u32 disable_fpu     :  1;
-            u32                 : 11;
+            u32                 : 12;
             u32 block_exception :  1;
             u32 select_bank     :  1;
             u32 is_privileged   :  1;
+            u32                 :  1;
         };
     } sr, ssr;
 
@@ -140,6 +152,50 @@ static void delayed_jump(const u32 addr) {
     NPC = addr;
 }
 
+namespace ExceptionEvent {
+    enum : u32 {
+        Reset = 0,
+    };
+}
+
+namespace ExceptionOffset {
+    enum : u32 {
+        Reset = 0,
+    };
+}
+
+static void raise_exception(const u32 event, const u32 offset) {
+    constexpr u32 RESET_VECTOR = 0xA0000000;
+
+    std::printf("SH-4 exception @ %08X (code: %03X)\n", CPC, event);
+
+    // Save exception context
+    SPC = PC;
+    SSR = SR;
+    SGR = GPRS[15];
+
+    auto new_sr = SR;
+
+    new_sr.block_exception = 1;
+    new_sr.is_privileged = 1;
+    new_sr.select_bank = 1;
+
+    set_sr(new_sr.raw);
+
+    if (event == ExceptionEvent::Reset) {
+        // Reset exception enables FPU(?)
+        SR.disable_fpu = 0;
+    }
+
+    ocio::set_exception_event(event);
+
+    if (event == ExceptionEvent::Reset) {
+        jump(RESET_VECTOR);
+    } else {
+        jump(VBR + offset);
+    }
+}
+
 namespace PrivilegedRegion {
     enum : u32 {
         P0 = 0x00000000,
@@ -174,8 +230,7 @@ static T read(const u32 addr) {
         std::printf("Unimplemented P3 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
         exit(1);
     } else {
-        std::printf("Unimplemented P4 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
-        exit(1);
+        return ocio::read<T>(masked_addr);
     }
 }
 
@@ -212,8 +267,7 @@ static void write(const u32 addr, const T data) {
         std::printf("Unimplemented P3 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
         exit(1);
     } else {
-        std::printf("Unimplemented P4 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
-        exit(1);
+        return ocio::write<T>(masked_addr, data);
     }
 }
 
@@ -333,22 +387,25 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "1110xxxxxxxxxxxx", i_movi);
 }
 
-constexpr u32 INITIAL_PC = 0xA0000000;
-constexpr u32 INITIAL_SR = 0x700000F0;
-
 void initialize() {
-    jump(INITIAL_PC);
+    ocio::initialize();
 
-    set_sr(INITIAL_SR);
+    SR.interrupt_mask = 0xF;
+
+    raise_exception(ExceptionEvent::Reset, ExceptionOffset::Reset);
 
     initialize_instr_table();
 }
 
 void reset() {
+    ocio::reset();
+
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
-void shutdown() {}
+void shutdown() {
+    ocio::shutdown();
+}
 
 void step() {
     while (ctx.cycles > 0) {
