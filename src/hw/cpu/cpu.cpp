@@ -1,0 +1,285 @@
+/*
+ * nejicast is a Sega Dreamcast emulator.
+ * Copyright (C) 2025  noumidev
+ */
+
+#include <hw/cpu/cpu.hpp>
+
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+#include <hw/holly/bus.hpp>
+
+namespace hw::cpu {
+
+// Instruction bit macros
+#define IMM get_bits(instr, 0,  7)
+#define D   get_bits(instr, 0,  3)
+#define M   get_bits(instr, 4,  7)
+#define N   get_bits(instr, 8, 11)
+
+static inline u32 get_mask(const u32 start, const u32 end) {
+    assert(start <= end);
+
+    return (UINT32_MAX << start) & (UINT32_MAX >> ((8 * sizeof(u32) - 1) - end));
+}
+
+[[maybe_unused]]
+static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
+    return (n & get_mask(start, end)) >> end;
+}
+
+// Register file macros
+#define PC          ctx.pc
+#define CPC         ctx.current_pc
+#define NPC         ctx.next_pc
+#define GPRS        ctx.gprs
+#define BANKED_GPRS ctx.banked_gprs
+#define SR          ctx.sr
+#define SSR         ctx.ssr
+
+constexpr usize NUM_REGS = 16;
+constexpr usize NUM_BANKED_REGS = 8;
+
+constexpr usize INSTR_TABLE_SIZE = 0x10000;
+
+struct {
+    // PC and delay slot helpers
+    u32 pc, current_pc, next_pc;
+
+    // GPRs, banked GPRs
+    u32 gprs[NUM_REGS], banked_gprs[NUM_BANKED_REGS];
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 t               :  1;
+            u32 saturate_mac    :  1;
+            u32                 :  2;
+            u32 interrupt_mask  :  4;
+            u32 q               :  1;
+            u32 m               :  1;
+            u32                 :  5;
+            u32 disable_fpu     :  1;
+            u32                 : 11;
+            u32 block_exception :  1;
+            u32 select_bank     :  1;
+            u32 is_privileged   :  1;
+        };
+    } sr, ssr;
+
+    std::array<i64(*)(const u16), INSTR_TABLE_SIZE> instr_table;
+
+    i64 cycles;
+} ctx;
+
+template<typename T>
+void fillTableEntries(T table[], const char* pattern, T func) {
+    usize mask = 0;
+    usize value = 0;
+
+    const usize length = std::strlen(pattern);
+
+    for (usize i = 0; i < length; i++) {
+        const usize shifted_bit = 1 << (length - i - 1);
+
+        const char bit = pattern[i];
+        if (bit == '0') {
+            mask |= shifted_bit;
+        } else if (bit == '1') {
+            mask |= shifted_bit;
+            value |= shifted_bit;
+        }
+    }
+
+    for (usize i = 0; i < (1 << length); i++) {
+        if ((i & mask) == value) {
+            table[i] = func;
+        }
+    }
+}
+
+static void dump_registers() {
+    u32* bank_0 = (SR.select_bank) ? BANKED_GPRS : GPRS; 
+    u32* bank_1 = (SR.select_bank) ? GPRS : BANKED_GPRS;
+
+    for (usize i = 0; i < NUM_BANKED_REGS; i++) {
+        std::printf("[R%zu_BANK0] %08X ", i, bank_0[i]);
+
+        if ((i % 4) == 3) {
+            std::puts("");
+        }
+    }
+
+    for (usize i = 0; i < NUM_BANKED_REGS; i++) {
+        std::printf("[R%zu_BANK1] %08X ", i, bank_1[i]);
+
+        if ((i % 4) == 3) {
+            std::puts("");
+        }
+    }
+
+    for (usize i = 8; i < NUM_REGS; i++) {
+        std::printf("[R%zu%*c] %08X ", i, (i < 10) ? 6 : 5, ' ', GPRS[i]);
+
+        if ((i % 4) == 3) {
+            std::puts("");
+        }
+    }
+
+    printf("[PC      ] %08X\n", CPC);
+    printf("[SR      ] %08X\n", SR.raw);
+}
+
+static void swap_banks() {
+    u32 temp_bank[NUM_BANKED_REGS];
+
+    const u32 size = sizeof(u32) * NUM_BANKED_REGS;
+
+    std::memcpy(temp_bank, GPRS, size);
+    std::memcpy(GPRS, BANKED_GPRS, size);
+    std::memcpy(BANKED_GPRS, temp_bank, size);
+}
+
+static void set_sr(const u32 sr) {
+    const u32 old_select_bank = SR.select_bank;
+
+    SR.raw = sr;
+
+    if (old_select_bank != SR.select_bank) {
+        swap_banks();
+    }
+}
+
+static void jump(const u32 addr) {
+    PC = addr;
+    NPC = addr + sizeof(u16);
+}
+
+[[maybe_unused]]
+static void delayed_jump(const u32 addr) {
+    NPC = addr;
+}
+
+namespace PrivilegedRegion {
+    enum : u32 {
+        P0 = 0x00000000,
+        P1 = 0x80000000,
+        P2 = 0xA0000000,
+        P3 = 0xC0000000,
+        P4 = 0xE0000000,
+    };
+}
+
+constexpr u32 P0_MASK = 0x7FFFFFFF;
+constexpr u32 PRIV_MASK = 0x1FFFFFFF;
+
+template<typename T>
+T read(const u32 addr) {
+    assert(SR.is_privileged);
+    
+    u32 masked_addr = addr & PRIV_MASK;
+
+    if (addr < PrivilegedRegion::P1) {
+        masked_addr = addr & P0_MASK;
+
+        std::printf("Unimplemented P0 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
+        exit(1);
+    } else if (addr < PrivilegedRegion::P2) {
+        std::printf("Unimplemented P1 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
+        exit(1);
+    } else if (addr < PrivilegedRegion::P3) {
+        // P2, non-cacheable
+        return hw::holly::bus::read<T>(masked_addr);
+    } else if (addr < PrivilegedRegion::P4) {
+        std::printf("Unimplemented P3 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
+        exit(1);
+    } else {
+        std::printf("Unimplemented P4 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
+        exit(1);
+    }
+}
+
+static u16 fetch_instr() {
+    // Save current PC
+    CPC = PC;
+
+    const u16 instr = read<u16>(PC);
+
+    PC = NPC;
+    NPC += sizeof(instr);
+
+    return instr;
+}
+
+template<typename T>
+void write(const u32 addr, const T data) {
+    assert(SR.is_privileged);
+    
+    u32 masked_addr = addr & PRIV_MASK;
+
+    if (addr < PrivilegedRegion::P1) {
+        masked_addr = addr & P0_MASK;
+
+        std::printf("Unimplemented P0 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
+        exit(1);
+    } else if (addr < PrivilegedRegion::P2) {
+        std::printf("Unimplemented P1 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
+        exit(1);
+    } else if (addr < PrivilegedRegion::P3) {
+        // P2, non-cacheable
+        return hw::holly::bus::write<T>(masked_addr, data);
+    } else if (addr < PrivilegedRegion::P4) {
+        std::printf("Unimplemented P3 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
+        exit(1);
+    } else {
+        std::printf("Unimplemented P4 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
+        exit(1);
+    }
+}
+
+i64 i_undefined(const u16 instr) {
+    std::printf("Undefined SH-4 instruction %04X\n", instr);
+
+    dump_registers();
+    exit(1);
+}
+
+static void initialize_instr_table() {
+    ctx.instr_table.fill(i_undefined);
+}
+
+constexpr u32 INITIAL_PC = 0xA0000000;
+constexpr u32 INITIAL_SR = 0x700000F0;
+
+void initialize() {
+    jump(INITIAL_PC);
+
+    set_sr(INITIAL_SR);
+
+    initialize_instr_table();
+}
+
+void reset() {
+    std::memset(&ctx, 0, sizeof(ctx));
+}
+
+void shutdown() {}
+
+void step() {
+    while (ctx.cycles > 0) {
+        const u16 instr = fetch_instr();
+        
+        ctx.cycles -= ctx.instr_table[instr](instr);
+    }
+}
+
+i64* get_cycles() {
+    return &ctx.cycles;
+}
+
+}

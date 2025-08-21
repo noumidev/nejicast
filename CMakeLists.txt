@@ -20,6 +20,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 set(SOURCES
     src/nejicast.cpp
     src/common/file.cpp
+    src/hw/cpu/cpu.cpp
     src/hw/g1/g1.cpp
     src/hw/holly/bus.cpp
 )
@@ -30,6 +31,7 @@ set(HEADERS
     include/common/config.hpp
     include/common/file.hpp
     include/common/types.hpp
+    include/hw/cpu/cpu.hpp
     include/hw/g1/g1.hpp
     include/hw/holly/bus.hpp
 )
