@@ -6,6 +6,7 @@
 #include <hw/cpu/cpu.hpp>
 
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +48,8 @@ static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
 #define GBR         ctx.gbr
 #define VBR         ctx.vbr
 #define DBR         ctx.dbr
+#define MACH        ctx.mach
+#define MACL        ctx.macl
 
 constexpr usize NUM_REGS = 16;
 constexpr usize NUM_BANKED_REGS = 8;
@@ -64,6 +67,9 @@ struct {
 
     // Base registers
     u32 gbr, vbr, dbr;
+
+    // Multiplication results
+    u32 mach, macl;
 
     union {
         u32 raw;
@@ -118,8 +124,10 @@ static void dump_registers() {
         }
     }
 
-    printf("[PC      ] %08X\n", CPC);
-    printf("[SR      ] %08X\n", SR.raw);
+    printf("[PC      ] %08X [SPC     ] %08X\n", CPC, SPC);
+    printf("[SR      ] %08X [SSR     ] %08X [SGR     ] %08X\n", SR.raw, SSR.raw, SGR);
+    printf("[GBR     ] %08X [VBR     ] %08X [DBR     ] %08X\n", GBR, VBR, DBR);
+    printf("[MACH    ] %08X [MACL    ] %08X\n", MACH, MACL);
 }
 
 static void swap_banks() {
@@ -143,13 +151,28 @@ static void set_sr(const u32 sr) {
 }
 
 static void jump(const u32 addr) {
+    std::printf("SH-4 jump @ %08X to %08X\n", CPC, addr);
+
     PC = addr;
     NPC = addr + sizeof(u16);
 }
 
-[[maybe_unused]]
 static void delayed_jump(const u32 addr) {
+    std::printf("SH-4 delayed jump @ %08X to %08X\n", CPC, addr);
+
     NPC = addr;
+}
+
+enum class SystemRegister {
+    Macl,
+};
+
+template<SystemRegister system_register>
+u32 get_system_register() {
+    switch (system_register) {
+        case SystemRegister::Macl:
+            return MACL;
+    }
 }
 
 namespace ExceptionEvent {
@@ -221,8 +244,9 @@ static T read(const u32 addr) {
         std::printf("Unimplemented P0 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
         exit(1);
     } else if (addr < PrivilegedRegion::P2) {
-        std::printf("Unimplemented P1 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
-        exit(1);
+        // P1, cacheable
+        // TODO: implement caches?
+        return hw::holly::bus::read<T>(masked_addr);
     } else if (addr < PrivilegedRegion::P3) {
         // P2, non-cacheable
         return hw::holly::bus::read<T>(masked_addr);
@@ -258,8 +282,9 @@ static void write(const u32 addr, const T data) {
         std::printf("Unimplemented P0 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
         exit(1);
     } else if (addr < PrivilegedRegion::P2) {
-        std::printf("Unimplemented P1 write%zu @ %08X = %0*X\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), data);
-        exit(1);
+        // P1, cacheable
+        // TODO: implement caches?
+        return hw::holly::bus::write<T>(masked_addr, data);
     } else if (addr < PrivilegedRegion::P3) {
         // P2, non-cacheable
         return hw::holly::bus::write<T>(masked_addr, data);
@@ -297,11 +322,115 @@ static void fill_table_with_pattern(T table[], const char* pattern, T func) {
     }
 }
 
-enum class Size {
+enum class AddressingMode {
+    Immediate,
+    RegisterDirect,
+    RegisterIndirectGbr,
+    RegisterIndirectPredecrement,
+};
+
+enum class OperandSize {
     Byte,
     Word,
     Long,
 };
+
+template<bool is_immediate>
+static i64 i_add(const u16 instr) {
+    if constexpr (is_immediate) {
+        GPRS[N] += (i8)IMM;
+    } else {
+        GPRS[N] += GPRS[M];
+    }
+
+    return 1;
+}
+
+template<bool is_delayed>
+static i64 i_bf(const u16 instr) {
+    if (SR.t != 0) {
+        return 1;
+    }
+
+    const u32 jump_target = PC + sizeof(u16) + ((u32)(i8)IMM << 1);
+
+    if constexpr (is_delayed) {
+        delayed_jump(jump_target);
+    } else {
+        jump(jump_target);
+    }
+
+    return 2;
+}
+
+enum class Comparison {
+    Equal,
+    EqualImmediate,
+    GreaterThan,
+    GreaterEqual,
+    Higher,
+    HigherSame,
+    Positive,
+    PositiveZero,
+    String,
+};
+
+template<Comparison comparison>
+static i64 i_cmp(const u16 instr) {
+    switch (comparison) {
+        case Comparison::Equal:
+            SR.t = GPRS[N] == GPRS[M];
+            break;
+        case Comparison::EqualImmediate:
+            SR.t = GPRS[0] == (u32)(i8)IMM;
+            break;
+        case Comparison::GreaterThan:
+            SR.t = (i32)GPRS[N] > (i32)GPRS[M];
+            break;
+        case Comparison::GreaterEqual:
+            SR.t = (i32)GPRS[N] >= (i32)GPRS[M];
+            break;
+        case Comparison::Higher:
+            SR.t = GPRS[N] > GPRS[M];
+            break;
+        case Comparison::HigherSame:
+            SR.t = GPRS[N] >= GPRS[M];
+            break;
+        case Comparison::Positive:
+            SR.t = (i32)GPRS[N] > 0;
+            break;
+        case Comparison::PositiveZero:
+            SR.t = (i32)GPRS[N] >= 0;
+            break;
+        case Comparison::String:
+            {
+                const u32 temp = GPRS[N] ^ GPRS[M];
+
+                u32 result = temp & 0xFF;
+
+                result &= (temp >>  8) & 0xFF;
+                result &= (temp >> 16) & 0xFF;
+                result &= (temp >> 24) & 0xFF;
+
+                SR.t = result == 0;
+                break;
+            }
+    }
+
+    return 1;
+}
+
+static i64 i_jmp(const u16 instr) {
+    delayed_jump(GPRS[N]);
+
+    return 3;
+}
+
+static i64 i_mov(const u16 instr) {
+    GPRS[N] = GPRS[M];
+
+    return 1;
+}
 
 static i64 i_movi(const u16 instr) {
     GPRS[N] = (i8)IMM;
@@ -309,21 +438,105 @@ static i64 i_movi(const u16 instr) {
     return 1;
 }
 
-template<Size size>
+template<OperandSize size>
 static i64 i_movl4(const u16 instr) {
     switch (size) {
-        case Size::Byte:
+        case OperandSize::Byte:
             GPRS[0] = (i8)read<u8>(GPRS[M] + D);
             break;
-        case Size::Word:
+        case OperandSize::Word:
             GPRS[0] = (i16)read<u16>(GPRS[M] + (D << 1));
             break;
-        case Size::Long:
+        case OperandSize::Long:
             GPRS[N] = read<u32>(GPRS[M] + (D << 2));
             break;
     }
 
     return 2;
+}
+
+template<OperandSize size>
+static i64 i_movs(const u16 instr) {
+    switch (size) {
+        case OperandSize::Byte:
+            write<u8>(GPRS[N], GPRS[M]);
+            break;
+        case OperandSize::Word:
+            write<u16>(GPRS[N], GPRS[M]);
+            break;
+        case OperandSize::Long:
+            write<u32>(GPRS[N], GPRS[M]);
+            break;
+    }
+
+    return 1;
+}
+
+template<OperandSize size>
+static i64 i_movs4(const u16 instr) {
+    switch (size) {
+        case OperandSize::Byte:
+            write<u8>(GPRS[M] + D, GPRS[0]);
+            break;
+        case OperandSize::Word:
+            write<u16>(GPRS[M] + (D << 1), GPRS[0]);
+            break;
+        case OperandSize::Long:
+            // Different from MOVLL4
+            write<u32>(GPRS[N] + (D << 2), GPRS[M]);
+            break;
+    }
+
+    return 2;
+}
+
+static i64 i_mulu(const u16 instr) {
+    MACL = (u32)(u16)GPRS[N] * (u32)(u16)GPRS[M];
+
+    return 4;
+}
+
+static i64 i_nop(const u16) {
+    return 1;
+}
+
+template<AddressingMode mode>
+static i64 i_or(const u16 instr) {
+    if constexpr (mode == AddressingMode::RegisterDirect) {
+        GPRS[N] |= GPRS[M];
+    } else if constexpr (mode == AddressingMode::Immediate) {
+        GPRS[0] |= IMM;
+    } else {
+        write<u8>(GPRS[0] + GBR, read<u8>(GPRS[0] + GBR) | IMM);
+
+        return 4;
+    }
+
+    return 1;
+}
+
+static i64 i_pref(const u16 instr) {
+    // TODO: implement operand cache?
+
+    std::printf("SH-4 operand cache prefetch @ %08X\n", GPRS[N]);
+
+    return 1;
+}
+
+static i64 i_rotr(const u16 instr) {
+    SR.t = GPRS[N] & 1;
+
+    GPRS[N] = std::rotr(GPRS[N], 1);
+
+    return 1;
+}
+
+static i64 i_shar(const u16 instr) {
+    SR.t = GPRS[N] & 1;
+
+    GPRS[N] = (i32)GPRS[N] >> 1;
+
+    return 1;
 }
 
 template<u32 amount>
@@ -350,13 +563,43 @@ static i64 i_shlr(const u16 instr) {
     return 1;
 }
 
-template<Size size>
+template <SystemRegister system_register, AddressingMode mode>
+i64 i_sts(const u16 instr) {
+    if constexpr (mode == AddressingMode::RegisterDirect) {
+        GPRS[N] = get_system_register<system_register>();
+    } else {
+        // Register indirect pre-decrement
+        GPRS[N] -= sizeof(u32);
+
+        write<u32>(GPRS[N], get_system_register<system_register>());
+    }
+
+    // Depends, but is good enough for now
+    return 2;
+}
+
+template<OperandSize size>
 static i64 i_swap(const u16 instr) {
     switch (size) {
-        case Size::Word:
+        case OperandSize::Word:
             // Swap 16-bit halves
             GPRS[N] = (GPRS[M] << 16) | (GPRS[M] >> 16);
             break;
+    }
+
+    return 1;
+}
+
+template<AddressingMode mode>
+static i64 i_tst(const u16 instr) {
+    if constexpr (mode == AddressingMode::RegisterDirect) {
+        SR.t = (GPRS[N] & GPRS[M]) == 0;
+    } else if constexpr (mode == AddressingMode::Immediate) {
+        SR.t = (GPRS[0] & IMM) == 0;
+    } else {
+        SR.t = (read<u8>(GPRS[0] + GBR) & IMM) == 0;
+
+        return 3;
     }
 
     return 1;
@@ -369,21 +612,73 @@ static i64 i_undefined(const u16 instr) {
     exit(1);
 }
 
+template<AddressingMode mode>
+static i64 i_xor(const u16 instr) {
+    if constexpr (mode == AddressingMode::RegisterDirect) {
+        GPRS[N] ^= GPRS[M];
+    } else if constexpr (mode == AddressingMode::Immediate) {
+        GPRS[0] ^= IMM;
+    } else {
+        write<u8>(GPRS[0] + GBR, read<u8>(GPRS[0] + GBR) ^ IMM);
+
+        return 4;
+    }
+
+    return 1;
+}
+
 static void initialize_instr_table() {
     ctx.instr_table.fill(i_undefined);
 
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000001001", i_nop);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00011010", i_sts<SystemRegister::Macl, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10000011", i_pref);
+    fill_table_with_pattern(ctx.instr_table.data(), "0001xxxxxxxxxxxx", i_movs4<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0000", i_movs<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0001", i_movs<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0010", i_movs<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1000", i_tst<AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1010", i_xor<AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1011", i_or<AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1100", i_cmp<Comparison::String>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1110", i_mulu);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0000", i_cmp<Comparison::Equal>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0010", i_cmp<Comparison::HigherSame>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0011", i_cmp<Comparison::GreaterEqual>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0110", i_cmp<Comparison::Higher>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0111", i_cmp<Comparison::GreaterThan>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1100", i_add<false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000000", i_shll<1>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000001", i_shlr<1>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000101", i_rotr);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001000", i_shll<2>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001001", i_shlr<2>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00010001", i_cmp<Comparison::PositiveZero>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00010010", i_sts<SystemRegister::Macl, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00010101", i_cmp<Comparison::Positive>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011000", i_shll<8>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011001", i_shlr<8>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100001", i_shar);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101000", i_shll<16>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101001", i_shlr<16>);
-    fill_table_with_pattern(ctx.instr_table.data(), "0101xxxxxxxxxxxx", i_movl4<Size::Long>);
-    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<Size::Word>);
-    fill_table_with_pattern(ctx.instr_table.data(), "10000100xxxxxxxx", i_movl4<Size::Byte>);
-    fill_table_with_pattern(ctx.instr_table.data(), "10000101xxxxxxxx", i_movl4<Size::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101011", i_jmp);
+    fill_table_with_pattern(ctx.instr_table.data(), "0101xxxxxxxxxxxx", i_movl4<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0011", i_mov);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0111xxxxxxxxxxxx", i_add<true>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000000xxxxxxxx", i_movs4<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000100xxxxxxxx", i_movl4<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000001xxxxxxxx", i_movs4<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10000101xxxxxxxx", i_movl4<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10001000xxxxxxxx", i_cmp<Comparison::EqualImmediate>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10001011xxxxxxxx", i_bf<false>);
+    fill_table_with_pattern(ctx.instr_table.data(), "10001111xxxxxxxx", i_bf<true>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001000xxxxxxxx", i_tst<AddressingMode::Immediate>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001010xxxxxxxx", i_xor<AddressingMode::Immediate>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001011xxxxxxxx", i_or<AddressingMode::Immediate>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001100xxxxxxxx", i_tst<AddressingMode::RegisterIndirectGbr>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001110xxxxxxxx", i_xor<AddressingMode::RegisterIndirectGbr>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11001111xxxxxxxx", i_or<AddressingMode::RegisterIndirectGbr>);
     fill_table_with_pattern(ctx.instr_table.data(), "1110xxxxxxxxxxxx", i_movi);
 }
 
