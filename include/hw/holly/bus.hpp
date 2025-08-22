@@ -20,4 +20,10 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
+void dump_memory(
+    const u32 addr,
+    const u32 size,
+    const char* path
+);
+
 }

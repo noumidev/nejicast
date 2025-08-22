@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include <hw/g1/g1.hpp>
 
@@ -24,6 +25,7 @@ namespace MemoryBase {
     enum : u32 {
         BootRom = 0x00000000,
         G1      = 0x005F7400,
+        Dram    = 0x0C000000,
     };
 }
 
@@ -31,12 +33,15 @@ namespace MemorySize {
     enum : u32 {
         BootRom = 0x00200000,
         Io      = 0x00000100,
+        Dram    = 0x01000000,
     };
 }
 
 struct {
     // Pagetables for software fastmem
     std::array<u8*, ADDRESS_SPACE / PAGE_SIZE> rd_table, wr_table;
+
+    std::array<u8, MemorySize::Dram> dram;
 } ctx;
 
 static bool is_aligned(const u64 addr, const u64 align) {
@@ -78,8 +83,16 @@ void initialize() {
         g1::get_boot_rom_ptr(),
         MemoryBase::BootRom,
         MemorySize::BootRom,
-        true, 
+        true,
         false
+    );
+
+    map_memory(
+        ctx.dram.data(),
+        MemoryBase::Dram,
+        MemorySize::Dram,
+        true,
+        true
     );
 }
 
@@ -141,5 +154,22 @@ void write(const u32 addr, const T data) {
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u32);
+
+void dump_memory(
+    const u32 addr,
+    const u32 size,
+    const char* path
+) {
+    FILE* file = std::fopen(path, "w+b");
+
+    std::vector<u8> file_bytes(size);
+
+    for (u32 i = 0; i < size; i++) {
+        file_bytes[i] = read<u8>(addr + i);
+    }
+
+    std::fwrite(file_bytes.data(), sizeof(u8), size, file);
+    std::fclose(file);
+}
 
 }
