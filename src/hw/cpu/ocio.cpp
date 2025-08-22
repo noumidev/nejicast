@@ -293,6 +293,13 @@ u32 read(const u32 addr) {
 }
 
 template u8 read(u32);
+template u64 read(u32);
+
+template<typename T>
+void write(const u32 addr, const T data) {
+    std::printf("Unmapped SH-4 P4 write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
+    exit(1);
+}
 
 template<>
 void write(const u32 addr, const u8 data) {
@@ -398,6 +405,8 @@ void write(const u32 addr, const u32 data) {
             exit(1);
     }
 }
+
+template void write(u32, u64);
 
 void set_exception_event(const u32 event) {
     EXPEVT = event;

@@ -63,10 +63,11 @@ T read(const u32 addr) {
 template u8 read(u32);
 template u16 read(u32);
 template u32 read(u32);
+template u64 read(u32);
 
 template<typename T>
 void write(const u32 addr, const T data) {
-    std::printf("Unmapped G1 write%zu @ %08X = %0*X\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), data);
+    std::printf("Unmapped G1 write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
     exit(1);
 }
 
@@ -97,6 +98,7 @@ void write(const u32 addr, const u32 data) {
 }
 
 template void write(u32, u8);
+template void write(u32, u64);
 
 // For HOLLY access
 u8* get_boot_rom_ptr() {

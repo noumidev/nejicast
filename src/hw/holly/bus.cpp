@@ -129,6 +129,7 @@ T read(const u32 addr) {
 template u8 read(u32);
 template u16 read(u32);
 template u32 read(u32);
+template u64 read(u32);
 
 template<typename T>
 void write(const u32 addr, const T data) {
@@ -147,13 +148,14 @@ void write(const u32 addr, const T data) {
             return hw::g1::write<T>(addr, data);
     }
 
-    std::printf("Unmapped write%zu @ %08X = %0*X\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), data);
+    std::printf("Unmapped write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
     exit(1);
 }
 
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u32);
+template void write(u32, u64);
 
 void dump_memory(
     const u32 addr,
