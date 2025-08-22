@@ -84,8 +84,19 @@ void write(const u32 addr, const u16 data) {
     }
 }
 
+template<>
+void write(const u32 addr, const u32 data) {
+    switch (addr) {
+        case 0x005F74E4:
+            std::printf("Unknown G1 write32 @ %08X = %04X\n", addr, data);
+            break;
+        default:
+            std::printf("Unmapped G1 write32 @ %08X = %04X\n", addr, data);
+            exit(1);
+    }
+}
+
 template void write(u32, u8);
-template void write(u32, u32);
 
 // For HOLLY access
 u8* get_boot_rom_ptr() {
