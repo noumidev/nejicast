@@ -24,6 +24,7 @@ set(SOURCES
     src/hw/cpu/ocio.cpp
     src/hw/g1/g1.cpp
     src/hw/holly/bus.cpp
+    src/hw/holly/holly.cpp
 )
 
 # Set header files
@@ -36,6 +37,7 @@ set(HEADERS
     include/hw/cpu/ocio.hpp
     include/hw/g1/g1.hpp
     include/hw/holly/bus.hpp
+    include/hw/holly/holly.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

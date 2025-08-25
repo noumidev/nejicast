@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <hw/g1/g1.hpp>
+#include <hw/holly/holly.hpp>
 
 namespace hw::holly::bus {
 
@@ -122,8 +123,8 @@ T read(const u32 addr) {
             return hw::g1::read<T>(addr);
     }
 
-    std::printf("Unmapped read%zu @ %08X\n", 8 * sizeof(T), addr);
-    exit(1);
+    // Redirect read
+    return hw::holly::read<T>(addr);
 }
 
 template u8 read(u32);
@@ -148,8 +149,8 @@ void write(const u32 addr, const T data) {
             return hw::g1::write<T>(addr, data);
     }
 
-    std::printf("Unmapped write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
-    exit(1);
+    // Redirect write
+    hw::holly::write<T>(addr, data);
 }
 
 template void write(u32, u8);

@@ -9,7 +9,7 @@
 
 #include <hw/cpu/cpu.hpp>
 #include <hw/g1/g1.hpp>
-#include <hw/holly/bus.hpp>
+#include <hw/holly/holly.hpp>
 
 constexpr int NUM_ARGS = 2;
 
@@ -20,19 +20,19 @@ namespace nejicast {
 void initialize(const common::Config& config) {
     hw::cpu::initialize();
     hw::g1::initialize(config.boot_path);
-    hw::holly::bus::initialize();
+    hw::holly::initialize();
 }
 
 void shutdown() {
     hw::cpu::shutdown();
     hw::g1::shutdown();
-    hw::holly::bus::shutdown();
+    hw::holly::shutdown();
 }
 
 void reset() {
     hw::cpu::reset();
     hw::g1::reset();
-    hw::holly::bus::reset();
+    hw::holly::reset();
 }
 
 void run() {
