@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include <hw/holly/bus.hpp>
+#include <hw/holly/intc.hpp>
 
 namespace hw::holly {
 
@@ -82,16 +83,19 @@ struct {
 
 void initialize() {
     bus::initialize();
+    intc::initialize();
 }
 
 void reset() {
     bus::reset();
+    intc::reset();
 
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
 void shutdown() {
     bus::shutdown();
+    intc::shutdown();
 }
 
 template<typename T>
