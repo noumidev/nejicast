@@ -14,36 +14,185 @@ namespace hw::cpu::ocio {
 
 namespace Address {
     enum : u32 {
-        Mmucr  = 0x1F000010,
-        Ccr    = 0x1F00001C,
-        Expevt = 0x1F000024,
-        Bcr1   = 0x1F800000,
-        Bcr2   = 0x1F800004,
-        Wcr1   = 0x1F800008,
-        Wcr2   = 0x1F80000C,
-        Mcr    = 0x1F800014,
-        Rtcsr  = 0x1F80001C,
-        Rtcor  = 0x1F800024,
-        Rfcr   = 0x1F800028,
-        Sdmr3  = 0x1F940000,
+        Pteh    = 0x1F000000,
+        Ptel    = 0x1F000004,
+        Ttb     = 0x1F000008,
+        Tea     = 0x1F00000C,
+        Mmucr   = 0x1F000010,
+        Ccr     = 0x1F00001C,
+        Trapa   = 0x1F000020,
+        Expevt  = 0x1F000024,
+        Intevt  = 0x1F000028,
+        Ptea    = 0x1F000034,
+        Qacr1   = 0x1F000038,
+        Qacr2   = 0x1F00003C,
+        Bbra    = 0x1F200008,
+        Bbrb    = 0x1F200014,
+        Brcr    = 0x1F200020,
+        Bcr1    = 0x1F800000,
+        Bcr2    = 0x1F800004,
+        Wcr1    = 0x1F800008,
+        Wcr2    = 0x1F80000C,
+        Wcr3    = 0x1F800010,
+        Mcr     = 0x1F800014,
+        Pcr     = 0x1F800018,
+        Rtcsr   = 0x1F80001C,
+        Rtcor   = 0x1F800024,
+        Rfcr    = 0x1F800028,
+        Pctra   = 0x1F80002C,
+        Pdtra   = 0x1F800030,
+        Pctrb   = 0x1F800040,
+        Pdtrb   = 0x1F800044,
+        Gpioic  = 0x1F800048,
+        Sdmr3   = 0x1F940000,
+        Sar0    = 0x1FA00000,
+        Dar0    = 0x1FA00004,
+        Dmatcr0 = 0x1FA00008,
+        Chcr0   = 0x1FA0000C,
+        Sar1    = 0x1FA00010,
+        Dar1    = 0x1FA00014,
+        Dmatcr1 = 0x1FA00018,
+        Chcr1   = 0x1FA0001C,
+        Sar2    = 0x1FA00020,
+        Dar2    = 0x1FA00024,
+        Dmatcr2 = 0x1FA00028,
+        Chcr2   = 0x1FA0002C,
+        Sar3    = 0x1FA00030,
+        Dar3    = 0x1FA00034,
+        Dmatcr3 = 0x1FA00038,
+        Chcr3   = 0x1FA0003C,
+        Dmaor   = 0x1FA00040,
+        Stbcr   = 0x1FC00004,
+        Wtcnt   = 0x1FC00008,
+        Wtcsr   = 0x1FC0000C,
+        Stbcr2  = 0x1FC00010,
+        Rmonar  = 0x1FC80034,
+        Rcr1    = 0x1FC80038,
+        Icr     = 0x1FD00000,
+        Ipra    = 0x1FD00004,
+        Iprb    = 0x1FD00008,
+        Iprc    = 0x1FD0000C,
+        Tocr    = 0x1FD80000,
+        Tstr    = 0x1FD80004,
+        Tcor0   = 0x1FD80008,
+        Tcnt0   = 0x1FD8000C,
+        Tcr0    = 0x1FD80010,
+        Tcor1   = 0x1FD80014,
+        Tcnt1   = 0x1FD80018,
+        Tcr1    = 0x1FD8001C,
+        Tcor2   = 0x1FD80020,
+        Tcnt2   = 0x1FD80024,
+        Tcr2    = 0x1FD80028,
+        Scsmr2  = 0x1FE80000,
+        Scbrr2  = 0x1FE80004,
+        Scscr2  = 0x1FE80008,
+        Scfcr2  = 0x1FE80018,
+        Scsptr2 = 0x1FE80020,
     };
 }
 
-#define MMUCR  ctx.mmu_control
-#define CCR    ctx.cache_control
-#define EXPEVT ctx.exception_event
-#define BCR1   ctx.bus_control_1
-#define BCR2   ctx.bus_control_2
-#define WCR1   ctx.wait_control_1
-#define WCR2   ctx.wait_control_2
-#define MCR    ctx.memory_control
-#define RTCSR  ctx.refresh_timer_control
-#define RTCNT  ctx.refresh_timer
-#define RTCOR  ctx.refresh_time_constant
-#define RFCR   ctx.refresh_count
-#define SDMR3  ctx.sdram_mode_3
+enum {
+    DMA_0,
+    DMA_1,
+    DMA_2,
+    DMA_3,
+    NUM_DMA_CHANNELS,
+};
+
+enum {
+    TIMER_0,
+    TIMER_1,
+    TIMER_2,
+    NUM_TIMERS,
+};
+
+#define PTEH    ctx.page_table_entry_hi
+#define TTB     ctx.translation_table_base
+#define TEA     ctx.tlb_exception_address
+#define MMUCR   ctx.mmu_control
+#define CCR     ctx.cache_control
+#define TRAPA   ctx.trapa_exception
+#define EXPEVT  ctx.exception_event
+#define INTEVT  ctx.interrupt_event
+#define PTEA    ctx.page_table_entry_assistance
+#define QACR1   ctx.queue_address_control_1
+#define QACR2   ctx.queue_address_control_2
+#define BBRA    ctx.break_bus_cycle_a
+#define BBRB    ctx.break_bus_cycle_b
+#define BRCR    ctx.break_control
+#define BCR1    ctx.bus_control_1
+#define BCR2    ctx.bus_control_2
+#define WCR1    ctx.wait_control_1
+#define WCR2    ctx.wait_control_2
+#define WCR3    ctx.wait_control_3
+#define MCR     ctx.memory_control
+#define RTCSR   ctx.refresh_timer_control
+#define RTCNT   ctx.refresh_timer
+#define RTCOR   ctx.refresh_time_constant
+#define RFCR    ctx.refresh_count
+#define PCTRA   ctx.port_a.control
+#define PDTRA   ctx.port_a.latched_data
+#define PCTRB   ctx.port_b.control
+#define PDTRB   ctx.port_b.latched_data
+#define GPIOIC  ctx.gpio_interrupt_control
+#define SDMR3   ctx.sdram_mode_3
+#define SAR0    ctx.dma_channels[DMA_0].source_address
+#define DAR0    ctx.dma_channels[DMA_0].destination_address
+#define DMATCR0 ctx.dma_channels[DMA_0].transfer_count
+#define CHCR0   ctx.dma_channels[DMA_0].control
+#define SAR1    ctx.dma_channels[DMA_1].source_address
+#define DAR1    ctx.dma_channels[DMA_1].destination_address
+#define DMATCR1 ctx.dma_channels[DMA_1].transfer_count
+#define CHCR1   ctx.dma_channels[DMA_1].control
+#define SAR2    ctx.dma_channels[DMA_2].source_address
+#define DAR2    ctx.dma_channels[DMA_2].destination_address
+#define DMATCR2 ctx.dma_channels[DMA_2].transfer_count
+#define CHCR2   ctx.dma_channels[DMA_2].control
+#define SAR3    ctx.dma_channels[DMA_3].source_address
+#define DAR3    ctx.dma_channels[DMA_3].destination_address
+#define DMATCR3 ctx.dma_channels[DMA_3].transfer_count
+#define CHCR3   ctx.dma_channels[DMA_3].control
+#define DMAOR   ctx.dma_operation
+#define STBCR   ctx.standby_control
+#define WTCNT   ctx.watchdog_timer_counter
+#define WTCSR   ctx.watchdog_timer_control
+#define STBCR2  ctx.standby_control_2
+#define RMONAR  ctx.rtc_month_alarm
+#define RCR1    ctx.rtc_control_1
+#define ICR     ctx.interrupt_control
+#define IPRA    ctx.interrupt_priority_a
+#define IPRB    ctx.interrupt_priority_b
+#define IPRC    ctx.interrupt_priority_c
+#define TOCR    ctx.timer_output_control
+#define TSTR    ctx.timer_start
+#define TCOR0   ctx.timers[TIMER_0].constant
+#define TCNT0   ctx.timers[TIMER_0].counter
+#define TCR0    ctx.timers[TIMER_0].control
+#define TCOR1   ctx.timers[TIMER_1].constant
+#define TCNT1   ctx.timers[TIMER_1].counter
+#define TCR1    ctx.timers[TIMER_1].control
+#define TCOR2   ctx.timers[TIMER_2].constant
+#define TCNT2   ctx.timers[TIMER_2].counter
+#define TCR2    ctx.timers[TIMER_2].control
+#define SCSMR2  ctx.serial_mode_2
+#define SCBRR2  ctx.bit_rate_2
+#define SCSCR2  ctx.serial_control_2
+#define SCFCR2  ctx.fifo_control_2
+#define SCSPTR2 ctx.serial_port_2
 
 struct {
+    union {
+        u32 raw;
+
+        struct {
+            u32 address_space_id    :  8;
+            u32                     :  2;
+            u32 virtual_page_number : 22;
+        };
+    } page_table_entry_hi;
+    
+    u32 translation_table_base, tlb_exception_address;
+
     union {
         u32 raw;
 
@@ -83,7 +232,57 @@ struct {
         };
     } cache_control;
 
-    u32 exception_event;
+    u32 trapa_exception, exception_event, interrupt_event;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 space_attribute :  3;
+            u32 timing_control  :  1;
+            u32                 : 28;
+        };
+    } page_table_entry_assistance;
+
+    union {
+        u32 raw;
+        
+        struct {
+            u32      :  2;
+            u32 area :  3;
+            u32      : 27;
+        };
+    } queue_address_control_1, queue_address_control_2;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 select_size_01    : 2;
+            u16 select_read_write : 2;
+            u16 select_access     : 2;
+            u16 select_size_2     : 1;
+            u16                   : 9;
+        };
+    } break_bus_cycle_a, break_bus_cycle_b;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 enable_user_break_debug   : 1;
+            u16                           : 2;
+            u16 select_sequence_condition : 1;
+            u16                           : 2;
+            u16 select_pc_break_b         : 1;
+            u16 enable_data_break_b       : 1;
+            u16                           : 2;
+            u16 select_pc_break_a         : 1;
+            u16                           : 2;
+            u16 condition_match_flag_b    : 1;
+            u16 condition_match_flag_a    : 1;
+        };
+    } break_control;
 
     union {
         u32 raw;
@@ -175,6 +374,34 @@ struct {
         u32 raw;
 
         struct {
+            u32 a0_hold_time     : 2;
+            u32 a0_strobe_time   : 1;
+            u32                  : 1;
+            u32 a1_hold_time     : 2;
+            u32 a1_strobe_time   : 1;
+            u32 a1_negate_timing : 1;
+            u32 a2_hold_time     : 2;
+            u32 a2_strobe_time   : 1;
+            u32                  : 1;
+            u32 a3_hold_time     : 2;
+            u32 a3_strobe_time   : 1;
+            u32                  : 1;
+            u32 a4_hold_time     : 2;
+            u32 a4_strobe_time   : 1;
+            u32 a4_negate_timing : 1;
+            u32 a5_hold_time     : 2;
+            u32 a5_strobe_time   : 1;
+            u32                  : 1;
+            u32 a6_hold_time     : 2;
+            u32 a6_strobe_time   : 1;
+            u32                  : 5;
+        };
+    } wait_control_3;
+
+    union {
+        u32 raw;
+
+        struct {
             u32 edo_mode              : 1;
             u32 refresh_mode          : 1;
             u32 refresh_control       : 1;
@@ -211,7 +438,237 @@ struct {
 
     u16 refresh_timer, refresh_time_constant, refresh_count;
 
+    struct {
+        u32 control;
+        u16 latched_data;
+    } port_a, port_b;
+
+    u16 gpio_interrupt_control;
+
     u16 sdram_mode_3;
+
+    struct {
+        u32 source_address;
+        u32 destination_address;
+        u32 transfer_count;
+
+        union {
+            u32 raw;
+
+            struct {
+                u32 enable_dmac              : 1;
+                u32 transfer_end             : 1;
+                u32 enable_interrupt         : 1;
+                u32                          : 1;
+                u32 transmit_size            : 3;
+                u32 burst_mode               : 1;
+                u32 select_resource          : 4;
+                u32 source_mode              : 2;
+                u32 destination_mode         : 2;
+                u32 acknowledge_level        : 1;
+                u32 acknowledge_mode         : 1;
+                u32 request_check_level      : 1;
+                u32 select_dreq              : 1;
+                u32                          : 4;
+                u32 destination_wait_control : 1;
+                u32 destination_attribute    : 3;
+                u32 source_wait_control      : 1;
+                u32 source_attribute         : 3;
+            };
+        } control;
+    } dma_channels[NUM_DMA_CHANNELS];
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 master_enable_dmac :  1;
+            u32 nmi_flag           :  1;
+            u32 address_error_flag :  1;
+            u32                    :  5;
+            u32 priority_mode      :  2;
+            u32                    :  6;
+            u32 on_demand_mode     :  1;
+            u32                    : 16;
+        };
+    } dma_operation;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 stop_sci_clock  : 1;
+            u8 stop_rtc_clock  : 1;
+            u8 stop_tmu_clock  : 1;
+            u8 stop_scif_clock : 1;
+            u8 stop_dmac_clock : 1;
+            u8 ppu_pup_control : 1;
+            u8 ppu_hiz_control : 1;
+            u8 standby_mode    : 1;
+        };
+    } standby_control;
+
+    u8 watchdog_timer_counter;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 select_clock           : 3;
+            u8 interval_overflow_flag : 1;
+            u8 watchdog_overflow_flag : 1;
+            u8 select_reset           : 1;
+            u8 select_mode            : 1;
+            u8 enable_timer           : 1;
+        };
+    } watchdog_timer_control;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8                 : 7;
+            u8 deep_sleep_mode : 1;
+        };
+    } standby_control_2;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 ones   : 4;
+            u8 tens   : 1;
+            u8        : 2;
+            u8 enable : 1;
+        };
+    } rtc_month_alarm;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 alarm_flag             : 1;
+            u8                        : 2;
+            u8 alarm_interrupt_enable : 1;
+            u8 carry_interrupt_enable : 1;
+            u8                        : 2;
+            u8 carry_flag             : 1;
+        };
+    } rtc_control_1;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16                    : 7;
+            u16 pin_mode           : 1;
+            u16 select_nmi_edge    : 1;
+            u16 nmi_block_mode     : 1;
+            u16                    : 4;
+            u16 nmi_interrupt_mask : 1;
+            u16 nmi_input_level    : 1;
+        };
+    } interrupt_control;
+
+    u16 interrupt_priority_a, interrupt_priority_b, interrupt_priority_c;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 timer_clock_control : 1;
+            u8                     : 7;
+        };
+    } timer_output_control;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 start_counter : 3;
+            u8               : 5;
+        };
+    } timer_start;
+
+    struct {
+        u32 constant;
+        u32 counter;
+
+        union {
+            u16 raw;
+
+            struct {
+                u16 prescaler                  : 3;
+                u16 clock_edge                 : 2;
+                u16 enable_underflow_interrupt : 1;
+                u16 enable_input_capture       : 2;
+                u16 underflow_flag             : 1;
+                u16 input_capture_flag         : 1;
+                u16                            : 6;
+            };
+        } control;
+    } timers[NUM_TIMERS];
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 select_clock     : 2;
+            u16                  : 1;
+            u16 stop_length      : 1;
+            u16 parity_mode      : 1;
+            u16 enable_parity    : 1;
+            u16 character_length : 1;
+            u16                  : 9;
+        };
+    } serial_mode_2;
+
+    u8 bit_rate_2;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16                                : 1;
+            u16 enable_clock_1                 : 1;
+            u16                                : 1;
+            u16 enable_receive_error_interrupt : 1;
+            u16 enable_receive                 : 1;
+            u16 enable_transmit                : 1;
+            u16 enable_receive_interrupt       : 1;
+            u16 enable_transmit_interrupt      : 1;
+            u16                                : 8;
+        };
+    } serial_control_2;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 test_loopback              : 1;
+            u16 reset_receive_fifo         : 1;
+            u16 reset_transmit_fifo        : 1;
+            u16 enable_modem_control       : 1;
+            u16 transmit_fifo_data_trigger : 2;
+            u16 receive_fifo_data_trigger  : 2;
+            u16                            : 8;
+        };
+    } fifo_control_2;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 port_break_data : 1;
+            u16 port_break_io   : 1;
+            u16                 : 2;
+            u16 cts_port_data   : 1;
+            u16 cts_port_io     : 1;
+            u16 rts_port_data   : 1;
+            u16 rts_port_io     : 1;
+            u16                 : 8;
+        };
+    } serial_port_2;
 } ctx;
 
 // Simulates DRAM refresh
@@ -245,10 +702,51 @@ static void refresh_dram() {
     }
 }
 
+constexpr int NUM_PINS = 16;
+
+static void write_port_a(const u16 data) {
+    for (int i = 0; i < NUM_PINS; i++) {
+        const bool is_output = ((PCTRA >> (2 * i)) & 1) != 0;
+
+        if (is_output) {
+            const u16 bit = (data >> i) & 1;
+
+            std::printf("P%d = %u\n", i, bit);
+
+            PDTRA &= ~(1 << i);
+            PDTRA |= bit << i;
+        }
+    }
+}
+
+// TODO: merge this with Port A write handler?
+static void write_port_b(const u16 data) {
+    for (int i = 0; i < NUM_PINS; i++) {
+        const bool is_output = ((PCTRB >> (2 * i)) & 1) != 0;
+
+        if (is_output) {
+            const u16 bit = (data >> i) & 1;
+
+            std::printf("P%d write = %u\n", i, bit);
+
+            PDTRB &= ~(1 << i);
+            PDTRB |= bit << i;
+        }
+    }
+}
+
 void initialize() {
     BCR2.raw = 0x3FFC;
     WCR1.raw = 0x77777777;
     WCR2.raw = 0xFFFEEFFF;
+    WCR3.raw = 0x07777777;
+
+    for (auto& timer : ctx.timers) {
+        timer.constant = 0xFFFFFFFF;
+        timer.counter = 0xFFFFFFFF;
+    }
+
+    SCBRR2 = 0xFF;
 }
 
 void reset() {
@@ -312,6 +810,41 @@ void write(const u32 addr, const u8 data) {
     }
 
     switch (addr) {
+        case Address::Stbcr:
+            std::printf("STBCR write8 = %02X\n", data);
+
+            STBCR.raw = data;
+            break;
+        case Address::Rmonar:
+            std::printf("RMONAR write8 = %02X\n", data);
+
+            RMONAR.raw = data;
+            break;
+        case Address::Rcr1:
+            std::printf("RCR1 write8 = %02X\n", data);
+
+            RCR1.raw = data;
+            break;
+        case Address::Stbcr2:
+            std::printf("STBCR2 write8 = %02X\n", data);
+
+            STBCR2.raw = data;
+            break;
+        case Address::Tocr:
+            std::printf("TOCR write8 = %02X\n", data);
+
+            TOCR.raw = data;
+            break;
+        case Address::Tstr:
+            std::printf("TSTR write8 = %02X\n", data);
+
+            TSTR.raw = data;
+            break;
+        case Address::Scbrr2:
+            std::printf("SCBRR2 write8 = %02X\n", data);
+
+            SCBRR2 = data;
+            break;
         default:
             std::printf("Unmapped SH-4 P4 write8 @ %08X = %02X\n", addr, data);
             exit(1);
@@ -321,10 +854,28 @@ void write(const u32 addr, const u8 data) {
 template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
+        case Address::Bbra:
+            std::printf("BBRA write16 = %04X\n", data);
+
+            BBRA.raw = data;
+            break;
+        case Address::Bbrb:
+            std::printf("BBRB write16 = %04X\n", data);
+
+            BBRB.raw = data;
+            break;
+        case Address::Brcr:
+            std::printf("BRCR write16 = %04X\n", data);
+
+            BRCR.raw = data;
+            break;
         case Address::Bcr2:
             std::printf("BCR2 write16 = %04X\n", data);
 
             BCR2.raw = data;
+            break;
+        case Address::Pcr:
+            std::printf("PCR write16 = %04X\n", data);
             break;
         case Address::Rtcsr:
             std::printf("RTCSR write16 = %04X\n", data);
@@ -347,6 +898,90 @@ void write(const u32 addr, const u16 data) {
                 RFCR = data & 0x3FF;
             }
             break;
+        case Address::Pdtra:
+            std::printf("PDTRA write16 = %04X\n", data);
+
+            write_port_a(data);
+            break;
+        case Address::Pdtrb:
+            std::printf("PDTRB write16 = %04X\n", data);
+
+            write_port_b(data);
+            break;
+        case Address::Gpioic:
+            std::printf("GPIOIC write16 = %04X\n", data);
+
+            GPIOIC = data;
+            break;
+        case Address::Wtcnt:
+            std::printf("WTCNT write16 = %04X\n", data);
+
+            if ((data & 0xFF00) == 0x5A00) {
+                WTCNT = (u8)data;
+            }
+            break;
+        case Address::Wtcsr:
+            std::printf("WTCSR write16 = %04X\n", data);
+
+            if ((data & 0xFF00) == 0x5A00) {
+                WTCSR.raw = (u8)data;
+            }
+            break;
+        case Address::Icr:
+            std::printf("ICR write16 = %04X\n", data);
+
+            ICR.raw = data;
+            break;
+        case Address::Ipra:
+            std::printf("IPRA write16 = %04X\n", data);
+
+            IPRA = data;
+            break;
+        case Address::Iprb:
+            std::printf("IPRB write16 = %04X\n", data);
+
+            IPRB = data;
+            break;
+        case Address::Iprc:
+            std::printf("IPRC write16 = %04X\n", data);
+
+            IPRC = data;
+            break;
+        case Address::Tcr0:
+            std::printf("TCR0 write16 = %04X\n", data);
+
+            TCR0.raw = data;
+            break;
+        case Address::Tcr1:
+            std::printf("TCR1 write16 = %04X\n", data);
+
+            TCR1.raw = data;
+            break;
+        case Address::Tcr2:
+            std::printf("TCR2 write16 = %04X\n", data);
+
+            TCR2.raw = data;
+            break;
+        case Address::Scsmr2:
+            std::printf("SCSMR2 write16 = %04X\n", data);
+
+            SCSMR2.raw = data;
+            break;
+        case Address::Scscr2:
+            std::printf("SCSCR2 write16 = %04X\n", data);
+
+            SCSCR2.raw = data;
+            break;
+        case Address::Scfcr2:
+            std::printf("SCFCR2 write16 = %04X\n", data);
+
+            SCFCR2.raw = data;
+            break;
+        case Address::Scsptr2:
+            std::printf("SCSPTR2 write16 = %04X\n", data);
+
+            SCSPTR2.raw = data;
+            break;
         default:
             std::printf("Unmapped SH-4 P4 write16 @ %08X = %04X\n", addr, data);
             exit(1);
@@ -356,12 +991,32 @@ void write(const u32 addr, const u16 data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
+        case Address::Pteh:
+            std::printf("PTEH write32 = %08X\n", data);
+
+            PTEH.raw = data;
+            break;
+        case Address::Ptel:
+            std::printf("PTEL write32 = %08X\n", data);
+
+            // TODO
+            break;
+        case Address::Ttb:
+            std::printf("TTB write32 = %08X\n", data);
+
+            TTB = data;
+            break;
+        case Address::Tea:
+            std::printf("TEA write32 = %08X\n", data);
+
+            TEA = data;
+            break;
         case Address::Mmucr:
             std::printf("MMUCR write32 = %08X\n", data);
 
             MMUCR.raw = data;
 
-            assert(MMUCR.enable_translation == 0);
+            assert(!MMUCR.enable_translation);
             break;
         case Address::Ccr:
             std::printf("CCR write32 = %08X\n", data);
@@ -380,6 +1035,36 @@ void write(const u32 addr, const u32 data) {
                 CCR.invalidate_instruction_cache = 0;
             }
             break;
+        case Address::Trapa:
+            std::printf("TRAPA write32 = %08X\n", data);
+
+            TRAPA = data;
+            break;
+        case Address::Expevt:
+            std::printf("EXPEVT write32 = %08X\n", data);
+
+            EXPEVT = data;
+            break;
+        case Address::Intevt:
+            std::printf("INTEVT write32 = %08X\n", data);
+
+            INTEVT = data;
+            break;
+        case Address::Ptea:
+            std::printf("PTEA write32 = %08X\n", data);
+
+            PTEA.raw = data;
+            break;
+        case Address::Qacr1:
+            std::printf("QACR1 write32 = %08X\n", data);
+
+            QACR1.raw = data;
+            break;
+        case Address::Qacr2:
+            std::printf("QACR2 write32 = %08X\n", data);
+
+            QACR2.raw = data;
+            break;
         case Address::Bcr1:
             std::printf("BCR1 write32 = %08X\n", data);
 
@@ -395,10 +1080,120 @@ void write(const u32 addr, const u32 data) {
 
             WCR2.raw = data;
             break;
+        case Address::Wcr3:
+            std::printf("WCR3 write32 = %08X\n", data);
+
+            WCR3.raw = data;
+            break;
         case Address::Mcr:
             std::printf("MCR write32 = %08X\n", data);
 
             MCR.raw = data;
+            break;
+        case Address::Pctra:
+            std::printf("PCTRA write32 = %08X\n", data);
+
+            PCTRA = data;
+            break;
+        case Address::Pctrb:
+            std::printf("PCTRB write32 = %08X\n", data);
+
+            PCTRB = data;
+            break;
+        case Address::Sar1:
+            std::printf("SAR1 write32 = %08X\n", data);
+
+            SAR1 = data;
+            break;
+        case Address::Dar1:
+            std::printf("DAR1 write32 = %08X\n", data);
+
+            DAR1 = data;
+            break;
+        case Address::Dmatcr1:
+            std::printf("DMATCR1 write32 = %08X\n", data);
+
+            DMATCR1 = data;
+            break;
+        case Address::Chcr1:
+            std::printf("CHCR1 write32 = %08X\n", data);
+
+            CHCR1.raw = data;
+            break;
+        case Address::Sar2:
+            std::printf("SAR2 write32 = %08X\n", data);
+
+            SAR2 = data;
+            break;
+        case Address::Dar2:
+            std::printf("DAR2 write32 = %08X\n", data);
+
+            DAR2 = data;
+            break;
+        case Address::Dmatcr2:
+            std::printf("DMATCR2 write32 = %08X\n", data);
+
+            DMATCR2 = data;
+            break;
+        case Address::Chcr2:
+            std::printf("CHCR2 write32 = %08X\n", data);
+
+            CHCR2.raw = data;
+            break;
+        case Address::Sar3:
+            std::printf("SAR3 write32 = %08X\n", data);
+
+            SAR3 = data;
+            break;
+        case Address::Dar3:
+            std::printf("DAR2 write32 = %08X\n", data);
+
+            DAR3 = data;
+            break;
+        case Address::Dmatcr3:
+            std::printf("DMATCR3 write32 = %08X\n", data);
+
+            DMATCR3 = data;
+            break;
+        case Address::Chcr3:
+            std::printf("CHCR3 write32 = %08X\n", data);
+
+            CHCR3.raw = data;
+            break;
+        case Address::Dmaor:
+            std::printf("DMAOR write32 = %08X\n", data);
+
+            DMAOR.raw = data;
+            break;
+        case Address::Tcor0:
+            std::printf("TCOR0 write32 = %08X\n", data);
+
+            TCOR0 = data;
+            break;
+        case Address::Tcnt0:
+            std::printf("TCNT0 write32 = %08X\n", data);
+
+            TCNT0 = data;
+            break;
+        case Address::Tcor1:
+            std::printf("TCOR1 write32 = %08X\n", data);
+
+            TCOR1 = data;
+            break;
+        case Address::Tcnt1:
+            std::printf("TCNT1 write32 = %08X\n", data);
+
+            TCNT1 = data;
+            break;
+        case Address::Tcor2:
+            std::printf("TCOR2 write32 = %08X\n", data);
+
+            TCOR2 = data;
+            break;
+        case Address::Tcnt2:
+            std::printf("TCNT2 write32 = %08X\n", data);
+
+            TCNT2 = data;
             break;
         default:
             std::printf("Unmapped SH-4 P4 write32 @ %08X = %08X\n", addr, data);
