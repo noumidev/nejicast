@@ -12,6 +12,7 @@
 
 #include <hw/holly/bus.hpp>
 #include <hw/holly/intc.hpp>
+#include <hw/holly/maple.hpp>
 
 namespace hw::holly {
 
@@ -84,11 +85,13 @@ struct {
 void initialize() {
     bus::initialize();
     intc::initialize();
+    maple::initialize();
 }
 
 void reset() {
     bus::reset();
     intc::reset();
+    maple::reset();
 
     std::memset(&ctx, 0, sizeof(ctx));
 }
@@ -96,6 +99,7 @@ void reset() {
 void shutdown() {
     bus::shutdown();
     intc::shutdown();
+    maple::shutdown();
 }
 
 template<typename T>

@@ -26,6 +26,7 @@ set(SOURCES
     src/hw/holly/bus.cpp
     src/hw/holly/holly.cpp
     src/hw/holly/intc.cpp
+    src/hw/holly/maple.cpp
 )
 
 # Set header files
@@ -40,6 +41,7 @@ set(HEADERS
     include/hw/holly/bus.hpp
     include/hw/holly/holly.hpp
     include/hw/holly/intc.hpp
+    include/hw/holly/maple.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

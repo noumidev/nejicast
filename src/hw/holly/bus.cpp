@@ -16,6 +16,7 @@
 #include <hw/g1/g1.hpp>
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
+#include <hw/holly/maple.hpp>
 
 namespace hw::holly::bus {
 
@@ -27,6 +28,7 @@ namespace MemoryBase {
     enum : u32 {
         BootRom = 0x00000000,
         Intc    = 0x005F6900,
+        Maple   = 0x005F6C00,
         G1      = 0x005F7400,
         Dram    = 0x0C000000,
     };
@@ -123,6 +125,8 @@ T read(const u32 addr) {
     switch (addr & ~(MemorySize::Io - 1)) {
         case MemoryBase::Intc:
             return hw::holly::intc::read<T>(addr);
+        case MemoryBase::Maple:
+            return hw::holly::maple::read<T>(addr);
         case MemoryBase::G1:
             return hw::g1::read<T>(addr);
     }
@@ -151,6 +155,8 @@ void write(const u32 addr, const T data) {
     switch (addr & ~(MemorySize::Io - 1)) {
         case MemoryBase::Intc:
             return hw::holly::intc::write<T>(addr, data);
+        case MemoryBase::Maple:
+            return hw::holly::maple::write<T>(addr, data);
         case MemoryBase::G1:
             return hw::g1::write<T>(addr, data);
     }
