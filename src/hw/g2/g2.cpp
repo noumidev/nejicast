@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/g2/modem.hpp>
+
 namespace hw::g2 {
 
 enum : u32 {
@@ -137,13 +139,19 @@ struct {
     } address_protection;
 } ctx;
 
-void initialize() {}
+void initialize() {
+    modem::initialize();
+}
 
 void reset() {
+    modem::reset();
+
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
-void shutdown() {}
+void shutdown() {
+    modem::shutdown();
+}
 
 template<typename T>
 T read(const u32 addr) {
