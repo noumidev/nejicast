@@ -17,25 +17,23 @@ namespace hw::g1 {
 
 constexpr usize BOOT_ROM_SIZE = 0x200000;
 
-namespace Address {
-    enum : u32 {
-        Gdstar  = 0x005F7404,
-        Gdlen   = 0x005F7408,
-        Gddir   = 0x005F740C,
-        Gden    = 0x005F7414,
-        Gdst    = 0x005F7418,
-        G1Rrc   = 0x005F7480,
-        G1Rwc   = 0x005F7484,
-        G1Frc   = 0x005F7488,
-        G1Fwc   = 0x005F748C,
-        G1Crc   = 0x005F7490,
-        G1Cwc   = 0x005F7494,
-        G1Gdrc  = 0x005F74A0,
-        G1Gdwc  = 0x005F74A4,
-        G1Crdyc = 0x005F74B4,
-        Gdapro  = 0x005F74B8,
-    };
-}
+enum : u32 {
+    IO_GDSTAR  = 0x005F7404,
+    IO_GDLEN   = 0x005F7408,
+    IO_GDDIR   = 0x005F740C,
+    IO_GDEN    = 0x005F7414,
+    IO_GDST    = 0x005F7418,
+    IO_G1RRC   = 0x005F7480,
+    IO_G1RWC   = 0x005F7484,
+    IO_G1FRC   = 0x005F7488,
+    IO_G1FWC   = 0x005F748C,
+    IO_G1CRC   = 0x005F7490,
+    IO_G1CWC   = 0x005F7494,
+    IO_G1GDRC  = 0x005F74A0,
+    IO_G1GDWC  = 0x005F74A4,
+    IO_G1CRDYC = 0x005F74B4,
+    IO_GDAPRO  = 0x005F74B8,
+};
 
 #define SB_GDSTAR  ctx.gdrom_dma.start_address
 #define SB_GDLEN   ctx.gdrom_dma.length
@@ -147,7 +145,7 @@ void write(const u32 addr, const T data) {
 template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
-        case Address::G1Rrc:
+        case IO_G1RRC:
             std::printf("SB_G1RRC write16 = %04X\n", data);
 
             SB_G1RRC.raw = data;
@@ -161,72 +159,72 @@ void write(const u32 addr, const u16 data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
-        case Address::Gdstar:
+        case IO_GDSTAR:
             std::printf("SB_GDSTAR write32 = %08X\n", data);
 
             SB_GDSTAR = data;
             break;
-        case Address::Gdlen:
+        case IO_GDLEN:
             std::printf("SB_GDLEN write32 = %08X\n", data);
 
             SB_GDLEN = data;
             break;
-        case Address::Gddir:
+        case IO_GDDIR:
             std::printf("SB_GDDIR write32 = %08X\n", data);
 
             SB_GDDIR = (data & 1) != 0;
             break;
-        case Address::Gden:
+        case IO_GDEN:
             std::printf("SB_GDEN write32 = %08X\n", data);
 
             SB_GDEN = (data & 1) != 0;
             break;
-        case Address::Gdst:
+        case IO_GDST:
             std::printf("SB_GDST write32 = %08X\n", data);
 
             assert((data & 1) == 0);
             break;
-        case Address::G1Rwc:
+        case IO_G1RWC:
             std::printf("SB_G1RWC write32 = %08X\n", data);
 
             SB_G1RWC.raw = data;
             break;
-        case Address::G1Frc:
+        case IO_G1FRC:
             std::printf("SB_G1FRC write32 = %08X\n", data);
 
             SB_G1FRC.raw = data;
             break;
-        case Address::G1Fwc:
+        case IO_G1FWC:
             std::printf("SB_G1FWC write32 = %08X\n", data);
 
             SB_G1FWC.raw = data;
             break;
-        case Address::G1Crc:
+        case IO_G1CRC:
             std::printf("SB_G1CRC write32 = %08X\n", data);
 
             SB_G1CRC.raw = data;
             break;
-        case Address::G1Cwc:
+        case IO_G1CWC:
             std::printf("SB_G1CWC write32 = %08X\n", data);
 
             SB_G1CWC.raw = data;
             break;
-        case Address::G1Gdrc:
+        case IO_G1GDRC:
             std::printf("SB_G1GDRC write32 = %08X\n", data);
 
             SB_G1GDRC.raw = data;
             break;
-        case Address::G1Gdwc:
+        case IO_G1GDWC:
             std::printf("SB_G1GDWC write32 = %08X\n", data);
 
             SB_G1GDWC.raw = data;
             break;
-        case Address::G1Crdyc:
+        case IO_G1CRDYC:
             std::printf("SB_G1CRDYC write32 = %08X\n", data);
 
             SB_G1CRDYC = (data & 1) != 0;
             break;
-        case Address::Gdapro:
+        case IO_GDAPRO:
             std::printf("SB_GDAPRO write32 = %08X\n", data);
 
             if ((data & ~0xFFFF) == 0x88430000) {

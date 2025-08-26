@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include <cstddef>
 #include <hw/holly/bus.hpp>
 
 #include <array>
@@ -14,6 +13,7 @@
 #include <vector>
 
 #include <hw/g1/g1.hpp>
+#include <hw/g2/g2.hpp>
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/holly/maple.hpp>
@@ -24,29 +24,26 @@ constexpr usize ADDRESS_SPACE = 0x20000000;
 constexpr usize PAGE_SIZE = 0x1000;
 constexpr usize PAGE_MASK = PAGE_SIZE - 1;
 
-namespace MemoryBase {
-    enum : u32 {
-        BootRom = 0x00000000,
-        Intc    = 0x005F6900,
-        Maple   = 0x005F6C00,
-        G1      = 0x005F7400,
-        Dram    = 0x0C000000,
-    };
-}
+enum : u32 {
+    BASE_BOOT_ROM = 0x00000000,
+    BASE_INTC     = 0x005F6900,
+    BASE_MAPLE    = 0x005F6C00,
+    BASE_G1       = 0x005F7400,
+    BASE_G2       = 0x005F7800,
+    BASE_DRAM     = 0x0C000000,
+};
 
-namespace MemorySize {
-    enum : u32 {
-        BootRom = 0x00200000,
-        Io      = 0x00000100,
-        Dram    = 0x01000000,
-    };
-}
+enum : u32 {
+    SIZE_BOOT_ROM = 0x00200000,
+    SIZE_IO       = 0x00000100,
+    SIZE_DRAM     = 0x01000000,
+};
 
 struct {
     // Pagetables for software fastmem
     std::array<u8*, ADDRESS_SPACE / PAGE_SIZE> rd_table, wr_table;
 
-    std::array<u8, MemorySize::Dram> dram;
+    std::array<u8, SIZE_DRAM> dram;
 } ctx;
 
 static bool is_aligned(const u64 addr, const u64 align) {
@@ -86,16 +83,16 @@ static void map_memory(
 void initialize() {
     map_memory(
         g1::get_boot_rom_ptr(),
-        MemoryBase::BootRom,
-        MemorySize::BootRom,
+        BASE_BOOT_ROM,
+        SIZE_BOOT_ROM,
         true,
         false
     );
 
     map_memory(
         ctx.dram.data(),
-        MemoryBase::Dram,
-        MemorySize::Dram,
+        BASE_DRAM,
+        SIZE_DRAM,
         true,
         true
     );
@@ -122,13 +119,15 @@ T read(const u32 addr) {
         return data;
     }
 
-    switch (addr & ~(MemorySize::Io - 1)) {
-        case MemoryBase::Intc:
+    switch (addr & ~(SIZE_IO - 1)) {
+        case BASE_INTC:
             return hw::holly::intc::read<T>(addr);
-        case MemoryBase::Maple:
+        case BASE_MAPLE:
             return hw::holly::maple::read<T>(addr);
-        case MemoryBase::G1:
+        case BASE_G1:
             return hw::g1::read<T>(addr);
+        case BASE_G2:
+            return hw::g2::read<T>(addr);
     }
 
     // Redirect read
@@ -152,13 +151,15 @@ void write(const u32 addr, const T data) {
         return;
     }
 
-    switch (addr & ~(MemorySize::Io - 1)) {
-        case MemoryBase::Intc:
+    switch (addr & ~(SIZE_IO - 1)) {
+        case BASE_INTC:
             return hw::holly::intc::write<T>(addr, data);
-        case MemoryBase::Maple:
+        case BASE_MAPLE:
             return hw::holly::maple::write<T>(addr, data);
-        case MemoryBase::G1:
+        case BASE_G1:
             return hw::g1::write<T>(addr, data);
+        case BASE_G2:
+            return hw::g2::write<T>(addr, data);
     }
 
     // Redirect write

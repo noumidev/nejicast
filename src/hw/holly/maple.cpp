@@ -12,17 +12,15 @@
 
 namespace hw::holly::maple {
 
-namespace Address {
-    enum : u32 {
-        Mdstar = 0x005F6C04,
-        Mdtsel = 0x005F6C10,
-        Mden   = 0x005F6C14,
-        Mdst   = 0x005F6C18,
-        Msys   = 0x005F6C80,
-        Mdapro = 0x005F6C8C,
-        Mmsel  = 0x005F6CE8,
-    };
-}
+enum : u32 {
+    IO_MDSTAR = 0x005F6C04,
+    IO_MDTSEL = 0x005F6C10,
+    IO_MDEN   = 0x005F6C14,
+    IO_MDST   = 0x005F6C18,
+    IO_MSYS   = 0x005F6C80,
+    IO_MDAPRO = 0x005F6C8C,
+    IO_MMSEL  = 0x005F6CE8,
+};
 
 #define SB_MDSTAR ctx.command_table_address
 #define SB_MDTSEL ctx.is_vblank_trigger
@@ -94,39 +92,39 @@ void write(const u32 addr, const T data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
-        case Address::Mdstar:
+        case IO_MDSTAR:
             std::printf("SB_MDSTAR write32 = %08X\n", data);
 
             SB_MDSTAR = data;
             break;
-        case Address::Mdtsel:
+        case IO_MDTSEL:
             std::printf("SB_MDTSEL write32 = %08X\n", data);
 
             SB_MDTSEL = (data & 1) != 0;
             break;
-        case Address::Mden:
+        case IO_MDEN:
             std::printf("SB_MDEN write32 = %08X\n", data);
 
             SB_MDEN = (data & 1) != 0;
             break;
-        case Address::Mdst:
+        case IO_MDST:
             std::printf("SB_MDST write32 = %08X\n", data);
             
             assert((data & 1) == 0);
             break;
-        case Address::Msys:
+        case IO_MSYS:
             std::printf("SB_MSYS write32 = %08X\n", data);
 
             SB_MSYS.raw = data;
             break;
-        case Address::Mdapro:
+        case IO_MDAPRO:
             std::printf("SB_MDAPRO write32 = %08X\n", data);
 
             if ((data & ~0xFFFF) == 0x61550000) {
                 SB_MDAPRO.raw = (u16)data;
             }
             break;
-        case Address::Mmsel:
+        case IO_MMSEL:
             std::printf("SB_MMSEL write32 = %08X\n", data);
 
             SB_MMSEL = (data & 1) != 0;

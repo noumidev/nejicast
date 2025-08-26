@@ -16,25 +16,23 @@
 
 namespace hw::holly {
 
-namespace Address {
-    enum : u32 {
-        C2Dstat = 0x005F6800,
-        C2Dlen  = 0x005F6804,
-        C2Dst   = 0x005F6808,
-        Sdstaw  = 0x005F6810,
-        Sdbaaw  = 0x005F6814,
-        Sdwlt   = 0x005F6818,
-        Sdlas   = 0x005F681C,
-        Sdst    = 0x005F6820,
-        Dbreqm  = 0x005F6840,
-        Bavlwc  = 0x005F6844,
-        C2Dpryc = 0x005F6848,
-        C2Dmaxl = 0x005F684C,
-        Lmmode0 = 0x005F6884,
-        Lmmode1 = 0x005F6888,
-        Rbsplt  = 0x005F68A0,
-    };
-}
+enum : u32 {
+    IO_C2DSTAT = 0x005F6800,
+    IO_C2DLEN  = 0x005F6804,
+    IO_C2DST   = 0x005F6808,
+    IO_SDSTAW  = 0x005F6810,
+    IO_SDBAAW  = 0x005F6814,
+    IO_SDWLT   = 0x005F6818,
+    IO_SDLAS   = 0x005F681C,
+    IO_SDST    = 0x005F6820,
+    IO_DBREQM  = 0x005F6840,
+    IO_BAVLWC  = 0x005F6844,
+    IO_C2DPRYC = 0x005F6848,
+    IO_C2DMAXL = 0x005F684C,
+    IO_LMMODE0 = 0x005F6884,
+    IO_LMMODE1 = 0x005F6888,
+    IO_RBSPLT  = 0x005F68A0,
+};
 
 #define SB_C2DSTAT ctx.channel_2.destination_address
 #define SB_C2DLEN  ctx.channel_2.length
@@ -122,81 +120,81 @@ void write(const u32 addr, const T data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
-        case Address::C2Dstat:
+        case IO_C2DSTAT:
             std::printf("SB_C2DSTAT write32 = %08X\n", data);
 
             SB_C2DSTAT = data;
             break;
-        case Address::C2Dlen:
+        case IO_C2DLEN:
             std::printf("SB_C2DLEN write32 = %08X\n", data);
 
             SB_C2DLEN = data;
             break;
-        case Address::C2Dst:
+        case IO_C2DST:
             std::printf("SB_C2DST write32 = %08X\n", data);
 
             SB_C2DST = (data & 1) != 0;
 
             assert(!SB_C2DST);
             break;
-        case Address::Sdstaw:
+        case IO_SDSTAW:
             std::printf("SB_SDSTAW write32 = %08X\n", data);
 
             SB_SDSTAW = data | (1 << 27); // Bit 27 is hardwired to 1
             break;
-        case Address::Sdbaaw:
+        case IO_SDBAAW:
             std::printf("SB_SDBAAW write32 = %08X\n", data);
 
             SB_SDBAAW = data | (1 << 27); // Bit 27 is hardwired to 1
             break;
-        case Address::Sdwlt:
+        case IO_SDWLT:
             std::printf("SB_SDWLT write32 = %08X\n", data);
 
             SB_SDWLT = (data & 1) != 0;
             break;
-        case Address::Sdlas:
+        case IO_SDLAS:
             std::printf("SB_SDLAS write32 = %08X\n", data);
 
             SB_SDLAS = (data & 1) != 0;
             break;
-        case Address::Sdst:
+        case IO_SDST:
             std::printf("SB_SDST write32 = %08X\n", data);
 
             SB_SDST = (data & 1) != 0;
 
             assert(!SB_SDST);
             break;
-        case Address::Dbreqm:
+        case IO_DBREQM:
             std::printf("SB_DBREQM write32 = %08X\n", data);
 
             SB_DBREQM = (data & 1) != 0;
             break;
-        case Address::Bavlwc:
+        case IO_BAVLWC:
             std::printf("SB_BAVLWC write32 = %08X\n", data);
 
             SB_BAVLWC = data;
             break;
-        case Address::C2Dpryc:
+        case IO_C2DPRYC:
             std::printf("SB_C2DPRYC write32 = %08X\n", data);
 
             SB_C2DPRYC = data;
             break;
-        case Address::C2Dmaxl:
+        case IO_C2DMAXL:
             std::printf("SB_C2DMAXL write32 = %08X\n", data);
 
             SB_C2DMAXL = data;
             break;
-        case Address::Lmmode0:
+        case IO_LMMODE0:
             std::printf("SB_LMMODE0 write32 = %08X\n", data);
 
             SB_LMMODE0 = (data & 1) != 0;
             break;
-        case Address::Lmmode1:
+        case IO_LMMODE1:
             std::printf("SB_LMMODE1 write32 = %08X\n", data);
 
             SB_LMMODE1 = (data & 1) != 0;
             break;
-        case Address::Rbsplt:
+        case IO_RBSPLT:
             std::printf("SB_RBSPLT write32 = %08X\n", data);
 
             SB_RBSPLT = (data >> 31) != 0;

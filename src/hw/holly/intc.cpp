@@ -11,23 +11,21 @@
 
 namespace hw::holly::intc {
 
-namespace Address {
-    enum : u32 {
-        Iml2Nrm = 0x005F6910,
-        Iml2Ext = 0x005F6914,
-        Iml2Err = 0x005F6918,
-        Iml4Nrm = 0x005F6920,
-        Iml4Ext = 0x005F6924,
-        Iml4Err = 0x005F6928,
-        Iml6Nrm = 0x005F6930,
-        Iml6Ext = 0x005F6934,
-        Iml6Err = 0x005F6938,
-        Pdtnrm  = 0x005F6940,
-        Pdtext  = 0x005F6944,
-        G2Dtnrm = 0x005F6950,
-        G2Dtext = 0x005F6954,
-    };
-}
+enum : u32 {
+    IO_IML2NRM = 0x005F6910,
+    IO_IML2EXT = 0x005F6914,
+    IO_IML2ERR = 0x005F6918,
+    IO_IML4NRM = 0x005F6920,
+    IO_IML4EXT = 0x005F6924,
+    IO_IML4ERR = 0x005F6928,
+    IO_IML6NRM = 0x005F6930,
+    IO_IML6EXT = 0x005F6934,
+    IO_IML6ERR = 0x005F6938,
+    IO_PDTNRM  = 0x005F6940,
+    IO_PDTEXT  = 0x005F6944,
+    IO_G2DTNRM = 0x005F6950,
+    IO_G2DTEXT = 0x005F6954,
+};
 
 enum {
     LEVEL_2,
@@ -96,67 +94,67 @@ void write(const u32 addr, const T data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
-        case Address::Iml2Nrm:
+        case IO_IML2NRM:
             std::printf("SB_IML2NRM write32 = %08X\n", data);
 
             SB_IML2NRM = data;
             break;
-        case Address::Iml2Ext:
+        case IO_IML2EXT:
             std::printf("SB_IML2EXT write32 = %08X\n", data);
 
             SB_IML2EXT = data;
             break;
-        case Address::Iml2Err:
+        case IO_IML2ERR:
             std::printf("SB_IML2ERR write32 = %08X\n", data);
 
             SB_IML2ERR = data;
             break;
-        case Address::Iml4Nrm:
+        case IO_IML4NRM:
             std::printf("SB_IML4NRM write32 = %08X\n", data);
 
             SB_IML4NRM = data;
             break;
-        case Address::Iml4Ext:
+        case IO_IML4EXT:
             std::printf("SB_IML4EXT write32 = %08X\n", data);
 
             SB_IML4EXT = data;
             break;
-        case Address::Iml4Err:
+        case IO_IML4ERR:
             std::printf("SB_IML4ERR write32 = %08X\n", data);
 
             SB_IML4ERR = data;
             break;
-        case Address::Iml6Nrm:
+        case IO_IML6NRM:
             std::printf("SB_IML6NRM write32 = %08X\n", data);
 
             SB_IML6NRM = data;
             break;
-        case Address::Iml6Ext:
+        case IO_IML6EXT:
             std::printf("SB_IML6EXT write32 = %08X\n", data);
 
             SB_IML6EXT = data;
             break;
-        case Address::Iml6Err:
+        case IO_IML6ERR:
             std::printf("SB_IML6ERR write32 = %08X\n", data);
 
             SB_IML6ERR = data;
             break;
-        case Address::Pdtnrm:
+        case IO_PDTNRM:
             std::printf("SB_PDTNRM write32 = %08X\n", data);
 
             SB_PDTNRM = data;
             break;
-        case Address::Pdtext:
+        case IO_PDTEXT:
             std::printf("SB_PDTEXT write32 = %08X\n", data);
 
             SB_PDTEXT = data;
             break;
-        case Address::G2Dtnrm:
+        case IO_G2DTNRM:
             std::printf("SB_G2DTNRM write32 = %08X\n", data);
 
             SB_G2DTNRM = data;
             break;
-        case Address::G2Dtext:
+        case IO_G2DTEXT:
             std::printf("SB_G2DTEXT write32 = %08X\n", data);
 
             SB_G2DTEXT = data;

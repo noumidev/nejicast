@@ -379,15 +379,13 @@ static void raise_exception(const u32 event, const u32 offset) {
     }
 }
 
-namespace PrivilegedRegion {
-    enum : u32 {
-        P0 = 0x00000000,
-        P1 = 0x80000000,
-        P2 = 0xA0000000,
-        P3 = 0xC0000000,
-        P4 = 0xE0000000,
-    };
-}
+enum : u32 {
+    REGION_P0 = 0x00000000,
+    REGION_P1 = 0x80000000,
+    REGION_P2 = 0xA0000000,
+    REGION_P3 = 0xC0000000,
+    REGION_P4 = 0xE0000000,
+};
 
 constexpr u32 P0_MASK = 0x7FFFFFFF;
 constexpr u32 PRIV_MASK = 0x1FFFFFFF;
@@ -398,19 +396,19 @@ static T read(const u32 addr) {
     
     u32 masked_addr = addr & PRIV_MASK;
 
-    if (addr < PrivilegedRegion::P1) {
+    if (addr < REGION_P1) {
         masked_addr = addr & P0_MASK;
 
         std::printf("Unimplemented P0 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
         exit(1);
-    } else if (addr < PrivilegedRegion::P2) {
+    } else if (addr < REGION_P2) {
         // P1, cacheable
         // TODO: implement caches?
         return hw::holly::bus::read<T>(masked_addr);
-    } else if (addr < PrivilegedRegion::P3) {
+    } else if (addr < REGION_P3) {
         // P2, non-cacheable
         return hw::holly::bus::read<T>(masked_addr);
-    } else if (addr < PrivilegedRegion::P4) {
+    } else if (addr < REGION_P4) {
         std::printf("Unimplemented P3 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
         exit(1);
     } else {
@@ -436,19 +434,19 @@ static void write(const u32 addr, const T data) {
     
     u32 masked_addr = addr & PRIV_MASK;
 
-    if (addr < PrivilegedRegion::P1) {
+    if (addr < REGION_P1) {
         masked_addr = addr & P0_MASK;
 
         std::printf("Unimplemented P0 write%zu @ %08X = %0*llX\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), (u64)data);
         exit(1);
-    } else if (addr < PrivilegedRegion::P2) {
+    } else if (addr < REGION_P2) {
         // P1, cacheable
         // TODO: implement caches?
         return hw::holly::bus::write<T>(masked_addr, data);
-    } else if (addr < PrivilegedRegion::P3) {
+    } else if (addr < REGION_P3) {
         // P2, non-cacheable
         return hw::holly::bus::write<T>(masked_addr, data);
-    } else if (addr < PrivilegedRegion::P4) {
+    } else if (addr < REGION_P4) {
         std::printf("Unimplemented P3 write%zu @ %08X = %0*llX\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), (u64)data);
         exit(1);
     } else {

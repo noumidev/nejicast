@@ -12,84 +12,82 @@
 
 namespace hw::cpu::ocio {
 
-namespace Address {
-    enum : u32 {
-        Pteh    = 0x1F000000,
-        Ptel    = 0x1F000004,
-        Ttb     = 0x1F000008,
-        Tea     = 0x1F00000C,
-        Mmucr   = 0x1F000010,
-        Ccr     = 0x1F00001C,
-        Trapa   = 0x1F000020,
-        Expevt  = 0x1F000024,
-        Intevt  = 0x1F000028,
-        Ptea    = 0x1F000034,
-        Qacr1   = 0x1F000038,
-        Qacr2   = 0x1F00003C,
-        Bbra    = 0x1F200008,
-        Bbrb    = 0x1F200014,
-        Brcr    = 0x1F200020,
-        Bcr1    = 0x1F800000,
-        Bcr2    = 0x1F800004,
-        Wcr1    = 0x1F800008,
-        Wcr2    = 0x1F80000C,
-        Wcr3    = 0x1F800010,
-        Mcr     = 0x1F800014,
-        Pcr     = 0x1F800018,
-        Rtcsr   = 0x1F80001C,
-        Rtcor   = 0x1F800024,
-        Rfcr    = 0x1F800028,
-        Pctra   = 0x1F80002C,
-        Pdtra   = 0x1F800030,
-        Pctrb   = 0x1F800040,
-        Pdtrb   = 0x1F800044,
-        Gpioic  = 0x1F800048,
-        Sdmr3   = 0x1F940000,
-        Sar0    = 0x1FA00000,
-        Dar0    = 0x1FA00004,
-        Dmatcr0 = 0x1FA00008,
-        Chcr0   = 0x1FA0000C,
-        Sar1    = 0x1FA00010,
-        Dar1    = 0x1FA00014,
-        Dmatcr1 = 0x1FA00018,
-        Chcr1   = 0x1FA0001C,
-        Sar2    = 0x1FA00020,
-        Dar2    = 0x1FA00024,
-        Dmatcr2 = 0x1FA00028,
-        Chcr2   = 0x1FA0002C,
-        Sar3    = 0x1FA00030,
-        Dar3    = 0x1FA00034,
-        Dmatcr3 = 0x1FA00038,
-        Chcr3   = 0x1FA0003C,
-        Dmaor   = 0x1FA00040,
-        Stbcr   = 0x1FC00004,
-        Wtcnt   = 0x1FC00008,
-        Wtcsr   = 0x1FC0000C,
-        Stbcr2  = 0x1FC00010,
-        Rmonar  = 0x1FC80034,
-        Rcr1    = 0x1FC80038,
-        Icr     = 0x1FD00000,
-        Ipra    = 0x1FD00004,
-        Iprb    = 0x1FD00008,
-        Iprc    = 0x1FD0000C,
-        Tocr    = 0x1FD80000,
-        Tstr    = 0x1FD80004,
-        Tcor0   = 0x1FD80008,
-        Tcnt0   = 0x1FD8000C,
-        Tcr0    = 0x1FD80010,
-        Tcor1   = 0x1FD80014,
-        Tcnt1   = 0x1FD80018,
-        Tcr1    = 0x1FD8001C,
-        Tcor2   = 0x1FD80020,
-        Tcnt2   = 0x1FD80024,
-        Tcr2    = 0x1FD80028,
-        Scsmr2  = 0x1FE80000,
-        Scbrr2  = 0x1FE80004,
-        Scscr2  = 0x1FE80008,
-        Scfcr2  = 0x1FE80018,
-        Scsptr2 = 0x1FE80020,
-    };
-}
+enum : u32 {
+    IO_PTEH    = 0x1F000000,
+    IO_PTEL    = 0x1F000004,
+    IO_TTB     = 0x1F000008,
+    IO_TEA     = 0x1F00000C,
+    IO_MMUCR   = 0x1F000010,
+    IO_CCR     = 0x1F00001C,
+    IO_TRAPA   = 0x1F000020,
+    IO_EXPEVT  = 0x1F000024,
+    IO_INTEVT  = 0x1F000028,
+    IO_PTEA    = 0x1F000034,
+    IO_QACR1   = 0x1F000038,
+    IO_QACR2   = 0x1F00003C,
+    IO_BBRA    = 0x1F200008,
+    IO_BBRB    = 0x1F200014,
+    IO_BRCR    = 0x1F200020,
+    IO_BCR1    = 0x1F800000,
+    IO_BCR2    = 0x1F800004,
+    IO_WCR1    = 0x1F800008,
+    IO_WCR2    = 0x1F80000C,
+    IO_WCR3    = 0x1F800010,
+    IO_MCR     = 0x1F800014,
+    IO_PCR     = 0x1F800018,
+    IO_RTCSR   = 0x1F80001C,
+    IO_RTCOR   = 0x1F800024,
+    IO_RFCR    = 0x1F800028,
+    IO_PCTRA   = 0x1F80002C,
+    IO_PDTRA   = 0x1F800030,
+    IO_PCTRB   = 0x1F800040,
+    IO_PDTRB   = 0x1F800044,
+    IO_GPIOIC  = 0x1F800048,
+    IO_SDMR3   = 0x1F940000,
+    IO_SAR0    = 0x1FA00000,
+    IO_DAR0    = 0x1FA00004,
+    IO_DMATCR0 = 0x1FA00008,
+    IO_CHCR0   = 0x1FA0000C,
+    IO_SAR1    = 0x1FA00010,
+    IO_DAR1    = 0x1FA00014,
+    IO_DMATCR1 = 0x1FA00018,
+    IO_CHCR1   = 0x1FA0001C,
+    IO_SAR2    = 0x1FA00020,
+    IO_DAR2    = 0x1FA00024,
+    IO_DMATCR2 = 0x1FA00028,
+    IO_CHCR2   = 0x1FA0002C,
+    IO_SAR3    = 0x1FA00030,
+    IO_DAR3    = 0x1FA00034,
+    IO_DMATCR3 = 0x1FA00038,
+    IO_CHCR3   = 0x1FA0003C,
+    IO_DMAOR   = 0x1FA00040,
+    IO_STBCR   = 0x1FC00004,
+    IO_WTCNT   = 0x1FC00008,
+    IO_WTCSR   = 0x1FC0000C,
+    IO_STBCR2  = 0x1FC00010,
+    IO_RMONAR  = 0x1FC80034,
+    IO_RCR1    = 0x1FC80038,
+    IO_ICR     = 0x1FD00000,
+    IO_IPRA    = 0x1FD00004,
+    IO_IPRB    = 0x1FD00008,
+    IO_IPRC    = 0x1FD0000C,
+    IO_TOCR    = 0x1FD80000,
+    IO_TSTR    = 0x1FD80004,
+    IO_TCOR0   = 0x1FD80008,
+    IO_TCNT0   = 0x1FD8000C,
+    IO_TCR0    = 0x1FD80010,
+    IO_TCOR1   = 0x1FD80014,
+    IO_TCNT1   = 0x1FD80018,
+    IO_TCR1    = 0x1FD8001C,
+    IO_TCOR2   = 0x1FD80020,
+    IO_TCNT2   = 0x1FD80024,
+    IO_TCR2    = 0x1FD80028,
+    IO_SCSMR2  = 0x1FE80000,
+    IO_SCBRR2  = 0x1FE80004,
+    IO_SCSCR2  = 0x1FE80008,
+    IO_SCFCR2  = 0x1FE80018,
+    IO_SCSPTR2 = 0x1FE80020,
+};
 
 enum {
     DMA_0,
@@ -764,7 +762,7 @@ T read(const u32 addr) {
 template<>
 u16 read(const u32 addr) {
     switch (addr) {
-        case Address::Rfcr:
+        case IO_RFCR:
             std::puts("RFCR read16");
 
             // HACK
@@ -780,7 +778,7 @@ u16 read(const u32 addr) {
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
-        case Address::Expevt:
+        case IO_EXPEVT:
             std::puts("EXPEVT read32");
 
             return EXPEVT;
@@ -801,7 +799,7 @@ void write(const u32 addr, const T data) {
 
 template<>
 void write(const u32 addr, const u8 data) {
-    if ((addr & ~0xFFFF) == Address::Sdmr3) {
+    if ((addr & ~0xFFFF) == IO_SDMR3) {
         // TODO: handle 32-bis bus SDMR3 writes?
         SDMR3 = (data & 0x1FF8) >> 3;
 
@@ -810,37 +808,37 @@ void write(const u32 addr, const u8 data) {
     }
 
     switch (addr) {
-        case Address::Stbcr:
+        case IO_STBCR:
             std::printf("STBCR write8 = %02X\n", data);
 
             STBCR.raw = data;
             break;
-        case Address::Rmonar:
+        case IO_RMONAR:
             std::printf("RMONAR write8 = %02X\n", data);
 
             RMONAR.raw = data;
             break;
-        case Address::Rcr1:
+        case IO_RCR1:
             std::printf("RCR1 write8 = %02X\n", data);
 
             RCR1.raw = data;
             break;
-        case Address::Stbcr2:
+        case IO_STBCR2:
             std::printf("STBCR2 write8 = %02X\n", data);
 
             STBCR2.raw = data;
             break;
-        case Address::Tocr:
+        case IO_TOCR:
             std::printf("TOCR write8 = %02X\n", data);
 
             TOCR.raw = data;
             break;
-        case Address::Tstr:
+        case IO_TSTR:
             std::printf("TSTR write8 = %02X\n", data);
 
             TSTR.raw = data;
             break;
-        case Address::Scbrr2:
+        case IO_SCBRR2:
             std::printf("SCBRR2 write8 = %02X\n", data);
 
             SCBRR2 = data;
@@ -854,130 +852,130 @@ void write(const u32 addr, const u8 data) {
 template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
-        case Address::Bbra:
+        case IO_BBRA:
             std::printf("BBRA write16 = %04X\n", data);
 
             BBRA.raw = data;
             break;
-        case Address::Bbrb:
+        case IO_BBRB:
             std::printf("BBRB write16 = %04X\n", data);
 
             BBRB.raw = data;
             break;
-        case Address::Brcr:
+        case IO_BRCR:
             std::printf("BRCR write16 = %04X\n", data);
 
             BRCR.raw = data;
             break;
-        case Address::Bcr2:
+        case IO_BCR2:
             std::printf("BCR2 write16 = %04X\n", data);
 
             BCR2.raw = data;
             break;
-        case Address::Pcr:
+        case IO_PCR:
             std::printf("PCR write16 = %04X\n", data);
             break;
-        case Address::Rtcsr:
+        case IO_RTCSR:
             std::printf("RTCSR write16 = %04X\n", data);
 
             if ((data & 0xFF00) == 0xA500) {
                 RTCSR.raw = data & 0xFF;
             }
             break;
-        case Address::Rtcor:
+        case IO_RTCOR:
             std::printf("RTCOR write16 = %04X\n", data);
 
             if ((data & 0xFF00) == 0xA500) {
                 RTCOR = data & 0xFF;
             }
             break;
-        case Address::Rfcr:
+        case IO_RFCR:
             std::printf("RFCR write16 = %04X\n", data);
 
             if ((data & 0xFC00) == 0xA400) {
                 RFCR = data & 0x3FF;
             }
             break;
-        case Address::Pdtra:
+        case IO_PDTRA:
             std::printf("PDTRA write16 = %04X\n", data);
 
             write_port_a(data);
             break;
-        case Address::Pdtrb:
+        case IO_PDTRB:
             std::printf("PDTRB write16 = %04X\n", data);
 
             write_port_b(data);
             break;
-        case Address::Gpioic:
+        case IO_GPIOIC:
             std::printf("GPIOIC write16 = %04X\n", data);
 
             GPIOIC = data;
             break;
-        case Address::Wtcnt:
+        case IO_WTCNT:
             std::printf("WTCNT write16 = %04X\n", data);
 
             if ((data & 0xFF00) == 0x5A00) {
                 WTCNT = (u8)data;
             }
             break;
-        case Address::Wtcsr:
+        case IO_WTCSR:
             std::printf("WTCSR write16 = %04X\n", data);
 
             if ((data & 0xFF00) == 0x5A00) {
                 WTCSR.raw = (u8)data;
             }
             break;
-        case Address::Icr:
+        case IO_ICR:
             std::printf("ICR write16 = %04X\n", data);
 
             ICR.raw = data;
             break;
-        case Address::Ipra:
+        case IO_IPRA:
             std::printf("IPRA write16 = %04X\n", data);
 
             IPRA = data;
             break;
-        case Address::Iprb:
+        case IO_IPRB:
             std::printf("IPRB write16 = %04X\n", data);
 
             IPRB = data;
             break;
-        case Address::Iprc:
+        case IO_IPRC:
             std::printf("IPRC write16 = %04X\n", data);
 
             IPRC = data;
             break;
-        case Address::Tcr0:
+        case IO_TCR0:
             std::printf("TCR0 write16 = %04X\n", data);
 
             TCR0.raw = data;
             break;
-        case Address::Tcr1:
+        case IO_TCR1:
             std::printf("TCR1 write16 = %04X\n", data);
 
             TCR1.raw = data;
             break;
-        case Address::Tcr2:
+        case IO_TCR2:
             std::printf("TCR2 write16 = %04X\n", data);
 
             TCR2.raw = data;
             break;
-        case Address::Scsmr2:
+        case IO_SCSMR2:
             std::printf("SCSMR2 write16 = %04X\n", data);
 
             SCSMR2.raw = data;
             break;
-        case Address::Scscr2:
+        case IO_SCSCR2:
             std::printf("SCSCR2 write16 = %04X\n", data);
 
             SCSCR2.raw = data;
             break;
-        case Address::Scfcr2:
+        case IO_SCFCR2:
             std::printf("SCFCR2 write16 = %04X\n", data);
 
             SCFCR2.raw = data;
             break;
-        case Address::Scsptr2:
+        case IO_SCSPTR2:
             std::printf("SCSPTR2 write16 = %04X\n", data);
 
             SCSPTR2.raw = data;
@@ -991,34 +989,34 @@ void write(const u32 addr, const u16 data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
-        case Address::Pteh:
+        case IO_PTEH:
             std::printf("PTEH write32 = %08X\n", data);
 
             PTEH.raw = data;
             break;
-        case Address::Ptel:
+        case IO_PTEL:
             std::printf("PTEL write32 = %08X\n", data);
 
             // TODO
             break;
-        case Address::Ttb:
+        case IO_TTB:
             std::printf("TTB write32 = %08X\n", data);
 
             TTB = data;
             break;
-        case Address::Tea:
+        case IO_TEA:
             std::printf("TEA write32 = %08X\n", data);
 
             TEA = data;
             break;
-        case Address::Mmucr:
+        case IO_MMUCR:
             std::printf("MMUCR write32 = %08X\n", data);
 
             MMUCR.raw = data;
 
             assert(!MMUCR.enable_translation);
             break;
-        case Address::Ccr:
+        case IO_CCR:
             std::printf("CCR write32 = %08X\n", data);
 
             CCR.raw = data;
@@ -1035,162 +1033,162 @@ void write(const u32 addr, const u32 data) {
                 CCR.invalidate_instruction_cache = 0;
             }
             break;
-        case Address::Trapa:
+        case IO_TRAPA:
             std::printf("TRAPA write32 = %08X\n", data);
 
             TRAPA = data;
             break;
-        case Address::Expevt:
+        case IO_EXPEVT:
             std::printf("EXPEVT write32 = %08X\n", data);
 
             EXPEVT = data;
             break;
-        case Address::Intevt:
+        case IO_INTEVT:
             std::printf("INTEVT write32 = %08X\n", data);
 
             INTEVT = data;
             break;
-        case Address::Ptea:
+        case IO_PTEA:
             std::printf("PTEA write32 = %08X\n", data);
 
             PTEA.raw = data;
             break;
-        case Address::Qacr1:
+        case IO_QACR1:
             std::printf("QACR1 write32 = %08X\n", data);
 
             QACR1.raw = data;
             break;
-        case Address::Qacr2:
+        case IO_QACR2:
             std::printf("QACR2 write32 = %08X\n", data);
 
             QACR2.raw = data;
             break;
-        case Address::Bcr1:
+        case IO_BCR1:
             std::printf("BCR1 write32 = %08X\n", data);
 
             BCR1.raw = data;
             break;
-        case Address::Wcr1:
+        case IO_WCR1:
             std::printf("WCR1 write32 = %08X\n", data);
 
             WCR1.raw = data;
             break;
-        case Address::Wcr2:
+        case IO_WCR2:
             std::printf("WCR2 write32 = %08X\n", data);
 
             WCR2.raw = data;
             break;
-        case Address::Wcr3:
+        case IO_WCR3:
             std::printf("WCR3 write32 = %08X\n", data);
 
             WCR3.raw = data;
             break;
-        case Address::Mcr:
+        case IO_MCR:
             std::printf("MCR write32 = %08X\n", data);
 
             MCR.raw = data;
             break;
-        case Address::Pctra:
+        case IO_PCTRA:
             std::printf("PCTRA write32 = %08X\n", data);
 
             PCTRA = data;
             break;
-        case Address::Pctrb:
+        case IO_PCTRB:
             std::printf("PCTRB write32 = %08X\n", data);
 
             PCTRB = data;
             break;
-        case Address::Sar1:
+        case IO_SAR1:
             std::printf("SAR1 write32 = %08X\n", data);
 
             SAR1 = data;
             break;
-        case Address::Dar1:
+        case IO_DAR1:
             std::printf("DAR1 write32 = %08X\n", data);
 
             DAR1 = data;
             break;
-        case Address::Dmatcr1:
+        case IO_DMATCR1:
             std::printf("DMATCR1 write32 = %08X\n", data);
 
             DMATCR1 = data;
             break;
-        case Address::Chcr1:
+        case IO_CHCR1:
             std::printf("CHCR1 write32 = %08X\n", data);
 
             CHCR1.raw = data;
             break;
-        case Address::Sar2:
+        case IO_SAR2:
             std::printf("SAR2 write32 = %08X\n", data);
 
             SAR2 = data;
             break;
-        case Address::Dar2:
+        case IO_DAR2:
             std::printf("DAR2 write32 = %08X\n", data);
 
             DAR2 = data;
             break;
-        case Address::Dmatcr2:
+        case IO_DMATCR2:
             std::printf("DMATCR2 write32 = %08X\n", data);
 
             DMATCR2 = data;
             break;
-        case Address::Chcr2:
+        case IO_CHCR2:
             std::printf("CHCR2 write32 = %08X\n", data);
 
             CHCR2.raw = data;
             break;
-        case Address::Sar3:
+        case IO_SAR3:
             std::printf("SAR3 write32 = %08X\n", data);
 
             SAR3 = data;
             break;
-        case Address::Dar3:
+        case IO_DAR3:
             std::printf("DAR2 write32 = %08X\n", data);
 
             DAR3 = data;
             break;
-        case Address::Dmatcr3:
+        case IO_DMATCR3:
             std::printf("DMATCR3 write32 = %08X\n", data);
 
             DMATCR3 = data;
             break;
-        case Address::Chcr3:
+        case IO_CHCR3:
             std::printf("CHCR3 write32 = %08X\n", data);
 
             CHCR3.raw = data;
             break;
-        case Address::Dmaor:
+        case IO_DMAOR:
             std::printf("DMAOR write32 = %08X\n", data);
 
             DMAOR.raw = data;
             break;
-        case Address::Tcor0:
+        case IO_TCOR0:
             std::printf("TCOR0 write32 = %08X\n", data);
 
             TCOR0 = data;
             break;
-        case Address::Tcnt0:
+        case IO_TCNT0:
             std::printf("TCNT0 write32 = %08X\n", data);
 
             TCNT0 = data;
             break;
-        case Address::Tcor1:
+        case IO_TCOR1:
             std::printf("TCOR1 write32 = %08X\n", data);
 
             TCOR1 = data;
             break;
-        case Address::Tcnt1:
+        case IO_TCNT1:
             std::printf("TCNT1 write32 = %08X\n", data);
 
             TCNT1 = data;
             break;
-        case Address::Tcor2:
+        case IO_TCOR2:
             std::printf("TCOR2 write32 = %08X\n", data);
 
             TCOR2 = data;
             break;
-        case Address::Tcnt2:
+        case IO_TCNT2:
             std::printf("TCNT2 write32 = %08X\n", data);
 
             TCNT2 = data;
