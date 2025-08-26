@@ -11,6 +11,7 @@
 #include <hw/g1/g1.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/holly/holly.hpp>
+#include <hw/pvr/interface.hpp>
 
 constexpr int NUM_ARGS = 2;
 
@@ -23,6 +24,7 @@ void initialize(const common::Config& config) {
     hw::g1::initialize(config.boot_path);
     hw::g2::initialize();
     hw::holly::initialize();
+    hw::pvr::interface::initialize();
 }
 
 void shutdown() {
@@ -30,6 +32,7 @@ void shutdown() {
     hw::g1::shutdown();
     hw::g2::shutdown();
     hw::holly::shutdown();
+    hw::pvr::interface::shutdown();
 }
 
 void reset() {
@@ -37,6 +40,7 @@ void reset() {
     hw::g1::reset();
     hw::g2::reset();
     hw::holly::reset();
+    hw::pvr::interface::reset();
 }
 
 void run() {

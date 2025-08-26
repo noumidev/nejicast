@@ -17,6 +17,7 @@
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/holly/maple.hpp>
+#include <hw/pvr/interface.hpp>
 
 namespace hw::holly::bus {
 
@@ -30,6 +31,7 @@ enum : u32 {
     BASE_MAPLE    = 0x005F6C00,
     BASE_G1       = 0x005F7400,
     BASE_G2       = 0x005F7800,
+    BASE_PVR_IF   = 0x005F7C00,
     BASE_DRAM     = 0x0C000000,
 };
 
@@ -128,6 +130,8 @@ T read(const u32 addr) {
             return hw::g1::read<T>(addr);
         case BASE_G2:
             return hw::g2::read<T>(addr);
+        case BASE_PVR_IF:
+            return hw::pvr::interface::read<T>(addr);
     }
 
     // Redirect read
@@ -160,6 +164,8 @@ void write(const u32 addr, const T data) {
             return hw::g1::write<T>(addr, data);
         case BASE_G2:
             return hw::g2::write<T>(addr, data);
+        case BASE_PVR_IF:
+            return hw::pvr::interface::write<T>(addr, data);
     }
 
     // Redirect write
