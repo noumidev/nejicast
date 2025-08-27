@@ -702,6 +702,60 @@ static void refresh_dram() {
 
 constexpr int NUM_PINS = 16;
 
+enum {
+    PIN_0             = 0,
+    PIN_1             = 1,
+    PIN_VIDEO_MODE_LO = 8,
+    PIN_VIDEO_MODE_HI = 9,
+};
+
+enum {
+    VIDEO_MODE_VGA,
+};
+
+static u16 read_port_a() {
+    u16 port_data = 0;
+
+    for (int i = 0; i < NUM_PINS; i++) {
+        const bool is_output = ((PCTRA >> (2 * i + 0)) & 1) != 0;
+        const bool is_pull_up = ((PCTRA >> (2 * i + 1)) & 1) == 0;
+
+        if (is_output) {
+            // Return latched value
+            port_data |= PDTRA & (1 << i);
+        } else {
+            switch (i) {
+                case PIN_0:
+                case PIN_1:
+                    port_data |= 1 << i;
+                    break;
+                case PIN_VIDEO_MODE_LO:
+                    port_data |= (VIDEO_MODE_VGA & 1) << 8;
+                    break;
+                case PIN_VIDEO_MODE_HI:
+                    port_data |= (VIDEO_MODE_VGA & 2) << 8;
+                    break;
+                default:
+                    if (is_pull_up) {
+                        port_data |= 1 << i;
+                    }
+                    break;
+            }
+        }
+        
+        std::printf("Pin %d read (output: %d, pull-up: %d)\n", i, is_output, is_pull_up);
+    }
+
+    // On Dreamcast, these two pins are shorted
+    if ((port_data & 3) != 3) {
+        port_data &= ~3;
+    }
+
+    std::printf("Port A data = %04X\n", port_data);
+
+    return port_data;
+}
+
 static void write_port_a(const u16 data) {
     for (int i = 0; i < NUM_PINS; i++) {
         const bool is_output = ((PCTRA >> (2 * i)) & 1) != 0;
@@ -709,12 +763,12 @@ static void write_port_a(const u16 data) {
         if (is_output) {
             const u16 bit = (data >> i) & 1;
 
-            std::printf("P%d = %u\n", i, bit);
-
-            PDTRA &= ~(1 << i);
-            PDTRA |= bit << i;
+            std::printf("Pin %d write = %u\n", i, bit);
         }
     }
+
+    // Update latched value
+    PDTRA = data;
 }
 
 // TODO: merge this with Port A write handler?
@@ -725,12 +779,12 @@ static void write_port_b(const u16 data) {
         if (is_output) {
             const u16 bit = (data >> i) & 1;
 
-            std::printf("P%d write = %u\n", i, bit);
-
-            PDTRB &= ~(1 << i);
-            PDTRB |= bit << i;
+            std::printf("Pin %d write = %u\n", i, bit);
         }
     }
+
+    // Update latched value
+    PDTRB = data;
 }
 
 void initialize() {
@@ -769,6 +823,10 @@ u16 read(const u32 addr) {
             refresh_dram();
 
             return RFCR;
+        case IO_PDTRA:
+            std::puts("PDTRA read16");
+
+            return read_port_a();
         default:
             std::printf("Unmapped SH-4 P4 read16 @ %08X\n", addr);
             exit(1);
@@ -782,6 +840,14 @@ u32 read(const u32 addr) {
             std::puts("EXPEVT read32");
 
             return EXPEVT;
+        case IO_PCTRA:
+            std::puts("PCTRA read32");
+
+            return PCTRA;
+        case IO_TCNT0:
+            std::puts("TCNT0 read32");
+
+            return TCNT0;
         default:
             std::printf("Unmapped SH-4 P4 read32 @ %08X\n", addr);
             exit(1);
