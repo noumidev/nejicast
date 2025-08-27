@@ -18,6 +18,7 @@
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/holly/maple.hpp>
+#include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 
 namespace hw::holly::bus {
@@ -33,6 +34,7 @@ enum : u32 {
     BASE_G1       = 0x005F7400,
     BASE_G2       = 0x005F7800,
     BASE_PVR_IF   = 0x005F7C00,
+    BASE_PVR_CORE = 0x005F8000,
     BASE_MODEM    = 0x00600000,
     BASE_DRAM     = 0x0C000000,
 };
@@ -41,6 +43,7 @@ enum : u32 {
     SIZE_BOOT_ROM = 0x00200000,
     SIZE_IO       = 0x00000100,
     SIZE_MODEM    = 0x00000800,
+    SIZE_PVR_CORE = 0x00002000,
     SIZE_DRAM     = 0x01000000,
 };
 
@@ -137,6 +140,10 @@ T read(const u32 addr) {
             return hw::pvr::interface::read<T>(addr);
     }
 
+    if ((addr & ~(SIZE_PVR_CORE - 1)) == BASE_PVR_CORE) {
+        return hw::pvr::core::read<T>(addr);
+    }
+
     if ((addr & ~(SIZE_MODEM - 1)) == BASE_MODEM) {
         return hw::g2::modem::read<T>(addr);
     }
@@ -173,6 +180,10 @@ void write(const u32 addr, const T data) {
             return hw::g2::write<T>(addr, data);
         case BASE_PVR_IF:
             return hw::pvr::interface::write<T>(addr, data);
+    }
+
+    if ((addr & ~(SIZE_PVR_CORE - 1)) == BASE_PVR_CORE) {
+        return hw::pvr::core::write<T>(addr, data);
     }
 
     if ((addr & ~(SIZE_MODEM - 1)) == BASE_MODEM) {
