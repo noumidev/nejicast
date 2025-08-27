@@ -5,6 +5,7 @@
 
 #include <hw/g2/aica.hpp>
 
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -13,12 +14,16 @@
 namespace hw::g2::aica {
 
 enum : u32 {
-    IO_ARMRST  = 0x00702C00,
+    IO_ARMRST = 0x00702C00,
 };
 
-#define ARMRST  ctx.arm_reset
+#define ARMRST ctx.arm_reset
+
+constexpr usize WAVE_RAM_SIZE = 0x200000;
 
 struct {
+    std::array<u8, WAVE_RAM_SIZE> wave_ram;
+
     union {
         u32 raw;
 
@@ -77,13 +82,19 @@ void write(const u32 addr, const u32 data) {
             ARMRST.raw = data;
             break;
         default:
-            std::printf("Unmapped AICA write32 @ %08X = %08X\n", addr, data);
-            exit(1);
+            // For now, ignore all registers
+            std::printf("Unhandled AICA write32 @ %08X = %08X\n", addr, data);
+            break;
     }
 }
 
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
+
+// For HOLLY access
+u8* get_wave_ram_ptr() {
+    return ctx.wave_ram.data();
+}
 
 }
