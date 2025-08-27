@@ -638,6 +638,20 @@ static i64 i_dt(const u16 instr) {
     return 1;
 }
 
+template<OperandSize size>
+static i64 i_extu(const u16 instr) {
+    switch (size) {
+        case OperandSize::Byte:
+            GPRS[N] = (u8)GPRS[M];
+            break;
+        case OperandSize::Word:
+            GPRS[N] = (u16)GPRS[M];
+            break;
+    }
+
+    return 1;
+}
+
 static i64 i_fmov(const u16 instr) {
     if (FPSCR.pair_mode) {
         u64 data = DR_RAW[M >> 1];
@@ -824,6 +838,23 @@ static i64 i_movl4(const u16 instr) {
     }
 
     return 2;
+}
+
+template<OperandSize size>
+static i64 i_movlg(const u16 instr) {
+    switch (size) {
+        case OperandSize::Byte:
+            GPRS[0] = (i8)read<u8>(GBR + D);
+            break;
+        case OperandSize::Word:
+            GPRS[0] = (i16)read<u16>(GBR + (D << 1));
+            break;
+        case OperandSize::Long:
+            GPRS[0] = read<u32>(GBR + (D << 2));
+            break;
+    }
+
+    return 1;
 }
 
 template<OperandSize size>
@@ -1184,6 +1215,8 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0110", i_movp<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1000", i_swap<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1100", i_extu<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1101", i_extu<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0111xxxxxxxxxxxx", i_add<true>);
     fill_table_with_pattern(ctx.instr_table.data(), "10000000xxxxxxxx", i_movs4<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "10000100xxxxxxxx", i_movl4<OperandSize::Byte>);
@@ -1200,6 +1233,9 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "11000000xxxxxxxx", i_movsg<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "11000001xxxxxxxx", i_movsg<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "11000010xxxxxxxx", i_movsg<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11000100xxxxxxxx", i_movlg<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11000101xxxxxxxx", i_movlg<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "11000110xxxxxxxx", i_movlg<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "11000111xxxxxxxx", i_mova);
     fill_table_with_pattern(ctx.instr_table.data(), "11001000xxxxxxxx", i_tst<AddressingMode::Immediate>);
     fill_table_with_pattern(ctx.instr_table.data(), "11001001xxxxxxxx", i_and<AddressingMode::Immediate>);
