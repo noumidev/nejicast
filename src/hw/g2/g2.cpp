@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/g2/aica.hpp>
 #include <hw/g2/modem.hpp>
 
 namespace hw::g2 {
@@ -140,16 +141,19 @@ struct {
 } ctx;
 
 void initialize() {
+    aica::initialize();
     modem::initialize();
 }
 
 void reset() {
+    aica::reset();
     modem::reset();
 
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
 void shutdown() {
+    aica::shutdown();
     modem::shutdown();
 }
 

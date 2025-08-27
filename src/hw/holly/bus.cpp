@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <hw/g1/g1.hpp>
+#include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/g2/modem.hpp>
 #include <hw/holly/holly.hpp>
@@ -36,6 +37,7 @@ enum : u32 {
     BASE_PVR_IF   = 0x005F7C00,
     BASE_PVR_CORE = 0x005F8000,
     BASE_MODEM    = 0x00600000,
+    BASE_AICA     = 0x00700000,
     BASE_DRAM     = 0x0C000000,
 };
 
@@ -44,6 +46,7 @@ enum : u32 {
     SIZE_IO       = 0x00000100,
     SIZE_MODEM    = 0x00000800,
     SIZE_PVR_CORE = 0x00002000,
+    SIZE_AICA     = 0x00008000,
     SIZE_DRAM     = 0x01000000,
 };
 
@@ -148,6 +151,10 @@ T read(const u32 addr) {
         return hw::g2::modem::read<T>(addr);
     }
 
+    if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
+        return hw::g2::aica::read<T>(addr);
+    }
+
     // Redirect read
     return hw::holly::read<T>(addr);
 }
@@ -188,6 +195,10 @@ void write(const u32 addr, const T data) {
 
     if ((addr & ~(SIZE_MODEM - 1)) == BASE_MODEM) {
         return hw::g2::modem::write<T>(addr, data);
+    }
+
+    if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
+        return hw::g2::aica::write<T>(addr, data);
     }
 
     // Redirect write

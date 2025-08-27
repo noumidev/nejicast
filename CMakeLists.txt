@@ -23,6 +23,7 @@ set(SOURCES
     src/hw/cpu/cpu.cpp
     src/hw/cpu/ocio.cpp
     src/hw/g1/g1.cpp
+    src/hw/g2/aica.cpp
     src/hw/g2/g2.cpp
     src/hw/g2/modem.cpp
     src/hw/holly/bus.cpp
@@ -42,6 +43,7 @@ set(HEADERS
     include/hw/cpu/cpu.hpp
     include/hw/cpu/ocio.hpp
     include/hw/g1/g1.hpp
+    include/hw/g2/aica.hpp
     include/hw/g2/g2.hpp
     include/hw/g2/modem.hpp
     include/hw/holly/bus.hpp
