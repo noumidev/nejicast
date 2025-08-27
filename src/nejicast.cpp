@@ -14,7 +14,7 @@
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 
-constexpr int NUM_ARGS = 2;
+constexpr int NUM_ARGS = 3;
 
 constexpr i64 CYCLES_PER_SLICE = 128;
 
@@ -22,7 +22,7 @@ namespace nejicast {
 
 void initialize(const common::Config& config) {
     hw::cpu::initialize();
-    hw::g1::initialize(config.boot_path);
+    hw::g1::initialize(config.boot_path, config.flash_path);
     hw::g2::initialize();
     hw::holly::initialize();
     hw::pvr::core::initialize();
@@ -59,11 +59,11 @@ void run() {
 
 int main(int argc, char** argv) {
     if (argc < NUM_ARGS) {
-        std::puts("Usage: nejicast [path to boot ROM]");
+        std::puts("Usage: nejicast [path to boot ROM] [path to FLASH ROM]");
         return 1;
     }
 
-    common::Config config {.boot_path = argv[1]};
+    common::Config config {.boot_path = argv[1], .flash_path = argv[2]};
     
     nejicast::reset();
     nejicast::initialize(config);

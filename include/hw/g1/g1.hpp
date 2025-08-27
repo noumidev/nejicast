@@ -10,7 +10,7 @@
 // G1 bus functions
 namespace hw::g1 {
 
-void initialize(const char* boot_path);
+void initialize(const char* boot_path, const char* flash_path);
 void reset();
 void shutdown();
 
@@ -21,5 +21,6 @@ template<typename T>
 void write(const u32 addr, const T data);
 
 u8* get_boot_rom_ptr();
+u8* get_flash_rom_ptr();
 
 }

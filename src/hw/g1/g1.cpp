@@ -16,6 +16,7 @@
 namespace hw::g1 {
 
 constexpr usize BOOT_ROM_SIZE = 0x200000;
+constexpr usize FLASH_ROM_SIZE = 0x20000;
 
 enum : u32 {
     IO_GDSTAR  = 0x005F7404,
@@ -52,7 +53,7 @@ enum : u32 {
 #define SB_GDAPRO  ctx.address_protection
 
 struct {
-    std::vector<u8> boot_rom;
+    std::vector<u8> boot_rom, flash_rom;
 
     struct {
         u32 start_address;
@@ -113,10 +114,14 @@ struct {
     } address_protection;
 } ctx;
 
-void initialize(const char* boot_path) {
+void initialize(const char* boot_path, const char* flash_path) {
     ctx.boot_rom = common::load_file(boot_path);
 
     assert(ctx.boot_rom.size() == BOOT_ROM_SIZE);
+
+    ctx.flash_rom = common::load_file(flash_path);
+
+    assert(ctx.flash_rom.size() == FLASH_ROM_SIZE);
 }
 
 void reset() {
@@ -246,6 +251,11 @@ template void write(u32, u64);
 // For HOLLY access
 u8* get_boot_rom_ptr() {
     return ctx.boot_rom.data();
+}
+
+// For HOLLY access
+u8* get_flash_rom_ptr() {
+    return ctx.flash_rom.data();
 }
 
 }

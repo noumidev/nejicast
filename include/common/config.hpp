@@ -9,6 +9,7 @@ namespace common {
 
 struct Config {
     const char* boot_path;
+    const char* flash_path;
 };
 
 }
