@@ -31,6 +31,7 @@ enum : u32 {
     IO_C2DMAXL = 0x005F684C,
     IO_LMMODE0 = 0x005F6884,
     IO_LMMODE1 = 0x005F6888,
+    IO_FFST    = 0x005F688C,
     IO_RBSPLT  = 0x005F68A0,
 };
 
@@ -48,6 +49,7 @@ enum : u32 {
 #define SB_C2DMAXL ctx.ddt_interface.dma_burst_length
 #define SB_LMMODE0 ctx.tile_accelerator.is_bus_32_bit_1
 #define SB_LMMODE1 ctx.tile_accelerator.is_bus_32_bit_2
+#define SB_FFST    ctx.fifo_status
 #define SB_RBSPLT  ctx.enable_root_bus_split
 
 struct {
@@ -106,9 +108,22 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_FFST:
+            // There's no need to implement this properly (yet?)
+            // std::puts("SB_FFST read32");
+
+            return 0;
+        default:
+            std::printf("Unmapped read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>
