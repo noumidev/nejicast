@@ -29,25 +29,29 @@ constexpr usize PAGE_SIZE = 0x1000;
 constexpr usize PAGE_MASK = PAGE_SIZE - 1;
 
 enum : u32 {
-    BASE_BOOT_ROM = 0x00000000,
-    BASE_INTC     = 0x005F6900,
-    BASE_MAPLE    = 0x005F6C00,
-    BASE_G1       = 0x005F7400,
-    BASE_G2       = 0x005F7800,
-    BASE_PVR_IF   = 0x005F7C00,
-    BASE_PVR_CORE = 0x005F8000,
-    BASE_MODEM    = 0x00600000,
-    BASE_AICA     = 0x00700000,
-    BASE_DRAM     = 0x0C000000,
+    BASE_BOOT_ROM  = 0x00000000,
+    BASE_FLASH_ROM = 0x00200000,
+    BASE_INTC      = 0x005F6900,
+    BASE_MAPLE     = 0x005F6C00,
+    BASE_G1        = 0x005F7400,
+    BASE_G2        = 0x005F7800,
+    BASE_PVR_IF    = 0x005F7C00,
+    BASE_PVR_CORE  = 0x005F8000,
+    BASE_MODEM     = 0x00600000,
+    BASE_AICA      = 0x00700000,
+    BASE_WAVE_RAM  = 0x00800000,
+    BASE_DRAM      = 0x0C000000,
 };
 
 enum : u32 {
-    SIZE_BOOT_ROM = 0x00200000,
-    SIZE_IO       = 0x00000100,
-    SIZE_MODEM    = 0x00000800,
-    SIZE_PVR_CORE = 0x00002000,
-    SIZE_AICA     = 0x00008000,
-    SIZE_DRAM     = 0x01000000,
+    SIZE_BOOT_ROM  = 0x00200000,
+    SIZE_FLASH_ROM = 0x00020000,
+    SIZE_IO        = 0x00000100,
+    SIZE_MODEM     = 0x00000800,
+    SIZE_PVR_CORE  = 0x00002000,
+    SIZE_AICA      = 0x00008000,
+    SIZE_WAVE_RAM  = 0x00200000,
+    SIZE_DRAM      = 0x01000000,
 };
 
 struct {
@@ -98,6 +102,22 @@ void initialize() {
         SIZE_BOOT_ROM,
         true,
         false
+    );
+
+    map_memory(
+        g1::get_flash_rom_ptr(),
+        BASE_FLASH_ROM,
+        SIZE_FLASH_ROM,
+        true,
+        false
+    );
+
+    map_memory(
+        g2::aica::get_wave_ram_ptr(),
+        BASE_WAVE_RAM,
+        SIZE_WAVE_RAM,
+        true,
+        true
     );
 
     map_memory(
