@@ -12,6 +12,9 @@
 namespace hw::holly::intc {
 
 enum : u32 {
+    IO_ISTNRM  = 0x005F6900,
+    IO_ISTEXT  = 0x005F6904,
+    IO_ISTERR  = 0x005F6908,
     IO_IML2NRM = 0x005F6910,
     IO_IML2EXT = 0x005F6914,
     IO_IML2ERR = 0x005F6918,
@@ -34,6 +37,9 @@ enum {
     NUM_LEVELS,
 };
 
+#define SB_ISTNRM  ctx.normal_flags
+#define SB_ISTEXT  ctx.external_flags
+#define SB_ISTERR  ctx.error_flags
 #define SB_IML2NRM ctx.levels[LEVEL_2].normal_mask
 #define SB_IML2EXT ctx.levels[LEVEL_2].external_mask
 #define SB_IML2ERR ctx.levels[LEVEL_2].error_mask
@@ -49,6 +55,10 @@ enum {
 #define SB_G2DTEXT ctx.g2_dma.external_mask
 
 struct {
+    u32 normal_flags;
+    u32 external_flags;
+    u32 error_flags;
+
     struct {
         u32 normal_mask;
         u32 external_mask;
@@ -94,6 +104,16 @@ void write(const u32 addr, const T data) {
 template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
+        case IO_ISTNRM:
+            std::printf("SB_ISTNRM write32 = %08X\n", data);
+
+            SB_ISTNRM &= ~data;
+            break;
+        case IO_ISTERR:
+            std::printf("SB_ISTERR write32 = %08X\n", data);
+
+            SB_ISTERR &= ~data;
+            break;
         case IO_IML2NRM:
             std::printf("SB_IML2NRM write32 = %08X\n", data);
 
