@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <hw/g1/g1.hpp>
+#include <hw/g1/gdrom.hpp>
 #include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/g2/modem.hpp>
@@ -33,6 +34,7 @@ enum : u32 {
     BASE_FLASH_ROM = 0x00200000,
     BASE_INTC      = 0x005F6900,
     BASE_MAPLE     = 0x005F6C00,
+    BASE_GDROM     = 0x005F7000,
     BASE_G1        = 0x005F7400,
     BASE_G2        = 0x005F7800,
     BASE_PVR_IF    = 0x005F7C00,
@@ -155,6 +157,8 @@ T read(const u32 addr) {
             return hw::holly::intc::read<T>(addr);
         case BASE_MAPLE:
             return hw::holly::maple::read<T>(addr);
+        case BASE_GDROM:
+            return hw::g1::gdrom::read<T>(addr);
         case BASE_G1:
             return hw::g1::read<T>(addr);
         case BASE_G2:
@@ -201,6 +205,8 @@ void write(const u32 addr, const T data) {
             return hw::holly::intc::write<T>(addr, data);
         case BASE_MAPLE:
             return hw::holly::maple::write<T>(addr, data);
+        case BASE_GDROM:
+            return hw::g1::gdrom::write<T>(addr, data);
         case BASE_G1:
             return hw::g1::write<T>(addr, data);
         case BASE_G2:

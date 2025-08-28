@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <common/file.hpp>
+#include <hw/g1/gdrom.hpp>
 
 namespace hw::g1 {
 
@@ -115,6 +116,8 @@ struct {
 } ctx;
 
 void initialize(const char* boot_path, const char* flash_path) {
+    gdrom::initialize();
+
     ctx.boot_rom = common::load_file(boot_path);
 
     assert(ctx.boot_rom.size() == BOOT_ROM_SIZE);
@@ -125,10 +128,14 @@ void initialize(const char* boot_path, const char* flash_path) {
 }
 
 void reset() {
+    gdrom::reset();
+
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
-void shutdown() {}
+void shutdown() {
+    gdrom::shutdown();
+}
 
 template<typename T>
 T read(const u32 addr) {
@@ -136,9 +143,21 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_GDST:
+            std::puts("SB_GDST read32");
+
+            return SB_GDST;
+        default:
+            std::printf("Unmapped G1 read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>
