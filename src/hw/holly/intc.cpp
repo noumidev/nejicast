@@ -90,9 +90,21 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_ISTEXT:
+            std::puts("SB_ISTEXT read32");
+
+            return SB_ISTEXT;
+        default:
+            std::printf("Unmapped INTC read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>
@@ -188,5 +200,23 @@ void write(const u32 addr, const u32 data) {
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
+
+void assert_external_interrupt(const int interrupt_number) {
+    if ((SB_ISTEXT & (1 << interrupt_number)) == 0) {
+        std::printf("Asserting external interrupt %d\n", interrupt_number);
+
+        SB_ISTEXT |= 1 << interrupt_number;
+
+        // TODO: trigger interrupt
+    }
+}
+
+void clear_external_interrupt(const int interrupt_number) {
+    if ((SB_ISTEXT & (1 << interrupt_number)) != 0) {
+        std::printf("Clearing external interrupt %d\n", interrupt_number);
+
+        SB_ISTEXT &= ~(1 << interrupt_number);
+    }
+}
 
 }
