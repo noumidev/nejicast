@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/pvr/spg.hpp>
+
 namespace hw::pvr::core {
 
 enum : u32 {
@@ -28,19 +30,13 @@ enum : u32 {
     IO_VO_CONTROL      = 0x005F80E8,
     IO_VO_STARTX       = 0x005F80EC,
     IO_VO_STARTY       = 0x005F80F0,
+    IO_SPG_STATUS      = 0x005F810C,
 };
 
 #define VO_BORDER_COLOR ctx.video_output.border_color
 #define FB_R_CTRL       ctx.frame_buffer.read_control
 #define SDRAM_REFRESH   ctx.sdram.refresh
 #define SDRAM_CFG       ctx.sdram.configuration
-#define SPG_HBLANK_INT  ctx.sync_pulse_generator.hblank_interrupt
-#define SPG_VBLANK_INT  ctx.sync_pulse_generator.vblank_interrupt
-#define SPG_CONTROL     ctx.sync_pulse_generator.control
-#define SPG_HBLANK      ctx.sync_pulse_generator.hblank
-#define SPG_LOAD        ctx.sync_pulse_generator.load
-#define SPG_VBLANK      ctx.sync_pulse_generator.vblank
-#define SPG_WIDTH       ctx.sync_pulse_generator.width
 #define VO_CONTROL      ctx.video_output.control
 #define VO_STARTX       ctx.video_output.horizontal_start
 #define VO_STARTY       ctx.video_output.vertical_start
@@ -69,95 +65,6 @@ struct {
         u32 refresh;
         u32 configuration;
     } sdram;
-
-    struct {
-        union {
-            u32 raw;
-
-            struct {
-                u32 compare_line   : 10;
-                u32                :  2;
-                u32 interrupt_mode :  2;
-                u32                :  2;
-                u32 in_position    : 10;
-                u32                :  6;
-            };
-        } hblank_interrupt;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 in_position  : 10;
-                u32              :  6;
-                u32 out_position : 10;
-                u32              :  6;
-            };
-        } vblank_interrupt;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 hsync_polarity            :  1;
-                u32 vsync_polarity            :  1;
-                u32 csync_polarity            :  1;
-                u32 external_synchronization  :  1;
-                u32 enable_interlacing        :  1;
-                u32 force_field_2             :  1;
-                u32 ntsc_mode                 :  1;
-                u32 pal_mode                  :  1;
-                u32 synchronization_direction :  1;
-                u32 csync_on_hsync            :  1;
-                u32                           : 22;
-            };
-        } control;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 start : 10;
-                u32       :  6;
-                u32 end   : 10;
-                u32       :  6;
-            };
-        } hblank;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 horizontal_count : 10;
-                u32                  :  6;
-                u32 vertical_count   : 10;
-                u32                  :  6;
-            };
-        } load;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 start : 10;
-                u32       :  6;
-                u32 end   : 10;
-                u32       :  6;
-            };
-        } vblank;
-
-        union {
-            u32 raw;
-
-            struct {
-                u32 hsync            : 7;
-                u32                  : 1;
-                u32 vsync            : 4;
-                u32 broad_pulse      : 10;
-                u32 equivalent_pulse : 10;
-            };
-        } width;
-    } sync_pulse_generator;
 
     struct {
         union {
@@ -204,11 +111,6 @@ struct {
 } ctx;
 
 void initialize() {
-    SPG_HBLANK_INT.raw = 0x031D0000;
-    SPG_VBLANK_INT.raw = 0x01500104;
-    SPG_HBLANK.raw = 0x007E0345;
-    SPG_LOAD.raw = 0x01060359;
-    SPG_VBLANK.raw = 0x01500104;
     VO_CONTROL.raw = 0x00000108;
     VO_STARTX = 0x9D;
     VO_STARTY.raw = 0x00150015;
@@ -233,6 +135,14 @@ u32 read(const u32 addr) {
             std::puts("VO_BORDER_COLOR read32");
 
             return VO_BORDER_COLOR.raw;
+        case IO_VO_CONTROL:
+            std::puts("VO_CONTROL read32");
+
+            return VO_CONTROL.raw;
+        case IO_SPG_STATUS:
+            // std::puts("SPG_STATUS read32");
+
+            return spg::get_status();
         default:
             std::printf("Unmapped PVR CORE read32 @ %08X\n", addr);
             exit(1);
@@ -273,37 +183,37 @@ void write(const u32 addr, const u32 data) {
         case IO_SPG_HBLANK_INT:
             std::printf("SPG_HBLANK_INT write32 = %08X\n", data);
         
-            SPG_HBLANK_INT.raw = data;
+            spg::set_hblank_interrupt(data);
             break;
         case IO_SPG_VBLANK_INT:
             std::printf("SPG_VBLANK_INT write32 = %08X\n", data);
         
-            SPG_VBLANK_INT.raw = data;
+            spg::set_vblank_interrupt(data);
             break;
         case IO_SPG_CONTROL:
             std::printf("SPG_CONTROL write32 = %08X\n", data);
         
-            SPG_CONTROL.raw = data;
+            spg::set_control(data);
             break;
         case IO_SPG_HBLANK:
             std::printf("SPG_HBLANK write32 = %08X\n", data);
         
-            SPG_HBLANK.raw = data;
+            spg::set_hblank_control(data);
             break;
         case IO_SPG_LOAD:
             std::printf("SPG_LOAD write32 = %08X\n", data);
         
-            SPG_LOAD.raw = data;
+            spg::set_load(data);
             break;
         case IO_SPG_VBLANK:
             std::printf("SPG_VBLANK write32 = %08X\n", data);
         
-            SPG_VBLANK.raw = data;
+            spg::set_vblank_control(data);
             break;
         case IO_SPG_WIDTH:
             std::printf("SPG_WIDTH write32 = %08X\n", data);
         
-            SPG_WIDTH.raw = data;
+            spg::set_width(data);
             break;
         case IO_VO_CONTROL:
             std::printf("VO_CONTROL write32 = %08X\n", data);

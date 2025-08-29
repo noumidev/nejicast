@@ -33,6 +33,7 @@ set(SOURCES
     src/hw/holly/maple.cpp
     src/hw/pvr/core.cpp
     src/hw/pvr/interface.cpp
+    src/hw/pvr/spg.cpp
 )
 
 # Set header files
@@ -54,6 +55,7 @@ set(HEADERS
     include/hw/holly/maple.hpp
     include/hw/pvr/core.hpp
     include/hw/pvr/interface.hpp
+    include/hw/pvr/spg.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

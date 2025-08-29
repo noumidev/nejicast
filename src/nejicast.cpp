@@ -13,6 +13,7 @@
 #include <hw/holly/holly.hpp>
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
+#include <hw/pvr/spg.hpp>
 
 constexpr int NUM_ARGS = 3;
 
@@ -27,6 +28,7 @@ void initialize(const common::Config& config) {
     hw::holly::initialize();
     hw::pvr::core::initialize();
     hw::pvr::interface::initialize();
+    hw::pvr::spg::initialize();
 }
 
 void shutdown() {
@@ -36,6 +38,7 @@ void shutdown() {
     hw::holly::shutdown();
     hw::pvr::core::shutdown();
     hw::pvr::interface::shutdown();
+    hw::pvr::spg::shutdown();
 }
 
 void reset() {
@@ -45,6 +48,7 @@ void reset() {
     hw::holly::reset();
     hw::pvr::core::reset();
     hw::pvr::interface::reset();
+    hw::pvr::spg::reset();
 }
 
 void run() {
@@ -52,6 +56,7 @@ void run() {
         *hw::cpu::get_cycles() = CYCLES_PER_SLICE;
 
         hw::cpu::step();
+        hw::pvr::spg::step(CYCLES_PER_SLICE / 7);
     }
 }
 
