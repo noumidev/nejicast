@@ -872,6 +872,10 @@ u32 read(const u32 addr) {
             std::puts("PCTRA read32");
 
             return PCTRA;
+        case IO_CHCR2:
+            std::puts("CHCR2 read32");
+
+            return CHCR2.raw;
         case IO_TCNT0:
             std::puts("TCNT0 read32");
 
