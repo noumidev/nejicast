@@ -515,6 +515,16 @@ static i64 i_add(const u16 instr) {
     return 1;
 }
 
+static i64 i_addc(const u16 instr) {
+    const u64 result = (u64)GPRS[N] + (u64)GPRS[M] + (u64)SR.t;
+
+    SR.t = result >= UINT32_MAX;
+
+    GPRS[N] = (u32)result;
+
+    return 1;
+}
+
 template<AddressingMode mode>
 static i64 i_and(const u16 instr) {
     if constexpr (mode == AddressingMode::RegisterDirect) {
@@ -640,6 +650,52 @@ static i64 i_cmp(const u16 instr) {
     return 1;
 }
 
+template<bool is_signed>
+static i64 i_div0(const u16 instr) {
+    if constexpr (is_signed) {
+        SR.m = GPRS[N] >> 31;
+        SR.q = GPRS[M] >> 31;
+        SR.t = SR.m ^ SR.q;
+    } else {
+        SR.m = 0;
+        SR.q = 0;
+        SR.t = 0;
+    }
+
+    return 1;
+}
+
+static i64 i_div1(const u16 instr) {
+    const u32 old_n = GPRS[N];
+    const u32 old_q = SR.q;
+
+    SR.q = GPRS[N] >> 31;
+
+    GPRS[N] = (GPRS[N] << 1) | SR.t;
+
+    u32 new_q;
+
+    if (old_q == SR.m) {
+        GPRS[N] -= GPRS[M];
+
+        new_q = GPRS[N] > old_n;
+    } else {
+        GPRS[N] += GPRS[M];
+
+        new_q = GPRS[N] < old_n;
+    }
+
+    SR.q ^= new_q;
+
+    if (SR.m != 0) {
+        SR.q ^= 1;
+    }
+
+    SR.t = SR.q == SR.m;
+
+    return 1;
+}
+
 static i64 i_dt(const u16 instr) {
     GPRS[N] -= 1;
 
@@ -696,6 +752,34 @@ static i64 i_fmov(const u16 instr) {
     return 1;
 }
 
+static i64 i_fmov_index_store(const u16 instr) {
+    if (FPSCR.pair_mode) {
+        if ((M & 1) != 0) {
+            write<u64>(GPRS[0] + GPRS[N], XD_RAW[M >> 1]);
+        } else {
+            write<u64>(GPRS[0] + GPRS[N], DR_RAW[M >> 1]);
+        }
+    } else {
+        write<u32>(GPRS[0] + GPRS[N], FR_RAW[M]);
+    }
+    
+    return 1;
+}
+
+static i64 i_fmov_load(const u16 instr) {
+    if (FPSCR.pair_mode) {
+        if ((N & 1) != 0) {
+            XD_RAW[N >> 1] = read<u64>(GPRS[M]);
+        } else {
+            DR_RAW[N >> 1] = read<u64>(GPRS[M]);
+        }
+    } else {
+        FR_RAW[N] = read<u32>(GPRS[M]);
+    }
+
+    return 1;
+}
+
 static i64 i_fmov_restore(const u16 instr) {
     if (FPSCR.pair_mode) {
         if ((N & 1) != 0) {
@@ -738,6 +822,14 @@ static i64 i_frchg(const u16) {
     FPSCR.select_bank ^= 1;
 
     swap_fpu_banks();
+
+    return 1;
+}
+
+static i64 i_fschg(const u16) {
+    assert(!FPSCR.precision_mode);
+
+    FPSCR.pair_mode ^= 1;
 
     return 1;
 }
@@ -1002,6 +1094,12 @@ static i64 i_movsg(const u16 instr) {
     return 1;
 }
 
+static i64 i_movt(const u16 instr) {
+    GPRS[N] = SR.t;
+
+    return 1;
+}
+
 static i64 i_muls(const u16 instr) {
     MACL = (i32)(i16)GPRS[N] * (i32)(i16)GPRS[M];
 
@@ -1015,6 +1113,14 @@ static i64 i_mulu(const u16 instr) {
 }
 
 static i64 i_nop(const u16) {
+    return 1;
+}
+
+static i64 i_ocbp(const u16 instr) {
+    // TODO: implement operand cache?
+
+    std::printf("SH-4 operand cache block purge @ %08X\n", GPRS[N]);
+
     return 1;
 }
 
@@ -1041,12 +1147,30 @@ static i64 i_pref(const u16 instr) {
     return 1;
 }
 
+static i64 i_rotcl(const u16 instr) {
+    const u32 old_t = SR.t;
+
+    SR.t = (GPRS[N] >> 31) & 1;
+
+    GPRS[N] = (GPRS[N] << 1) | old_t;
+
+    return 1;
+}
+
 static i64 i_rotr(const u16 instr) {
     SR.t = GPRS[N] & 1;
 
     GPRS[N] = std::rotr(GPRS[N], 1);
 
     return 1;
+}
+
+static i64 i_rte(const u16) {
+    set_sr(SSR.raw);
+
+    delayed_jump(SPC);
+
+    return 5;
 }
 
 static i64 i_rts(const u16) {
@@ -1121,10 +1245,20 @@ i64 i_sts(const u16 instr) {
 
     // Depends, but is good enough for now
     return 2;
+}
 
-
-}static i64 i_sub(const u16 instr) {
+static i64 i_sub(const u16 instr) {
     GPRS[N] -= GPRS[M];
+
+    return 1;
+}
+
+static i64 i_subc(const u16 instr) {
+    const u64 result = (u64)GPRS[N] - (u64)GPRS[M] - (u64)SR.t;
+
+    SR.t = (i64)result < 0;
+
+    GPRS[N] = (u32)result;
 
     return 1;
 }
@@ -1195,6 +1329,7 @@ static i64 i_xor(const u16 instr) {
 static void initialize_instr_table() {
     ctx.instr_table.fill(i_undefined);
 
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00000010", i_stc<ControlRegister::Sr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00000011", i_bra<true, false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0100", i_movs0<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0101", i_movs0<OperandSize::Word>);
@@ -1206,11 +1341,17 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx1110", i_movl0<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00010010", i_stc<ControlRegister::Gbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000011000", i_sett);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000011001", i_div0<false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00011010", i_sts<SystemRegister::Macl, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00100010", i_stc<ControlRegister::Vbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00100011", i_bra<false, false>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101001", i_movt);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101010", i_sts<SystemRegister::Pr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000101011", i_rte);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01101010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx1xxx0010", i_stc<ControlRegister::Rbank, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10000011", i_pref);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10100011", i_ocbp);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx11111010", i_stc<ControlRegister::Dbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0001xxxxxxxxxxxx", i_movs4<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0000", i_movs<OperandSize::Byte>);
@@ -1219,6 +1360,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0100", i_movm<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0101", i_movm<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0110", i_movm<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0111", i_div0<true>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1000", i_tst<AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1001", i_and<AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1010", i_xor<AddressingMode::RegisterDirect>);
@@ -1229,13 +1371,17 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0000", i_cmp<Comparison::Equal>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0010", i_cmp<Comparison::HigherSame>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0011", i_cmp<Comparison::GreaterEqual>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0100", i_div1);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0110", i_cmp<Comparison::Higher>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0111", i_cmp<Comparison::GreaterThan>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1000", i_sub);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1010", i_subc);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1100", i_add<false>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1110", i_addc);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000000", i_shll<1>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000001", i_shlr<1>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000010", i_sts<SystemRegister::Mach, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000011", i_stc<ControlRegister::Sr, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000101", i_rotr);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000110", i_lds<SystemRegister::Mach, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000111", i_ldc<ControlRegister::Sr, AddressingMode::RegisterIndirectPostincrement>);
@@ -1258,6 +1404,8 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011110", i_ldc<ControlRegister::Gbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100001", i_shar);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100010", i_sts<SystemRegister::Pr, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100011", i_stc<ControlRegister::Vbr, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100100", i_rotcl);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100110", i_lds<SystemRegister::Pr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100111", i_ldc<ControlRegister::Vbr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101000", i_shll<16>);
@@ -1271,6 +1419,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01001110", i_ldc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01010110", i_lds<SystemRegister::Fpul, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01011010", i_lds<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01100010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01100110", i_lds<SystemRegister::Fpscr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01101010", i_lds<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx1xxx0011", i_stc<ControlRegister::Rbank, AddressingMode::RegisterIndirectPredecrement>);
@@ -1321,9 +1470,12 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "11001111xxxxxxxx", i_or<AddressingMode::RegisterIndirectGbr>);
     fill_table_with_pattern(ctx.instr_table.data(), "1101xxxxxxxxxxxx", i_movi<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "1110xxxxxxxxxxxx", i_movi<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0111", i_fmov_index_store);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1000", i_fmov_load);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1001", i_fmov_restore);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1011", i_fmov_save);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1100", i_fmov);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111001111111101", i_fschg);
     fill_table_with_pattern(ctx.instr_table.data(), "1111101111111101", i_frchg);
 }
 
