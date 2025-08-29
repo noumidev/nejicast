@@ -32,6 +32,7 @@ enum : u32 {
     IO_LMMODE0 = 0x005F6884,
     IO_LMMODE1 = 0x005F6888,
     IO_FFST    = 0x005F688C,
+    IO_SBREV   = 0x005F689C,
     IO_RBSPLT  = 0x005F68A0,
 };
 
@@ -108,6 +109,8 @@ T read(const u32 addr) {
     exit(1);
 }
 
+constexpr u32 SB_REV = 1;
+
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
@@ -116,6 +119,10 @@ u32 read(const u32 addr) {
             // std::puts("SB_FFST read32");
 
             return 0;
+        case IO_SBREV:
+            std::puts("SB_REV read32");
+
+            return SB_REV;
         default:
             std::printf("Unmapped read32 @ %08X\n", addr);
             exit(1);
