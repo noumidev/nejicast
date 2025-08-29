@@ -13,6 +13,10 @@
 namespace hw::cpu::ocio {
 
 enum : u32 {
+    BASE_OPERAND_CACHE_TAG = 0x14000000,
+};
+
+enum : u32 {
     IO_PTEH    = 0x1F000000,
     IO_PTEL    = 0x1F000004,
     IO_TTB     = 0x1F000008,
@@ -22,6 +26,7 @@ enum : u32 {
     IO_TRAPA   = 0x1F000020,
     IO_EXPEVT  = 0x1F000024,
     IO_INTEVT  = 0x1F000028,
+    IO_CPUVER  = 0x1F000030,
     IO_PTEA    = 0x1F000034,
     IO_QACR1   = 0x1F000038,
     IO_QACR2   = 0x1F00003C,
@@ -814,6 +819,19 @@ T read(const u32 addr) {
 }
 
 template<>
+u8 read(const u32 addr) {
+    switch (addr) {
+        case IO_TSTR:
+            std::puts("TSTR read8");
+
+            return TSTR.raw;
+        default:
+            std::printf("Unmapped SH-4 P4 read8 @ %02X\n", addr);
+            exit(1);
+    }
+}
+
+template<>
 u16 read(const u32 addr) {
     switch (addr) {
         case IO_RFCR:
@@ -833,13 +851,23 @@ u16 read(const u32 addr) {
     }
 }
 
+constexpr u32 CPUVER = 0x040205C1;
+
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_CCR:
+            std::puts("CCR read32");
+
+            return CCR.raw;
         case IO_EXPEVT:
             std::puts("EXPEVT read32");
 
             return EXPEVT;
+        case IO_CPUVER:
+            std::puts("CPUVER read32");
+
+            return CPUVER;
         case IO_PCTRA:
             std::puts("PCTRA read32");
 
@@ -854,7 +882,6 @@ u32 read(const u32 addr) {
     }
 }
 
-template u8 read(u32);
 template u64 read(u32);
 
 template<typename T>
@@ -1054,6 +1081,11 @@ void write(const u32 addr, const u16 data) {
 
 template<>
 void write(const u32 addr, const u32 data) {
+    if ((addr & 0xFF000000) == BASE_OPERAND_CACHE_TAG) {
+        std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
+        return;
+    }
+
     switch (addr) {
         case IO_PTEH:
             std::printf("PTEH write32 = %08X\n", data);
