@@ -34,6 +34,7 @@ set(SOURCES
     src/hw/pvr/core.cpp
     src/hw/pvr/interface.cpp
     src/hw/pvr/spg.cpp
+    src/hw/pvr/ta.cpp
 )
 
 # Set header files
@@ -56,6 +57,7 @@ set(HEADERS
     include/hw/pvr/core.hpp
     include/hw/pvr/interface.hpp
     include/hw/pvr/spg.hpp
+    include/hw/pvr/ta.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

@@ -14,6 +14,7 @@
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 #include <hw/pvr/spg.hpp>
+#include <hw/pvr/ta.hpp>
 
 constexpr int NUM_ARGS = 3;
 
@@ -29,6 +30,7 @@ void initialize(const common::Config& config) {
     hw::pvr::core::initialize();
     hw::pvr::interface::initialize();
     hw::pvr::spg::initialize();
+    hw::pvr::ta::initialize();
 }
 
 void shutdown() {
@@ -39,6 +41,7 @@ void shutdown() {
     hw::pvr::core::shutdown();
     hw::pvr::interface::shutdown();
     hw::pvr::spg::shutdown();
+    hw::pvr::ta::shutdown();
 }
 
 void reset() {
@@ -49,6 +52,7 @@ void reset() {
     hw::pvr::core::reset();
     hw::pvr::interface::reset();
     hw::pvr::spg::reset();
+    hw::pvr::ta::reset();
 }
 
 void run() {
