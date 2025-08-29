@@ -864,6 +864,10 @@ u32 read(const u32 addr) {
             std::puts("EXPEVT read32");
 
             return EXPEVT;
+        case IO_INTEVT:
+            std::puts("INTEVT read32");
+
+            return INTEVT;
         case IO_CPUVER:
             std::puts("CPUVER read32");
 
@@ -1305,6 +1309,10 @@ template void write(u32, u64);
 
 void set_exception_event(const u32 event) {
     EXPEVT = event;
+}
+
+void set_interrupt_event(const u32 event) {
+    INTEVT = event;
 }
 
 }
