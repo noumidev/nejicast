@@ -748,6 +748,77 @@ static i64 i_extu(const u16 instr) {
     return 1;
 }
 
+static i64 i_fadd(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert(((M & 1) == 0) && ((N & 1) == 0));
+
+        DR[N >> 1] += DR[M >> 1];
+    } else {
+        FR[N] += FR[M];
+    }
+
+    return 3 + (4 * FPSCR.precision_mode);
+}
+
+template<Comparison comparison>
+static i64 i_fcmp(const u16 instr) {
+    assert(!FPSCR.precision_mode || (((N & 1) == 0) && ((M & 1) == 0)));
+
+    switch (comparison) {
+        case Comparison::Equal:
+            if (FPSCR.precision_mode) {
+                SR.t = DR[N] == DR[M];
+            } else {
+                SR.t = FR[N] == FR[M];
+            }
+            break;
+        case Comparison::GreaterThan:
+            if (FPSCR.precision_mode) {
+                SR.t = DR[N] > DR[M];
+            } else {
+                SR.t = FR[N] > FR[M];
+            }
+            break;
+    }
+
+    return 2 + FPSCR.precision_mode;
+}
+
+static i64 i_fdiv(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert(((M & 1) == 0) && ((N & 1) == 0));
+
+        DR[N >> 1] /= DR[M >> 1];
+    } else {
+        FR[N] /= FR[M];
+    }
+
+    return 12 + (12 * FPSCR.precision_mode);
+}
+
+template<bool is_1>
+static i64 i_fldi(const u16 instr) {
+    if constexpr (is_1) {
+        FR[N] = 1.0;
+    } else {
+        FR[N] = 0.0;
+    }
+
+    return 1;
+}
+
+static i64 i_float(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert((N & 1) == 0);
+
+        DR[N >> 1] = (f64)(i32)FPUL;
+    } else {
+        FR[N] = (f32)(i32)FPUL;
+    }
+
+    return 3 + FPSCR.precision_mode;
+}
+
 static i64 i_fmov(const u16 instr) {
     if (FPSCR.pair_mode) {
         u64 data = DR_RAW[M >> 1];
@@ -765,6 +836,20 @@ static i64 i_fmov(const u16 instr) {
         FR_RAW[N] = FR_RAW[M];
     }
 
+    return 1;
+}
+
+static i64 i_fmov_index_load(const u16 instr) {
+    if (FPSCR.pair_mode) {
+        if ((N & 1) != 0) {
+            XD_RAW[N >> 1] = read<u64>(GPRS[0] + GPRS[M]);
+        } else {
+            DR_RAW[N >> 1] = read<u64>(GPRS[0] + GPRS[M]);
+        }
+    } else {
+        FR_RAW[N] = read<u32>(GPRS[0] + GPRS[M]);
+    }
+    
     return 1;
 }
 
@@ -832,6 +917,32 @@ static i64 i_fmov_save(const u16 instr) {
     return 1;
 }
 
+static i64 i_fmov_store(const u16 instr) {
+    if (FPSCR.pair_mode) {
+        if ((M & 1) != 0) {
+            write<u64>(GPRS[N], XD_RAW[M >> 1]);
+        } else {
+            write<u64>(GPRS[N], DR_RAW[M >> 1]);
+        }
+    } else {
+        write<u32>(GPRS[N], FR_RAW[M]);
+    }
+
+    return 1;
+}
+
+static i64 i_fmul(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert(((M & 1) == 0) && ((N & 1) == 0));
+
+        DR[N >> 1] *= DR[M >> 1];
+    } else {
+        FR[N] *= FR[M];
+    }
+
+    return 3 + (4 * FPSCR.precision_mode);
+}
+
 static i64 i_frchg(const u16) {
     assert(!FPSCR.precision_mode);
 
@@ -848,6 +959,18 @@ static i64 i_fschg(const u16) {
     FPSCR.pair_mode ^= 1;
 
     return 1;
+}
+
+static i64 i_ftrc(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert((N & 1) == 0);
+
+        FPUL = (i32)DR[N >> 1];
+    } else {
+        FPUL = (i32)FR[N];
+    }
+
+    return 3 + FPSCR.precision_mode;
 }
 
 static i64 i_jmp(const u16 instr) {
@@ -1116,6 +1239,12 @@ static i64 i_movt(const u16 instr) {
     return 1;
 }
 
+static i64 i_mull(const u16 instr) {
+    MACL = GPRS[N] * GPRS[M];
+
+    return 4;
+}
+
 static i64 i_muls(const u16 instr) {
     MACL = (i32)(i16)GPRS[N] * (i32)(i16)GPRS[M];
 
@@ -1205,6 +1334,40 @@ static i64 i_shar(const u16 instr) {
     SR.t = GPRS[N] & 1;
 
     GPRS[N] = (i32)GPRS[N] >> 1;
+
+    return 1;
+}
+
+static i64 i_shad(const u16 instr) {
+    if ((i32)GPRS[M] >= 0) {
+        // Left shift
+        GPRS[N] <<= GPRS[M] & 0x1F;
+    } else if ((GPRS[M] & 0x1F) == 0) {
+        // Right shift by 32
+        if ((i32)GPRS[N] < 0) {
+            GPRS[N] = ~0;
+        } else {
+            GPRS[N] = 0;
+        }
+    } else {
+        // Right shift
+        GPRS[N] = (i32)GPRS[N] >> ((~GPRS[M] & 0x1F) + 1);
+    }
+
+    return 1;
+}
+
+static i64 i_shld(const u16 instr) {
+    if ((i32)GPRS[M] >= 0) {
+        // Left shift
+        GPRS[N] <<= GPRS[M] & 0x1F;
+    } else if ((GPRS[M] & 0x1F) == 0) {
+        // Right shift by 32
+        GPRS[N] = 0;
+    } else {
+        // Right shift
+        GPRS[N] >>= (~GPRS[M] & 0x1F) + 1;
+    }
 
     return 1;
 }
@@ -1350,6 +1513,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0100", i_movs0<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0101", i_movs0<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0110", i_movs0<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0111", i_mull);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001001", i_nop);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001011", i_rts);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx1100", i_movl0<OperandSize::Byte>);
@@ -1364,6 +1528,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101001", i_movt);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101010", i_sts<SystemRegister::Pr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000101011", i_rte);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01011010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01101010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx1xxx0010", i_stc<ControlRegister::Rbank, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10000011", i_pref);
@@ -1405,6 +1570,8 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001001", i_shlr<2>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001010", i_lds<SystemRegister::Mach, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001011", i_jsr);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxxxxxx1100", i_shad);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxxxxxx1101", i_shld);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00001110", i_ldc<ControlRegister::Sr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00010000", i_dt);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00010001", i_cmp<Comparison::PositiveZero>);
@@ -1433,6 +1600,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00111110", i_ldc<ControlRegister::Ssr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01000111", i_ldc<ControlRegister::Spc, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01001110", i_ldc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01010010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01010110", i_lds<SystemRegister::Fpul, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01011010", i_lds<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01100010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterIndirectPredecrement>);
@@ -1486,9 +1654,20 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "11001111xxxxxxxx", i_or<AddressingMode::RegisterIndirectGbr>);
     fill_table_with_pattern(ctx.instr_table.data(), "1101xxxxxxxxxxxx", i_movi<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "1110xxxxxxxxxxxx", i_movi<OperandSize::Byte>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0000", i_fadd);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0010", i_fmul);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0011", i_fdiv);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0100", i_fcmp<Comparison::Equal>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0101", i_fcmp<Comparison::GreaterThan>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00101101", i_float);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00111101", i_ftrc);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10001101", i_fldi<false>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10011101", i_fldi<true>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0110", i_fmov_index_load);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0111", i_fmov_index_store);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1000", i_fmov_load);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1001", i_fmov_restore);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1010", i_fmov_store);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1011", i_fmov_save);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx1100", i_fmov);
     fill_table_with_pattern(ctx.instr_table.data(), "1111001111111101", i_fschg);
