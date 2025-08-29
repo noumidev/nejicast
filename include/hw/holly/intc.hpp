@@ -20,6 +20,7 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
+void assert_normal_interrupt(const int interrupt_number);
 void assert_external_interrupt(const int interrupt_number);
 void clear_external_interrupt(const int interrupt_number);
 

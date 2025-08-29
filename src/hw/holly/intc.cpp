@@ -93,10 +93,54 @@ T read(const u32 addr) {
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_ISTNRM:
+            // std::puts("SB_ISTNRM read32");
+
+            return SB_ISTNRM;
         case IO_ISTEXT:
             std::puts("SB_ISTEXT read32");
 
             return SB_ISTEXT;
+        case IO_ISTERR:
+            std::puts("SB_ISTERR read32");
+
+            return SB_ISTERR;
+        case IO_IML2NRM:
+            std::puts("SB_IML2NRM read32");
+
+            return SB_IML2NRM;
+        case IO_IML2EXT:
+            std::puts("SB_IML2EXT read32");
+
+            return SB_IML2EXT;
+        case IO_IML2ERR:
+            std::puts("SB_IML2ERR read32");
+
+            return SB_IML2ERR;
+        case IO_IML4NRM:
+            std::puts("SB_IML4NRM read32");
+
+            return SB_IML4NRM;
+        case IO_IML4EXT:
+            std::puts("SB_IML4EXT read32");
+
+            return SB_IML4EXT;
+        case IO_IML4ERR:
+            std::puts("SB_IML4ERR read32");
+
+            return SB_IML4ERR;
+        case IO_IML6NRM:
+            std::puts("SB_IML6NRM read32");
+
+            return SB_IML6NRM;
+        case IO_IML6EXT:
+            std::puts("SB_IML6EXT read32");
+
+            return SB_IML6EXT;
+        case IO_IML6ERR:
+            std::puts("SB_IML6ERR read32");
+
+            return SB_IML6ERR;
         default:
             std::printf("Unmapped INTC read32 @ %08X\n", addr);
             exit(1);
@@ -200,6 +244,16 @@ void write(const u32 addr, const u32 data) {
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
+
+void assert_normal_interrupt(const int interrupt_number) {
+    if ((SB_ISTNRM & (1 << interrupt_number)) == 0) {
+        std::printf("Asserting normal interrupt %d\n", interrupt_number);
+
+        SB_ISTNRM |= 1 << interrupt_number;
+
+        // TODO: trigger interrupt
+    }
+}
 
 void assert_external_interrupt(const int interrupt_number) {
     if ((SB_ISTEXT & (1 << interrupt_number)) == 0) {
