@@ -24,11 +24,10 @@ namespace hw::pvr::spg {
 #define SPG_WIDTH      ctx.width
 
 #define HCOUNTER ctx.horizontal_counter
-#define VCOUNTER ctx.vertical_counter
+#define VCOUNTER ctx.status.scanline
 
 struct {
     u32 horizontal_counter;
-    u32 vertical_counter;
 
     union {
         u32 raw;
