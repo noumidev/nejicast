@@ -3,6 +3,7 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include <__bit/countl.h>
 #include <hw/cpu/cpu.hpp>
 
 #include <algorithm>
@@ -135,6 +136,8 @@ struct {
     } fprs, banked_fprs;
 
     std::array<i64(*)(const u16), INSTR_TABLE_SIZE> instr_table;
+
+    u16 pending_interrupts;
 
     i64 cycles;
 } ctx;
@@ -364,12 +367,14 @@ void set_system_register(const u32 data) {
 namespace ExceptionEvent {
     enum : u32 {
         Reset = 0,
+        ExternalInterrupt = 0x200,
     };
 }
 
 namespace ExceptionOffset {
     enum : u32 {
         Reset = 0,
+        ExternalInterrupt = 0x600,
     };
 }
 
@@ -607,6 +612,12 @@ static i64 i_bt(const u16 instr) {
     }
 
     return 2;
+}
+
+static i64 i_clrt(const u16) {
+    SR.t = 0;
+
+    return 1;
 }
 
 enum class Comparison {
@@ -1261,6 +1272,12 @@ static i64 i_nop(const u16) {
     return 1;
 }
 
+static i64 i_not(const u16 instr) {
+    GPRS[N] = ~GPRS[M];
+
+    return 1;
+}
+
 static i64 i_ocbp(const u16 instr) {
     // TODO: implement operand cache?
 
@@ -1514,6 +1531,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0101", i_movs0<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0110", i_movs0<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0111", i_mull);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000001000", i_clrt);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001001", i_nop);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001011", i_rts);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx1100", i_movl0<OperandSize::Byte>);
@@ -1528,6 +1546,8 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101001", i_movt);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101010", i_sts<SystemRegister::Pr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000101011", i_rte);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00110010", i_stc<ControlRegister::Ssr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01000010", i_stc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01011010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01101010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx1xxx0010", i_stc<ControlRegister::Rbank, AddressingMode::RegisterDirect>);
@@ -1596,8 +1616,10 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101010", i_lds<SystemRegister::Pr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101011", i_jmp);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00101110", i_ldc<ControlRegister::Vbr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00110011", i_stc<ControlRegister::Ssr, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00110111", i_ldc<ControlRegister::Ssr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00111110", i_ldc<ControlRegister::Ssr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01000011", i_stc<ControlRegister::Spc, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01000111", i_ldc<ControlRegister::Spc, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01001110", i_ldc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01010010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterIndirectPredecrement>);
@@ -1618,6 +1640,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0100", i_movp<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0101", i_movp<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0110", i_movp<OperandSize::Long>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0111", i_not);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1000", i_swap<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<OperandSize::Word>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1100", i_extu<OperandSize::Byte>);
@@ -1694,11 +1717,68 @@ void shutdown() {
     ocio::shutdown();
 }
 
+static bool in_delay_slot() {
+    return NPC != (PC + sizeof(u16));
+}
+
+static void raise_interrupt(const u32 level) {
+    std::printf("SH-4 interrupt @ %08X (level: %u)\n", CPC, level);
+
+    // Save exception context
+    SPC = PC;
+    SSR = SR;
+    SGR = GPRS[15];
+
+    auto new_sr = SR;
+
+    new_sr.block_exception = 1;
+    new_sr.is_privileged = 1;
+    new_sr.select_bank = 1;
+
+    set_sr(new_sr.raw);
+
+    ocio::set_interrupt_event(ExceptionEvent::ExternalInterrupt + 0x20 * (15 - level));
+
+    jump(VBR + ExceptionOffset::ExternalInterrupt);
+}
+
+static void check_pending_interrupts() {
+    if (SR.block_exception || in_delay_slot() || (ctx.pending_interrupts == 0)) {
+        // Interrupts can't happen in delay slots
+        return;
+    }
+
+    // Find highest level interrupt
+    const u16 level = (8 * sizeof(u16) - 1) - std::countl_zero(ctx.pending_interrupts);
+
+    if (level > SR.interrupt_mask) {
+        raise_interrupt(level);
+    }
+}
+
+void assert_interrupt(const int interrupt_level) {
+    if ((ctx.pending_interrupts & (1 << interrupt_level)) == 0) {
+        ctx.pending_interrupts |= 1 << interrupt_level;
+
+        std::printf("SH-4 level %d interrupt pending\n", interrupt_level);
+    }
+}
+
+void clear_interrupt(const int interrupt_level) {
+    if ((ctx.pending_interrupts & (1 << interrupt_level)) != 0) {
+        ctx.pending_interrupts &= ~(1 << interrupt_level);
+
+        std::printf("SH-4 level %d interrupt cleared\n", interrupt_level);
+    }
+}
+
 void step() {
     while (ctx.cycles > 0) {
         const u16 instr = fetch_instr();
         
         ctx.cycles -= ctx.instr_table[instr](instr);
+
+        check_pending_interrupts();
     }
 }
 
