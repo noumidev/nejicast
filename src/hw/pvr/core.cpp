@@ -6,54 +6,67 @@
 #include "common/types.hpp"
 #include <hw/pvr/core.hpp>
 
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #include <hw/pvr/spg.hpp>
+#include <hw/pvr/ta.hpp>
 
 namespace hw::pvr::core {
 
 enum : u32 {
-    IO_ID              = 0x005F8000,
-    IO_REVISION        = 0x005F8004,
-    IO_SOFTRESET       = 0x005F8008,
-    IO_SPAN_SORT_CFG   = 0x005F8030,
-    IO_VO_BORDER_COLOR = 0x005F8040,
-    IO_FB_R_CTRL       = 0x005F8044,
-    IO_FB_W_CTRL       = 0x005F8048,
-    IO_FB_W_LINESTRIDE = 0x005F804C,
-    IO_FB_R_SIZE       = 0x005F805C,
-    IO_FB_X_CLIP       = 0x005F8068,
-    IO_FB_Y_CLIP       = 0x005F806C,
-    IO_FPU_SHAD_SCALE  = 0x005F8074,
-    IO_FPU_CULL_VAL    = 0x005F8078,
-    IO_FPU_PARAM_CFG   = 0x005F807C,
-    IO_HALF_OFFSET     = 0x005F8080,
-    IO_FPU_PERP_VAL    = 0x005F8084,
-    IO_ISP_BACKGND_D   = 0x005F8088,
-    IO_ISP_BACKGND_T   = 0x005F808C,
-    IO_ISP_FEED_CFG    = 0x005F8098,
-    IO_SDRAM_REFRESH   = 0x005F80A0,
-    IO_SDRAM_CFG       = 0x005F80A8,
-    IO_FOG_COL_RAM     = 0x005F80B0,
-    IO_FOG_COL_VERT    = 0x005F80B4,
-    IO_FOG_CLAMP_MAX   = 0x005F80BC,
-    IO_FOG_CLAMP_MIN   = 0x005F80C0,
-    IO_SPG_HBLANK_INT  = 0x005F80C8,
-    IO_SPG_VBLANK_INT  = 0x005F80CC,
-    IO_SPG_CONTROL     = 0x005F80D0,
-    IO_SPG_HBLANK      = 0x005F80D4,
-    IO_SPG_LOAD        = 0x005F80D8,
-    IO_SPG_VBLANK      = 0x005F80DC,
-    IO_SPG_WIDTH       = 0x005F80E0,
-    IO_TEXT_CONTROL    = 0x005F80E4,
-    IO_VO_CONTROL      = 0x005F80E8,
-    IO_VO_STARTX       = 0x005F80EC,
-    IO_VO_STARTY       = 0x005F80F0,
-    IO_SPG_STATUS      = 0x005F810C,
-    IO_FB_BURSTCTRL    = 0x005F8110,
+    IO_ID                = 0x005F8000,
+    IO_REVISION          = 0x005F8004,
+    IO_SOFTRESET         = 0x005F8008,
+    IO_SPAN_SORT_CFG     = 0x005F8030,
+    IO_VO_BORDER_COLOR   = 0x005F8040,
+    IO_FB_R_CTRL         = 0x005F8044,
+    IO_FB_W_CTRL         = 0x005F8048,
+    IO_FB_W_LINESTRIDE   = 0x005F804C,
+    IO_FB_R_SIZE         = 0x005F805C,
+    IO_FB_X_CLIP         = 0x005F8068,
+    IO_FB_Y_CLIP         = 0x005F806C,
+    IO_FPU_SHAD_SCALE    = 0x005F8074,
+    IO_FPU_CULL_VAL      = 0x005F8078,
+    IO_FPU_PARAM_CFG     = 0x005F807C,
+    IO_HALF_OFFSET       = 0x005F8080,
+    IO_FPU_PERP_VAL      = 0x005F8084,
+    IO_ISP_BACKGND_D     = 0x005F8088,
+    IO_ISP_BACKGND_T     = 0x005F808C,
+    IO_ISP_FEED_CFG      = 0x005F8098,
+    IO_SDRAM_REFRESH     = 0x005F80A0,
+    IO_SDRAM_CFG         = 0x005F80A8,
+    IO_FOG_COL_RAM       = 0x005F80B0,
+    IO_FOG_COL_VERT      = 0x005F80B4,
+    IO_FOG_DENSITY       = 0x005F80B8,
+    IO_FOG_CLAMP_MAX     = 0x005F80BC,
+    IO_FOG_CLAMP_MIN     = 0x005F80C0,
+    IO_SPG_HBLANK_INT    = 0x005F80C8,
+    IO_SPG_VBLANK_INT    = 0x005F80CC,
+    IO_SPG_CONTROL       = 0x005F80D0,
+    IO_SPG_HBLANK        = 0x005F80D4,
+    IO_SPG_LOAD          = 0x005F80D8,
+    IO_SPG_VBLANK        = 0x005F80DC,
+    IO_SPG_WIDTH         = 0x005F80E0,
+    IO_TEXT_CONTROL      = 0x005F80E4,
+    IO_VO_CONTROL        = 0x005F80E8,
+    IO_VO_STARTX         = 0x005F80EC,
+    IO_VO_STARTY         = 0x005F80F0,
+    IO_SCALER_CTL        = 0x005F80F4,
+    IO_SPG_STATUS        = 0x005F810C,
+    IO_FB_BURSTCTRL      = 0x005F8110,
+    IO_Y_COEFF           = 0x005F8118,
+    IO_TA_OL_BASE        = 0x005F8124,
+    IO_TA_ISP_BASE       = 0x005F8128,
+    IO_TA_OL_LIMIT       = 0x005F812C,
+    IO_TA_ISP_LIMIT      = 0x005F8130,
+    IO_TA_GLOB_TILE_CLIP = 0x005F813C,
+    IO_TA_ALLOC_CTRL     = 0x005F8140,
+    IO_TA_LIST_INIT      = 0x005F8144,
+    IO_FOG_TABLE         = 0x005F8200,
 };
 
 #define SPAN_SORT_CFG   ctx.span_sort_configuration
@@ -76,15 +89,24 @@ enum : u32 {
 #define SDRAM_CFG       ctx.sdram.configuration
 #define FOG_COL_RAM     ctx.fog.color_lut_mode
 #define FOG_COL_VERT    ctx.fog.color_vertex_mode
+#define FOG_DENSITY     ctx.fog.density
 #define FOG_CLAMP_MAX   ctx.fog.clamp_max
 #define FOG_CLAMP_MIN   ctx.fog.clamp_min
 #define TEXT_CONTROL    ctx.texture_control
 #define VO_CONTROL      ctx.video_output.control
 #define VO_STARTX       ctx.video_output.horizontal_start
 #define VO_STARTY       ctx.video_output.vertical_start
+#define SCALER_CTL      ctx.scaler_control
 #define FB_BURSTCTRL    ctx.frame_buffer.burst_control
+#define Y_COEFF         ctx.y_coefficient
+
+constexpr usize VRAM_SIZE = 0x800000;
+constexpr usize FOG_TABLE_SIZE = 0x80;
 
 struct {
+    std::array<u8, VRAM_SIZE> video_ram;
+    std::array<u16, FOG_TABLE_SIZE> fog_table;
+
     union {
         u32 raw;
 
@@ -253,6 +275,16 @@ struct {
                 u32 alpha : 8;
             };
         } color_lut_mode, color_vertex_mode, clamp_max, clamp_min;
+
+        union {
+            u32 raw;
+
+            struct {
+                u32 exponent :  8;
+                u32 mantissa :  8;
+                u32          : 16;
+            };
+        } density;
     } fog;
 
     struct {
@@ -311,6 +343,28 @@ struct {
             u32                      : 14;
         };
     } texture_control;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 vertical_scale_factor     : 16;
+            u32 enable_horizontal_scaling :  1;
+            u32 enable_interlace          :  1;
+            u32 select_field              :  1;
+            u32                           : 13;
+        };
+    } scaler_control;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 coefficient_0 :  8;
+            u32 coefficient_1 :  8;
+            u32               : 16;
+        };
+    } y_coefficient;
 } ctx;
 
 void initialize() {
@@ -375,6 +429,15 @@ void write(const u32 addr, const T data) {
 
 template<>
 void write(const u32 addr, const u32 data) {
+    if ((addr & ~0x1FF) == IO_FOG_TABLE) {
+        const u32 idx = (addr >> 2) & (FOG_TABLE_SIZE - 1);
+
+        ctx.fog_table[idx] = data;
+
+        std::printf("FOG_TABLE[%03u] write32 = %08X\n", idx, data);
+        return;
+    }
+
     switch (addr) {
         case IO_SOFTRESET:
             std::printf("SOFTRESET write32 = %08X\n", data);
@@ -474,6 +537,11 @@ void write(const u32 addr, const u32 data) {
         
             FOG_COL_VERT.raw = data;
             break;
+        case IO_FOG_DENSITY:
+            std::printf("FOG_DENSITY write32 = %08X\n", data);
+        
+            FOG_DENSITY.raw = data;
+            break;
         case IO_FOG_CLAMP_MAX:
             std::printf("FOG_CLAMP_MAX write32 = %08X\n", data);
         
@@ -539,10 +607,57 @@ void write(const u32 addr, const u32 data) {
         
             VO_STARTY.raw = data;
             break;
+        case IO_SCALER_CTL:
+            std::printf("SCALER_CTL write32 = %08X\n", data);
+        
+            SCALER_CTL.raw = data;
+            break;
         case IO_FB_BURSTCTRL:
             std::printf("FB_BURSTCTRL write32 = %08X\n", data);
         
             FB_BURSTCTRL.raw = data;
+            break;
+        case IO_Y_COEFF:
+            std::printf("Y_COEFF write32 = %08X\n", data);
+        
+            Y_COEFF.raw = data;
+            break;
+        case IO_TA_OL_BASE:
+            std::printf("TA_OL_BASE write32 = %08X\n", data);
+        
+            ta::set_object_list_base(data);
+            break;
+        case IO_TA_ISP_BASE:
+            std::printf("TA_ISP_BASE write32 = %08X\n", data);
+        
+            ta::set_isp_list_base(data);
+            break;
+        case IO_TA_OL_LIMIT:
+            std::printf("TA_OL_LIMIT write32 = %08X\n", data);
+        
+            ta::set_object_list_limit(data);
+            break;
+        case IO_TA_ISP_LIMIT:
+            std::printf("TA_ISP_LIMIT write32 = %08X\n", data);
+        
+            ta::set_isp_list_limit(data);
+            break;
+        case IO_TA_GLOB_TILE_CLIP:
+            std::printf("TA_GLOB_TILE_CLIP write32 = %08X\n", data);
+        
+            ta::set_global_tile_clip(data);
+            break;
+        case IO_TA_ALLOC_CTRL:
+            std::printf("TA_ALLOC_CTRL write32 = %08X\n", data);
+        
+            ta::set_allocation_control(data);
+            break;
+        case IO_TA_LIST_INIT:
+            std::printf("TA_LIST_INIT write32 = %08X\n", data);
+        
+            if ((data >> 31) != 0) {
+                ta::initialize_lists();
+            }
             break;
         default:
             std::printf("Unmapped PVR CORE write32 @ %08X = %08X\n", addr, data);
@@ -553,5 +668,10 @@ void write(const u32 addr, const u32 data) {
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
+
+// For HOLLY access
+u8* get_video_ram_ptr() {
+    return ctx.video_ram.data();
+}
 
 }

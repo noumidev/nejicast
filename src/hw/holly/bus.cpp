@@ -42,6 +42,7 @@ enum : u32 {
     BASE_MODEM     = 0x00600000,
     BASE_AICA      = 0x00700000,
     BASE_WAVE_RAM  = 0x00800000,
+    BASE_VIDEO_RAM = 0x05000000,
     BASE_DRAM      = 0x0C000000,
 };
 
@@ -53,6 +54,7 @@ enum : u32 {
     SIZE_PVR_CORE  = 0x00002000,
     SIZE_AICA      = 0x00008000,
     SIZE_WAVE_RAM  = 0x00200000,
+    SIZE_VIDEO_RAM = 0x00800000,
     SIZE_DRAM      = 0x01000000,
 };
 
@@ -118,6 +120,14 @@ void initialize() {
         g2::aica::get_wave_ram_ptr(),
         BASE_WAVE_RAM,
         SIZE_WAVE_RAM,
+        true,
+        true
+    );
+
+    map_memory(
+        pvr::core::get_video_ram_ptr(),
+        BASE_VIDEO_RAM,
+        SIZE_VIDEO_RAM,
         true,
         true
     );
