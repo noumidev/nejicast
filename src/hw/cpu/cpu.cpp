@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_set>
 
 #include <hw/cpu/ocio.hpp>
 #include <hw/holly/bus.hpp>
@@ -226,17 +227,32 @@ static void set_fpscr(const u32 fpscr) {
     }
 }
 
+[[maybe_unused]]
+static void add_jump_target(const u32 addr) {
+    static std::unordered_set<u32> jump_targets;
+
+    if (jump_targets.find(addr) == jump_targets.end()) {
+        std::printf("Jump @ %08X to %08X\n", CPC, addr);
+
+        jump_targets.insert(addr);
+    }
+}
+
 static void jump(const u32 addr) {
     // std::printf("SH-4 jump @ %08X to %08X\n", CPC, addr);
 
     PC = addr;
     NPC = addr + sizeof(u16);
+
+    // add_jump_target(addr);
 }
 
 static void delayed_jump(const u32 addr) {
     // std::printf("SH-4 delayed jump @ %08X to %08X\n", CPC, addr);
 
     NPC = addr;
+
+    // add_jump_target(addr);
 }
 
 enum class ControlRegister {
