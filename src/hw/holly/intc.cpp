@@ -78,6 +78,38 @@ struct {
     } g2_dma;
 } ctx;
 
+static void check_pending_interrupts() {
+    if (
+        ((SB_ISTNRM & SB_IML6NRM) != 0) ||
+        ((SB_ISTEXT & SB_IML6EXT) != 0) ||
+        ((SB_ISTERR & SB_IML6ERR) != 0)
+    ) {
+        hw::cpu::assert_interrupt(6);
+    } else {
+        hw::cpu::clear_interrupt(6);
+    }
+
+    if (
+        ((SB_ISTNRM & SB_IML4NRM) != 0) ||
+        ((SB_ISTEXT & SB_IML4EXT) != 0) ||
+        ((SB_ISTERR & SB_IML4ERR) != 0)
+    ) {
+        hw::cpu::assert_interrupt(4);
+    } else {
+        hw::cpu::clear_interrupt(4);
+    }
+
+    if (
+        ((SB_ISTNRM & SB_IML2NRM) != 0) ||
+        ((SB_ISTEXT & SB_IML2EXT) != 0) ||
+        ((SB_ISTERR & SB_IML2ERR) != 0)
+    ) {
+        hw::cpu::assert_interrupt(2);
+    } else {
+        hw::cpu::clear_interrupt(2);
+    }
+}
+
 void initialize() {}
 
 void reset() {
@@ -241,43 +273,13 @@ void write(const u32 addr, const u32 data) {
             std::printf("Unmapped INTC write32 @ %08X = %08X\n", addr, data);
             exit(1);
     }
+
+    check_pending_interrupts();
 }
 
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
-
-static void check_pending_interrupts() {
-    if (
-        ((SB_ISTNRM & SB_IML6NRM) != 0) ||
-        ((SB_ISTEXT & SB_IML6EXT) != 0) ||
-        ((SB_ISTERR & SB_IML6ERR) != 0)
-    ) {
-        hw::cpu::assert_interrupt(6);
-    } else {
-        hw::cpu::clear_interrupt(6);
-    }
-
-    if (
-        ((SB_ISTNRM & SB_IML4NRM) != 0) ||
-        ((SB_ISTEXT & SB_IML4EXT) != 0) ||
-        ((SB_ISTERR & SB_IML4ERR) != 0)
-    ) {
-        hw::cpu::assert_interrupt(4);
-    } else {
-        hw::cpu::clear_interrupt(4);
-    }
-
-    if (
-        ((SB_ISTNRM & SB_IML2NRM) != 0) ||
-        ((SB_ISTEXT & SB_IML2EXT) != 0) ||
-        ((SB_ISTERR & SB_IML2ERR) != 0)
-    ) {
-        hw::cpu::assert_interrupt(2);
-    } else {
-        hw::cpu::clear_interrupt(2);
-    }
-}
 
 void assert_normal_interrupt(const int interrupt_number) {
     if ((SB_ISTNRM & (1 << interrupt_number)) == 0) {
