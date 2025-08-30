@@ -3,12 +3,16 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "common/types.hpp"
 #include <hw/holly/maple.hpp>
 
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <hw/holly/bus.hpp>
+#include <hw/holly/intc.hpp>
 
 namespace hw::holly::maple {
 
@@ -64,6 +68,79 @@ struct {
     bool is_msb_bit_31;
 } ctx;
 
+union Instruction {
+    u32 raw;
+
+    struct {
+        u32 transfer_length :  8;
+        u32 command         :  3;
+        u32                 :  5;
+        u32 select_port     :  2;
+        u32                 : 13;
+        u32 end_flag        :  1;
+    };
+};
+
+static u32 read_word(u32& addr) {
+    const u32 data = hw::holly::bus::read<u32>(addr);
+
+    addr += sizeof(data);
+
+    return data;
+}
+
+enum {
+    MAPLE_COMMAND_TRANSMIT_DATA,
+};
+
+enum {
+    MAPLE_NO_DEVICE = 0xFFFFFFFF,
+};
+
+constexpr int MAPLE_INTERRUPT = 12;
+
+static void execute_maple_dma() {
+    std::printf("MAPLE DMA @ %08X\n", SB_MDSTAR);
+
+    SB_MDST = true;
+
+    u32 addr = SB_MDSTAR;
+
+    while (true) {
+        const Instruction instr = Instruction{.raw = read_word(addr)};
+
+        std::printf("MAPLE instruction @ %08lX = %08X\n", addr - sizeof(instr), instr.raw);
+        
+        switch (instr.command) {
+            case MAPLE_COMMAND_TRANSMIT_DATA:
+                {
+                    u32 transfer_length = instr.transfer_length + 1;
+
+                    assert(transfer_length == 1);
+
+                    const u32 receive_addr = read_word(addr);
+
+                    std::printf("MAPLE Port %c receive address = %08X\n", 'A' + instr.select_port, receive_addr);
+                    std::printf("MAPLE Port %c frame = %08X\n", 'A' + instr.select_port, read_word(addr));
+
+                    // Simulate no device response
+                    hw::holly::bus::write<u32>(receive_addr, MAPLE_NO_DEVICE);
+                }
+                break;
+            default:
+                std::printf("Unimplemented MAPLE command %u\n", instr.command);
+                exit(1);
+        }
+
+        if (instr.end_flag) {
+            hw::holly::intc::assert_normal_interrupt(MAPLE_INTERRUPT);
+
+            SB_MDST = false;
+            break;
+        }
+    }
+}
+
 void initialize() {}
 
 void reset() {
@@ -78,9 +155,21 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_MDST:
+            std::puts("SB_MDST read32");
+
+            return SB_MDST;
+        default:
+            std::printf("Unmapped MAPLE read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>
@@ -110,7 +199,10 @@ void write(const u32 addr, const u32 data) {
         case IO_MDST:
             std::printf("SB_MDST write32 = %08X\n", data);
             
-            assert((data & 1) == 0);
+            // Manual trigger
+            if (!SB_MDTSEL && ((data & 1) != 0)) {
+                execute_maple_dma();
+            } 
             break;
         case IO_MSYS:
             std::printf("SB_MSYS write32 = %08X\n", data);
