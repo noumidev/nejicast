@@ -1433,6 +1433,10 @@ static i64 i_pref(const u16 instr) {
 
     std::printf("SH-4 operand cache prefetch @ %08X\n", GPRS[N]);
 
+    if (GPRS[N] >= REGION_P4) {
+        ocio::flush_store_queue(GPRS[N] & PRIV_MASK);
+    }
+
     return 1;
 }
 

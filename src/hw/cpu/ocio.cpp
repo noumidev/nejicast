@@ -112,6 +112,10 @@ enum {
     NUM_TIMERS,
 };
 
+enum {
+    SIZE_STORE_QUEUE_AREA = 0x4000000,
+};
+
 #define PTEH    ctx.page_table_entry_hi
 #define TTB     ctx.translation_table_base
 #define TEA     ctx.tlb_exception_address
@@ -121,8 +125,8 @@ enum {
 #define EXPEVT  ctx.exception_event
 #define INTEVT  ctx.interrupt_event
 #define PTEA    ctx.page_table_entry_assistance
-#define QACR1   ctx.queue_address_control_1
-#define QACR2   ctx.queue_address_control_2
+#define QACR1   ctx.queue_address_control[0]
+#define QACR2   ctx.queue_address_control[1]
 #define BBRA    ctx.break_bus_cycle_a
 #define BBRB    ctx.break_bus_cycle_b
 #define BRCR    ctx.break_control
@@ -186,7 +190,13 @@ enum {
 #define SCFCR2  ctx.fifo_control_2
 #define SCSPTR2 ctx.serial_port_2
 
+constexpr usize NUM_STORE_QUEUES = 2;
+
 struct {
+    struct {
+        u32 bytes[8];
+    } store_queues[NUM_STORE_QUEUES];
+
     union {
         u32 raw;
 
@@ -258,7 +268,7 @@ struct {
             u32 area :  3;
             u32      : 27;
         };
-    } queue_address_control_1, queue_address_control_2;
+    } queue_address_control[NUM_STORE_QUEUES];
 
     union {
         u16 raw;
@@ -1093,6 +1103,17 @@ void write(const u32 addr, const u16 data) {
 
 template<>
 void write(const u32 addr, const u32 data) {
+    if (addr < SIZE_STORE_QUEUE_AREA) {
+        const bool is_second_queue = (addr >> 5) != 0;
+
+        const usize select_longword = (addr >> 2) & 7;
+
+        ctx.store_queues[is_second_queue].bytes[select_longword] = data;
+
+        std::printf("SQ%d[%zu] write32 = %08X\n", is_second_queue, select_longword, data);
+        return;
+    }
+
     if ((addr & 0xFF000000) == BASE_OPERAND_CACHE_TAG) {
         std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
         return;
@@ -1320,6 +1341,19 @@ void set_interrupt_event(const u32 event) {
 }
 
 constexpr int CHANNEL_2_INTERRUPT = 19;
+
+void flush_store_queue(const u32 addr) {
+    assert(addr < SIZE_STORE_QUEUE_AREA);
+
+    const bool is_second_queue = (addr >> 5) != 0;
+
+    std::printf("Flushing SQ%d\n", is_second_queue);
+
+    hw::holly::bus::block_write(
+    (addr & 0x03FFFFE0) |( ctx.queue_address_control[is_second_queue].area << 26),
+    (u8*)ctx.store_queues[is_second_queue].bytes
+    );
+}
 
 void execute_channel_2_dma(u32 &start_address, u32 &length, bool &start) {
     assert(CHCR2.enable_dmac);
