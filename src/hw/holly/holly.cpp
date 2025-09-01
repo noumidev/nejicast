@@ -115,6 +115,10 @@ constexpr u32 SB_REV = 1;
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_C2DST:
+            std::puts("SB_C2DST read32");
+
+            return SB_C2DST;
         case IO_FFST:
             // There's no need to implement this properly (yet?)
             // std::puts("SB_FFST read32");
