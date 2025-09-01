@@ -120,11 +120,17 @@ void initialize(const char* boot_path, const char* flash_path) {
 
     ctx.boot_rom = common::load_file(boot_path);
 
-    assert(ctx.boot_rom.size() == BOOT_ROM_SIZE);
+    if (ctx.boot_rom.size() != BOOT_ROM_SIZE) {
+        std::printf("Invalid boot ROM size %zu\n", ctx.boot_rom.size());
+        exit(1);
+    }
 
     ctx.flash_rom = common::load_file(flash_path);
 
-    assert(ctx.flash_rom.size() == FLASH_ROM_SIZE);
+    if (ctx.flash_rom.size() != FLASH_ROM_SIZE) {
+        std::printf("Invalid FLASH ROM size %zu\n", ctx.flash_rom.size());
+        exit(1);
+    }
 }
 
 void reset() {
