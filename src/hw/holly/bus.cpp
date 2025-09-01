@@ -3,6 +3,7 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "hw/pvr/ta.hpp"
 #include <hw/holly/bus.hpp>
 
 #include <array>
@@ -42,8 +43,10 @@ enum : u32 {
     BASE_MODEM     = 0x00600000,
     BASE_AICA      = 0x00700000,
     BASE_WAVE_RAM  = 0x00800000,
-    BASE_VIDEO_RAM = 0x05000000,
+    BASE_VRAM_64   = 0x04000000,
+    BASE_VRAM_32   = 0x05000000,
     BASE_DRAM      = 0x0C000000,
+    BASE_TA_FIFO   = 0x10000000,
 };
 
 enum : u32 {
@@ -54,7 +57,7 @@ enum : u32 {
     SIZE_PVR_CORE  = 0x00002000,
     SIZE_AICA      = 0x00008000,
     SIZE_WAVE_RAM  = 0x00200000,
-    SIZE_VIDEO_RAM = 0x00800000,
+    SIZE_VRAM_32   = 0x00800000,
     SIZE_DRAM      = 0x01000000,
 };
 
@@ -126,8 +129,8 @@ void initialize() {
 
     map_memory(
         pvr::core::get_video_ram_ptr(),
-        BASE_VIDEO_RAM,
-        SIZE_VIDEO_RAM,
+        BASE_VRAM_32,
+        SIZE_VRAM_32,
         true,
         true
     );
@@ -198,6 +201,42 @@ template u16 read(u32);
 template u32 read(u32);
 template u64 read(u32);
 
+constexpr usize BLOCK_SIZE = 32;
+
+void block_read(const u32 addr, u8 *bytes) {
+    assert(addr < ADDRESS_SPACE);
+
+    const u32 page = addr / PAGE_SIZE;
+    const u32 offset = addr & PAGE_MASK;
+
+    if (ctx.rd_table[page] != nullptr) {
+        std::memcpy(bytes, &ctx.rd_table[page][offset], BLOCK_SIZE);
+        return;
+    }
+
+    std::printf("Unmapped block read @ %08X\n", addr);
+    exit(1);
+}
+
+template<typename T>
+static void write_texture_memory(const u32 addr, const T data) {
+    std::printf("Unmapped texture memory write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
+    exit(1);
+}
+
+template<>
+void write_texture_memory(const u32 addr, const u32 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        write<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1), data);
+    } else {
+        // First VRAM module
+        write<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1), data);
+    }
+}
+
 template<typename T>
 void write(const u32 addr, const T data) {
     assert(addr < ADDRESS_SPACE);
@@ -237,6 +276,10 @@ void write(const u32 addr, const T data) {
         return hw::g2::aica::write<T>(addr, data);
     }
 
+    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
+        return write_texture_memory<T>(addr, data);
+    }
+
     // Redirect write
     hw::holly::write<T>(addr, data);
 }
@@ -245,6 +288,32 @@ template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u32);
 template void write(u32, u64);
+
+void block_write(const u32 addr, const u8 *bytes) {
+    assert(addr < ADDRESS_SPACE);
+
+    const u32 page = addr / PAGE_SIZE;
+    const u32 offset = addr & PAGE_MASK;
+
+    if (ctx.wr_table[page] != nullptr) {
+        std::memcpy(&ctx.wr_table[page][offset], bytes, BLOCK_SIZE);
+        return;
+    }
+
+    if (addr == BASE_TA_FIFO) {
+        hw::pvr::ta::fifo_block_write(bytes);
+        return;
+    }
+
+    std::printf("Unmapped block write @ %08X = ", addr);
+
+    for (usize i = 0; i < BLOCK_SIZE; i++) {
+        std::printf("%02X", bytes[i]);
+    }
+
+    std::puts("");
+    exit(1);
+}
 
 void dump_memory(
     const u32 addr,
