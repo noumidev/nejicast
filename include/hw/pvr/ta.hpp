@@ -14,6 +14,8 @@ void initialize();
 void reset();
 void shutdown();
 
+u32 get_itp_current_address();
+
 void set_allocation_control(const u32 data);
 void set_global_tile_clip(const u32 data);
 void set_isp_list_base(const u32 data);

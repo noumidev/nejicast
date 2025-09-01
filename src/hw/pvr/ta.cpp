@@ -10,12 +10,15 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/holly/intc.hpp>
+
 namespace hw::pvr::ta {
 
 #define TA_ALLOC_CTRL     ctx.allocation_control
 #define TA_GLOB_TILE_CLIP ctx.global_tile_clip
 #define TA_ISP_BASE       ctx.isp_list_base
 #define TA_ISP_LIMIT      ctx.isp_list_limit
+#define TA_ITP_CURRENT    ctx.itp_current_address
 #define TA_OL_BASE        ctx.object_list_base
 #define TA_OL_LIMIT       ctx.object_list_limit
 #define TA_NEXT_OPB_INIT  ctx.next_object_pointer_block
@@ -56,6 +59,7 @@ struct {
     u32 object_list_base;
     u32 object_list_limit;
     u32 next_object_pointer_block;
+    u32 itp_current_address;
 } ctx;
 
 void initialize() {}
@@ -65,6 +69,10 @@ void reset() {
 }
 
 void shutdown() {}
+
+u32 get_itp_current_address() {
+    return TA_ITP_CURRENT;
+}
 
 void set_allocation_control(const u32 data) {
     TA_ALLOC_CTRL.raw = data;
