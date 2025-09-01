@@ -18,6 +18,7 @@ namespace hw::pvr::ta {
 #define TA_ISP_LIMIT      ctx.isp_list_limit
 #define TA_OL_BASE        ctx.object_list_base
 #define TA_OL_LIMIT       ctx.object_list_limit
+#define TA_NEXT_OPB_INIT  ctx.next_object_pointer_block
 
 struct {
     union {
@@ -54,6 +55,7 @@ struct {
     u32 isp_list_limit;
     u32 object_list_base;
     u32 object_list_limit;
+    u32 next_object_pointer_block;
 } ctx;
 
 void initialize() {}
@@ -81,6 +83,10 @@ void set_isp_list_limit(const u32 data) {
     TA_ISP_LIMIT = data;
 }
 
+void set_next_object_pointer_block(const u32 data) {
+    TA_NEXT_OPB_INIT = data;
+}
+
 void set_object_list_base(const u32 data) {
     TA_OL_BASE = data;
 }
@@ -91,6 +97,16 @@ void set_object_list_limit(const u32 data) {
 
 void initialize_lists() {
     // TODO: initialize TA lists
+}
+
+void fifo_block_write(const u8 *bytes) {
+    u32 fifo_bytes[8];
+
+    std::memcpy(fifo_bytes, bytes, sizeof(fifo_bytes));
+
+    for (int i = 0; i < 8; i++) {
+        std::printf("TA FIFO write = %08X\n", fifo_bytes[i]);
+    }
 }
 
 }
