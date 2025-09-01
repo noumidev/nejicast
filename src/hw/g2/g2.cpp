@@ -163,9 +163,33 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_ADST:
+            std::puts("SB_ADST read32");
+
+            return SB_ADST;
+        case IO_E1ST:
+            std::puts("SB_E1ST read32");
+
+            return SB_E1ST;
+        case IO_E2ST:
+            std::puts("SB_E2ST read32");
+
+            return SB_E2ST;
+        case IO_DDST:
+            std::puts("SB_DDST read32");
+
+            return SB_DDST;
+        default:
+            std::printf("Unmapped G2 read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>
