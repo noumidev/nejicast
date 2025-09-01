@@ -23,4 +23,6 @@ void write(const u32 addr, const T data);
 void set_exception_event(const u32 event);
 void set_interrupt_event(const u32 event);
 
+void execute_channel_2_dma(u32& start_address, u32& length, bool& start);
+
 }

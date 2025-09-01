@@ -3,12 +3,15 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "hw/holly/bus.hpp"
 #include <hw/cpu/ocio.hpp>
 
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <hw/holly/intc.hpp>
 
 namespace hw::cpu::ocio {
 
@@ -1314,6 +1317,58 @@ void set_exception_event(const u32 event) {
 
 void set_interrupt_event(const u32 event) {
     INTEVT = event;
+}
+
+constexpr int CHANNEL_2_INTERRUPT = 19;
+
+void execute_channel_2_dma(u32 &start_address, u32 &length, bool &start) {
+    assert(CHCR2.enable_dmac);
+    assert(CHCR2.transmit_size == 4); // 32-byte
+
+    assert((start_address % 32) == 0);
+    assert((length % 32) == 0);
+
+    // TODO: mask this through CPU
+    SAR2 &= 0x1FFFFFFF;
+    
+    u8 dma_bytes[32];
+
+    while (length > 0) {
+        hw::holly::bus::block_read(SAR2, dma_bytes);
+        hw::holly::bus::block_write(start_address, dma_bytes);
+
+        switch (CHCR2.source_mode) {
+            case 0: // Fixed
+            case 3: // ??
+                break;
+            case 1:
+                SAR2 += sizeof(dma_bytes);
+                break;
+            case 2:
+                SAR2 -= sizeof(dma_bytes);
+                break;
+        }
+
+        switch (CHCR2.destination_mode) {
+            case 0: // Fixed
+            case 3: // ??
+                break;
+            case 1:
+                start_address += sizeof(dma_bytes);
+                break;
+            case 2:
+                start_address -= sizeof(dma_bytes);
+                break;
+        }
+
+        length -= sizeof(dma_bytes);
+    }
+
+    start = false;
+
+    if (CHCR2.enable_interrupt) {
+        hw::holly::intc::assert_normal_interrupt(CHANNEL_2_INTERRUPT);
+    }
 }
 
 }
