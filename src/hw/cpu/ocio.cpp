@@ -881,9 +881,10 @@ u32 read(const u32 addr) {
 
             return CHCR2.raw;
         case IO_TCNT0:
-            std::puts("TCNT0 read32");
+            // std::puts("TCNT0 read32");
 
-            return TCNT0;
+            // HACK
+            return TCNT0--;
         default:
             std::printf("Unmapped SH-4 P4 read32 @ %08X\n", addr);
             exit(1);
