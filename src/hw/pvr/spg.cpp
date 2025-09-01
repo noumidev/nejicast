@@ -148,6 +148,10 @@ u32 get_status() {
     return SPG_STATUS.raw;
 }
 
+u32 get_vblank_control() {
+    return SPG_VBLANK.raw;
+}
+
 void set_control(const u32 data) {
     SPG_CONTROL.raw = data;
 }

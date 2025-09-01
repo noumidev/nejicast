@@ -15,6 +15,7 @@ void reset();
 void shutdown();
 
 u32 get_status();
+u32 get_vblank_control();
 
 void set_control(const u32 data);
 void set_hblank_control(const u32 data);
