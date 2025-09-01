@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/cpu/ocio.hpp>
 #include <hw/holly/bus.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/holly/maple.hpp>
@@ -157,7 +158,9 @@ void write(const u32 addr, const u32 data) {
 
             SB_C2DST = (data & 1) != 0;
 
-            assert(!SB_C2DST);
+            if (SB_C2DST) {
+                hw::cpu::ocio::execute_channel_2_dma(SB_C2DSTAT, SB_C2DLEN, SB_C2DST);
+            }
             break;
         case IO_SDSTAW:
             std::printf("SB_SDSTAW write32 = %08X\n", data);
