@@ -26,7 +26,11 @@ enum : u32 {
     IO_FB_R_CTRL         = 0x005F8044,
     IO_FB_W_CTRL         = 0x005F8048,
     IO_FB_W_LINESTRIDE   = 0x005F804C,
+    IO_FB_R_SOF1         = 0x005F8050,
+    IO_FB_R_SOF2         = 0x005F8054,
     IO_FB_R_SIZE         = 0x005F805C,
+    IO_FB_W_SOF1         = 0x005F8060,
+    IO_FB_W_SOF2         = 0x005F8064,
     IO_FB_X_CLIP         = 0x005F8068,
     IO_FB_Y_CLIP         = 0x005F806C,
     IO_FPU_SHAD_SCALE    = 0x005F8074,
@@ -66,6 +70,7 @@ enum : u32 {
     IO_TA_GLOB_TILE_CLIP = 0x005F813C,
     IO_TA_ALLOC_CTRL     = 0x005F8140,
     IO_TA_LIST_INIT      = 0x005F8144,
+    IO_TA_NEXT_OPB_INIT  = 0x005F8164,
     IO_FOG_TABLE         = 0x005F8200,
 };
 
@@ -74,7 +79,11 @@ enum : u32 {
 #define FB_R_CTRL       ctx.frame_buffer.read_control
 #define FB_W_CTRL       ctx.frame_buffer.write_control
 #define FB_W_LINESTRIDE ctx.frame_buffer.line_stride
+#define FB_R_SOF1       ctx.frame_buffer.read_address_1
+#define FB_R_SOF2       ctx.frame_buffer.read_address_2
 #define FB_R_SIZE       ctx.frame_buffer.read_size
+#define FB_W_SOF1       ctx.frame_buffer.write_address_1
+#define FB_W_SOF2       ctx.frame_buffer.write_address_2
 #define FB_X_CLIP       ctx.frame_buffer.x_clip
 #define FB_Y_CLIP       ctx.frame_buffer.y_clip
 #define FPU_SHAD_SCALE  ctx.fpu.shadow_scale
@@ -150,6 +159,9 @@ struct {
                 u32                  : 8;
             };
         } write_control;
+
+        u32 read_address_1, read_address_2;
+        u32 write_address_1, write_address_2;
 
         union {
             u32 raw;
@@ -403,6 +415,10 @@ u32 read(const u32 addr) {
             std::puts("VO_BORDER_COLOR read32");
 
             return VO_BORDER_COLOR.raw;
+        case IO_SPG_VBLANK:
+            std::puts("SPG_VBLANK read32");
+
+            return spg::get_vblank_control();
         case IO_VO_CONTROL:
             std::puts("VO_CONTROL read32");
 
@@ -411,6 +427,11 @@ u32 read(const u32 addr) {
             // std::puts("SPG_STATUS read32");
 
             return spg::get_status();
+        case IO_TA_LIST_INIT:
+            std::puts("TA_LIST_INIT read32");
+
+            // Always returns 0?
+            return 0;
         default:
             std::printf("Unmapped PVR CORE read32 @ %08X\n", addr);
             exit(1);
@@ -447,6 +468,11 @@ void write(const u32 addr, const u32 data) {
         
             SPAN_SORT_CFG.raw = data;
             break;
+        case IO_VO_BORDER_COLOR:
+            std::printf("VO_BORDER_COLOR write32 = %08X\n", data);
+        
+            VO_BORDER_COLOR.raw = data;
+            break;
         case IO_FB_R_CTRL:
             std::printf("FB_R_CTRL write32 = %08X\n", data);
         
@@ -462,10 +488,30 @@ void write(const u32 addr, const u32 data) {
         
             FB_W_LINESTRIDE = data;
             break;
+        case IO_FB_R_SOF1:
+            std::printf("FB_R_SOF1 write32 = %08X\n", data);
+        
+            FB_R_SOF1 = data;
+            break;
+        case IO_FB_R_SOF2:
+            std::printf("FB_R_SOF2 write32 = %08X\n", data);
+        
+            FB_R_SOF2 = data;
+            break;
         case IO_FB_R_SIZE:
             std::printf("FB_R_SIZE write32 = %08X\n", data);
         
             FB_R_SIZE.raw = data;
+            break;
+        case IO_FB_W_SOF1:
+            std::printf("FB_W_SOF1 write32 = %08X\n", data);
+        
+            FB_W_SOF1 = data;
+            break;
+        case IO_FB_W_SOF2:
+            std::printf("FB_W_SOF2 write32 = %08X\n", data);
+        
+            FB_W_SOF2 = data;
             break;
         case IO_FB_X_CLIP:
             std::printf("FB_X_CLIP write32 = %08X\n", data);
@@ -658,6 +704,11 @@ void write(const u32 addr, const u32 data) {
             if ((data >> 31) != 0) {
                 ta::initialize_lists();
             }
+            break;
+        case IO_TA_NEXT_OPB_INIT:
+            std::printf("TA_NEXT_OPB_INIT write32 = %08X\n", data);
+        
+            ta::set_next_object_pointer_block(data);
             break;
         default:
             std::printf("Unmapped PVR CORE write32 @ %08X = %08X\n", addr, data);
