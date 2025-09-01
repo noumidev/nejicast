@@ -68,6 +68,7 @@ struct {
     std::array<u8, SIZE_DRAM> dram;
 } ctx;
 
+[[maybe_unused]]
 static bool is_aligned(const u64 addr, const u64 align) {
     return (addr & (align - 1)) == 0;
 }

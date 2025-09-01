@@ -114,6 +114,7 @@ static void execute_maple_dma() {
         switch (instr.command) {
             case MAPLE_COMMAND_TRANSMIT_DATA:
                 {
+                    [[maybe_unused]]
                     u32 transfer_length = instr.transfer_length + 1;
 
                     assert(transfer_length == 1);
