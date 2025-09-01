@@ -1397,6 +1397,14 @@ static i64 i_not(const u16 instr) {
     return 1;
 }
 
+static i64 i_ocbi(const u16 instr) {
+    // TODO: implement operand cache?
+
+    std::printf("SH-4 operand cache block invalidate @ %08X\n", GPRS[N]);
+
+    return 1;
+}
+
 static i64 i_ocbp(const u16 instr) {
     // TODO: implement operand cache?
 
@@ -1681,6 +1689,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01101010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx1xxx0010", i_stc<ControlRegister::Rbank, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10000011", i_pref);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10010011", i_ocbi);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10100011", i_ocbp);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx11111010", i_stc<ControlRegister::Dbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0001xxxxxxxxxxxx", i_movs4<OperandSize::Long>);
