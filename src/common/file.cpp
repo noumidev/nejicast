@@ -8,7 +8,6 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <sys/_types/_seek_set.h>
 
 namespace common {
 
@@ -26,7 +25,10 @@ std::vector<u8> load_file(const char* path) {
 
     std::vector<u8> file_bytes(size);
 
-    assert(std::fread(file_bytes.data(), sizeof(u8), size, file) == size);
+    if (std::fread(file_bytes.data(), sizeof(u8), size, file) != size) {
+        std::printf("Failed to read file \"%s\"\n", path);
+        exit(1);
+    }
 
     return file_bytes;
 }
