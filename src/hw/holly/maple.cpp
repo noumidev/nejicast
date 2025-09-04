@@ -3,9 +3,9 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "common/types.hpp"
 #include <hw/holly/maple.hpp>
 
+#include <scheduler.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -134,7 +134,12 @@ static void execute_maple_dma() {
         }
 
         if (instr.end_flag) {
-            hw::holly::intc::assert_normal_interrupt(MAPLE_INTERRUPT);
+            scheduler::schedule_event(
+                "MAPLE_IRQ",
+                hw::holly::intc::assert_normal_interrupt,
+                MAPLE_INTERRUPT,
+                512
+            );
 
             SB_MDST = false;
             break;

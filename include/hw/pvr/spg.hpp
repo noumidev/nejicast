@@ -25,6 +25,4 @@ void set_vblank_control(const u32 data);
 void set_vblank_interrupt(const u32 data);
 void set_width(const u32 data);
 
-void step(const i64 video_cycles);
-
 }

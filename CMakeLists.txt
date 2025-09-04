@@ -19,6 +19,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 # Set source files
 set(SOURCES
     src/nejicast.cpp
+    src/scheduler.cpp
     src/common/file.cpp
     src/hw/cpu/cpu.cpp
     src/hw/cpu/ocio.cpp
@@ -40,6 +41,7 @@ set(SOURCES
 # Set header files
 set(HEADERS
     include/nejicast.hpp
+    include/scheduler.hpp
     include/common/config.hpp
     include/common/file.hpp
     include/common/types.hpp

@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "hw/holly/bus.hpp"
 #include <hw/cpu/ocio.hpp>
 
 #include <cassert>
@@ -11,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
+#include <hw/holly/bus.hpp>
 #include <hw/holly/intc.hpp>
 
 namespace hw::cpu::ocio {
@@ -1362,6 +1363,15 @@ void execute_channel_2_dma(u32 &start_address, u32 &length, bool &start) {
     assert((start_address % 32) == 0);
     assert((length % 32) == 0);
 
+    if (CHCR2.enable_interrupt) {
+        scheduler::schedule_event(
+            "CH2_IRQ",
+            hw::holly::intc::assert_normal_interrupt,
+            CHANNEL_2_INTERRUPT,
+            8 * length
+        );
+    }
+
     // TODO: mask this through CPU
     SAR2 &= 0x1FFFFFFF;
     
@@ -1399,10 +1409,6 @@ void execute_channel_2_dma(u32 &start_address, u32 &length, bool &start) {
     }
 
     start = false;
-
-    if (CHCR2.enable_interrupt) {
-        hw::holly::intc::assert_normal_interrupt(CHANNEL_2_INTERRUPT);
-    }
 }
 
 }

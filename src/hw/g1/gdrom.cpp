@@ -11,6 +11,7 @@
 #include <cstring>
 #include <vector>
 
+#include <scheduler.hpp>
 #include <hw/holly/intc.hpp>
 
 namespace hw::g1::gdrom {
@@ -144,9 +145,7 @@ enum {
     ATA_COMMAND_SET_FEATURES = 0xEF,
 };
 
-static void execute_ata_command(const u8 command) {
-    GD_STATUS.busy = 1;
-
+static void execute_ata_command(const int command) {
     switch (command) {
         case ATA_COMMAND_PACKET:
             ata_packet();
@@ -155,7 +154,7 @@ static void execute_ata_command(const u8 command) {
             ata_set_features();
             break;
         default:
-            std::printf("Unhandled ATA command %02X\n", command);
+            std::printf("Unhandled ATA command %02d\n", command);
             exit(1);
     }
 }
@@ -233,13 +232,10 @@ enum {
     SPI_COMMAND_REQ_MODE  = 0x11,
 };
 
-static void execute_spi_command() {
+static void execute_spi_command(const int command) {
     assert(ctx.data_in_bytes.size() == NUM_DATA_IN_BYTES);
 
-    GD_STATUS.busy = 1;
-    GD_STATUS.data_request = 0;
-
-    switch (SPI_COMMAND) {
+    switch (command) {
         case SPI_COMMAND_TEST_UNIT:
             spi_test_unit();
             break;
@@ -247,7 +243,7 @@ static void execute_spi_command() {
             spi_req_mode();
             break;
         default:
-            std::printf("Unhandled SPI command %02X\n", SPI_COMMAND);
+            std::printf("Unhandled SPI command %02d\n", command);
             exit(1);
     }
 }
@@ -358,7 +354,10 @@ void write(const u32 addr, const u8 data) {
         case IO_GD_COMMAND:
             std::printf("GD_COMMAND write8 = %02X\n", data);
 
-            execute_ata_command(data);
+            // Unsure about the timings of all the commands, so we'll just delay them by a bit
+            scheduler::schedule_event("ATA", execute_ata_command, data, 4096);
+
+            GD_STATUS.busy = 1;
             break;
         default:
             std::printf("Unmapped GD-ROM write8 @ %08X = %02X\n", addr, data);
@@ -378,7 +377,10 @@ void write(const u32 addr, const u16 data) {
             ctx.data_in_bytes.push_back(data >> 8);
 
             if (ctx.data_in_bytes.size() >= NUM_DATA_IN_BYTES) {
-                execute_spi_command();
+                scheduler::schedule_event("SPI", execute_spi_command, SPI_COMMAND, 4096);
+
+                GD_STATUS.busy = 1;
+                GD_STATUS.data_request = 0;
             }
             break;
         default:

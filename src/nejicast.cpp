@@ -7,6 +7,7 @@
 
 #include <cstdio>
 
+#include <scheduler.hpp>
 #include <hw/cpu/cpu.hpp>
 #include <hw/g1/g1.hpp>
 #include <hw/g2/g2.hpp>
@@ -18,11 +19,11 @@
 
 constexpr int NUM_ARGS = 3;
 
-constexpr i64 CYCLES_PER_SLICE = 128;
-
 namespace nejicast {
 
 void initialize(const common::Config& config) {
+    scheduler::initialize();
+
     hw::cpu::initialize();
     hw::g1::initialize(config.boot_path, config.flash_path);
     hw::g2::initialize();
@@ -34,6 +35,8 @@ void initialize(const common::Config& config) {
 }
 
 void shutdown() {
+    scheduler::shutdown();
+
     hw::cpu::shutdown();
     hw::g1::shutdown();
     hw::g2::shutdown();
@@ -45,6 +48,8 @@ void shutdown() {
 }
 
 void reset() {
+    scheduler::reset();
+
     hw::cpu::reset();
     hw::g1::reset();
     hw::g2::reset();
@@ -57,10 +62,7 @@ void reset() {
 
 void run() {
     while (true) {
-        *hw::cpu::get_cycles() = CYCLES_PER_SLICE;
-
-        hw::cpu::step();
-        hw::pvr::spg::step(CYCLES_PER_SLICE / 7);
+        scheduler::run();
     }
 }
 

@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
 #include <hw/holly/intc.hpp>
 
 namespace hw::pvr::spg {
@@ -28,6 +29,7 @@ namespace hw::pvr::spg {
 
 struct {
     u32 horizontal_counter;
+    u32 hblank_lines;
 
     union {
         u32 raw;
@@ -130,12 +132,73 @@ struct {
     } width;
 } ctx;
 
+constexpr int VBLANK_IN_INTERRUPT = 3;
+constexpr int VBLANK_OUT_INTERRUPT = 4;
+constexpr int HBLANK_INTERRUPT = 5;
+
+enum {
+    HBLANK_MODE_ONESHOT,
+    HBLANK_MODE_COUNT,
+    HBLANK_MODE_EVERY_LINE,
+};
+
+static void hblank(const int) {
+    switch (SPG_HBLANK_INT.interrupt_mode) {
+        case HBLANK_MODE_ONESHOT:
+            if (VCOUNTER == SPG_HBLANK_INT.compare_line) {
+                hw::holly::intc::assert_normal_interrupt(HBLANK_INTERRUPT);
+            }
+            break;
+        case HBLANK_MODE_COUNT:
+            if (ctx.hblank_lines < SPG_HBLANK_INT.compare_line) {
+                hw::holly::intc::assert_normal_interrupt(HBLANK_INTERRUPT);
+
+                ctx.hblank_lines++;
+            }
+            break;
+        case HBLANK_MODE_EVERY_LINE:
+            hw::holly::intc::assert_normal_interrupt(HBLANK_INTERRUPT);
+            break;
+    }
+
+    VCOUNTER++;
+
+    if (VCOUNTER == SPG_VBLANK_INT.in_position) {
+        hw::holly::intc::assert_normal_interrupt(VBLANK_IN_INTERRUPT);
+    } else if (VCOUNTER == SPG_VBLANK_INT.out_position) {
+        hw::holly::intc::assert_normal_interrupt(VBLANK_OUT_INTERRUPT);
+    }
+
+    if (VCOUNTER >= SPG_LOAD.vertical_count) {
+        VCOUNTER -= SPG_LOAD.vertical_count;
+
+        ctx.hblank_lines = 0;
+    }
+
+    SPG_STATUS.vsync_flag = (VCOUNTER <= SPG_VBLANK.end) || (VCOUNTER >= SPG_VBLANK.start);
+    SPG_STATUS.blank_flag = SPG_STATUS.hsync_flag | SPG_STATUS.vsync_flag;
+
+    scheduler::schedule_event(
+        "HBLANK",
+        hblank,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::PIXEL_CLOCKRATE>(SPG_LOAD.horizontal_count)
+    );
+}
+
 void initialize() {
     SPG_HBLANK_INT.raw = 0x031D0000;
     SPG_VBLANK_INT.raw = 0x01500104;
     SPG_HBLANK.raw = 0x007E0345;
     SPG_LOAD.raw = 0x01060359;
     SPG_VBLANK.raw = 0x01500104;
+
+    scheduler::schedule_event(
+        "HBLANK",
+        hblank,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::PIXEL_CLOCKRATE>(SPG_LOAD.horizontal_count)
+    );
 }
 
 void reset() {
@@ -178,36 +241,6 @@ void set_vblank_interrupt(const u32 data) {
 
 void set_width(const u32 data) {
     SPG_WIDTH.raw = data;
-}
-
-constexpr int VBLANK_IN_INTERRUPT = 3;
-constexpr int VBLANK_OUT_INTERRUPT = 4;
-
-void step(const i64 video_cycles) {
-    for (i64 i = 0; i < video_cycles; i++) {
-        HCOUNTER++;
-
-        if (HCOUNTER >= SPG_LOAD.horizontal_count) {
-            HCOUNTER -= SPG_LOAD.horizontal_count;
-
-            VCOUNTER++;
-
-            if (VCOUNTER == SPG_VBLANK_INT.in_position) {
-                hw::holly::intc::assert_normal_interrupt(VBLANK_IN_INTERRUPT);
-            } else if (VCOUNTER == SPG_VBLANK_INT.out_position) {
-                hw::holly::intc::assert_normal_interrupt(VBLANK_OUT_INTERRUPT);
-            }
-
-            if (VCOUNTER >= SPG_LOAD.vertical_count) {
-                VCOUNTER -= SPG_LOAD.vertical_count;
-            }
-
-            SPG_STATUS.vsync_flag = (VCOUNTER <= SPG_VBLANK.end) || (VCOUNTER >= SPG_VBLANK.start);
-        }
-
-        SPG_STATUS.hsync_flag = (HCOUNTER <= SPG_HBLANK.end) || (HCOUNTER >= SPG_HBLANK.start);
-        SPG_STATUS.blank_flag = SPG_STATUS.hsync_flag | SPG_STATUS.vsync_flag;
-    }
 }
 
 }
