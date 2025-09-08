@@ -60,19 +60,14 @@ static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
 #define FPUL        ctx.fpul
 #define FR          ctx.fprs.fr
 #define FV          &ctx.fprs.fr
-#define DR          ctx.fprs.dr
 #define XR          ctx.banked_fprs.fr
-#define XD          ctx.banked_fprs.dr
 #define FR_RAW      ctx.fprs.fr_raw
-#define DR_RAW      ctx.fprs.dr_raw
 #define XR_RAW      ctx.banked_fprs.fr_raw
-#define XD_RAW      ctx.banked_fprs.dr_raw
 
 constexpr usize NUM_REGS = 16;
 constexpr usize NUM_BANKED_REGS = 8;
 
 constexpr usize NUM_FPRS = 16;
-constexpr usize NUM_DRS = 8;
 
 constexpr usize INSTR_TABLE_SIZE = 0x10000;
 
@@ -132,8 +127,6 @@ struct {
     union {
         u32 fr_raw[NUM_FPRS];
         f32 fr[NUM_FPRS];
-        u64 dr_raw[NUM_DRS];
-        f64 dr[NUM_DRS];
     } fprs, banked_fprs;
 
     std::array<i64(*)(const u16), INSTR_TABLE_SIZE> instr_table;
@@ -229,6 +222,50 @@ static void set_fpscr(const u32 fpscr) {
     if (old_select_bank != FPSCR.select_bank) {
         swap_fpu_banks();
     }
+}
+
+static f64 get_dr(const usize n) {
+    assert(n < NUM_FPRS);
+
+    const u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    f64 data;
+
+    std::memcpy((u8*)&data + 4, fr + 0,sizeof(u32));
+    std::memcpy((u8*)&data + 0, fr + 1,sizeof(u32));
+
+    return data;
+}
+
+static u64 get_dr_raw(const usize n) {
+    assert(n < NUM_FPRS);
+
+    const u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    u64 data;
+
+    std::memcpy((u8*)&data + 4, fr + 0,sizeof(u32));
+    std::memcpy((u8*)&data + 0, fr + 1,sizeof(u32));
+
+    return data;
+}
+
+static void set_dr(const usize n, const f64 data) {
+    assert(n < NUM_FPRS);
+
+    u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    std::memcpy(fr + 0, (u8*)&data + 4, sizeof(u32));
+    std::memcpy(fr + 1, (u8*)&data + 0, sizeof(u32));
+}
+
+static void set_dr_raw(const usize n, const u64 data) {
+    assert(n < NUM_FPRS);
+
+    u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    std::memcpy(fr + 0, (u8*)&data + 4, sizeof(u32));
+    std::memcpy(fr + 1, (u8*)&data + 0, sizeof(u32));
 }
 
 [[maybe_unused]]
@@ -764,7 +801,7 @@ static i64 i_fadd(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert(((M & 1) == 0) && ((N & 1) == 0));
 
-        DR[N >> 1] += DR[M >> 1];
+        set_dr(N, get_dr(N) + get_dr(M));
     } else {
         FR[N] += FR[M];
     }
@@ -779,14 +816,14 @@ static i64 i_fcmp(const u16 instr) {
     switch (comparison) {
         case Comparison::Equal:
             if (FPSCR.precision_mode) {
-                SR.t = DR[N] == DR[M];
+                SR.t = get_dr(N) == get_dr(M);
             } else {
                 SR.t = FR[N] == FR[M];
             }
             break;
         case Comparison::GreaterThan:
             if (FPSCR.precision_mode) {
-                SR.t = DR[N] > DR[M];
+                SR.t = get_dr(N) > get_dr(M);
             } else {
                 SR.t = FR[N] > FR[M];
             }
@@ -800,7 +837,7 @@ static i64 i_fdiv(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert(((M & 1) == 0) && ((N & 1) == 0));
 
-        DR[N >> 1] /= DR[M >> 1];
+        set_dr(N, get_dr(N) / get_dr(M));
     } else {
         FR[N] /= FR[M];
     }
@@ -836,7 +873,7 @@ static i64 i_float(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert((N & 1) == 0);
 
-        DR[N >> 1] = (f64)(i32)FPUL;
+        set_dr(N, (f64)(i32)FPUL);
     } else {
         FR[N] = (f32)(i32)FPUL;
     }
@@ -854,17 +891,7 @@ static i64 i_fmac(const u16 instr) {
 
 static i64 i_fmov(const u16 instr) {
     if (FPSCR.pair_mode) {
-        u64 data = DR_RAW[M >> 1];
-
-        if ((M & 1) != 0) {
-            data = XD_RAW[M >> 1];
-        }
-
-        if ((N & 1) != 0) {
-            XD_RAW[N >> 1] = data;
-        } else {
-            DR_RAW[N >> 1] = data;
-        }
+        set_dr_raw(N, get_dr_raw(M));
     } else {
         FR_RAW[N] = FR_RAW[M];
     }
@@ -874,11 +901,7 @@ static i64 i_fmov(const u16 instr) {
 
 static i64 i_fmov_index_load(const u16 instr) {
     if (FPSCR.pair_mode) {
-        if ((N & 1) != 0) {
-            XD_RAW[N >> 1] = read<u64>(GPRS[0] + GPRS[M]);
-        } else {
-            DR_RAW[N >> 1] = read<u64>(GPRS[0] + GPRS[M]);
-        }
+        set_dr_raw(N, read<u64>(GPRS[0] + GPRS[M]));
     } else {
         FR_RAW[N] = read<u32>(GPRS[0] + GPRS[M]);
     }
@@ -888,11 +911,7 @@ static i64 i_fmov_index_load(const u16 instr) {
 
 static i64 i_fmov_index_store(const u16 instr) {
     if (FPSCR.pair_mode) {
-        if ((M & 1) != 0) {
-            write<u64>(GPRS[0] + GPRS[N], XD_RAW[M >> 1]);
-        } else {
-            write<u64>(GPRS[0] + GPRS[N], DR_RAW[M >> 1]);
-        }
+        write<u64>(GPRS[0] + GPRS[N], get_dr_raw(M));
     } else {
         write<u32>(GPRS[0] + GPRS[N], FR_RAW[M]);
     }
@@ -902,11 +921,7 @@ static i64 i_fmov_index_store(const u16 instr) {
 
 static i64 i_fmov_load(const u16 instr) {
     if (FPSCR.pair_mode) {
-        if ((N & 1) != 0) {
-            XD_RAW[N >> 1] = read<u64>(GPRS[M]);
-        } else {
-            DR_RAW[N >> 1] = read<u64>(GPRS[M]);
-        }
+        set_dr_raw(N, read<u64>(GPRS[M]));
     } else {
         FR_RAW[N] = read<u32>(GPRS[M]);
     }
@@ -916,11 +931,7 @@ static i64 i_fmov_load(const u16 instr) {
 
 static i64 i_fmov_restore(const u16 instr) {
     if (FPSCR.pair_mode) {
-        if ((N & 1) != 0) {
-            XD_RAW[N >> 1] = read<u64>(GPRS[M]);
-        } else {
-            DR_RAW[N >> 1] = read<u64>(GPRS[M]);
-        }
+        set_dr_raw(N, read<u64>(GPRS[M]));
 
         GPRS[M] += sizeof(u64);
     } else {
@@ -936,11 +947,7 @@ static i64 i_fmov_save(const u16 instr) {
     if (FPSCR.pair_mode) {
         GPRS[N] -= sizeof(u64);
 
-        if ((M & 1) != 0) {
-            write<u64>(GPRS[N], XD_RAW[M >> 1]);
-        } else {
-            write<u64>(GPRS[N], DR_RAW[M >> 1]);
-        }
+        write<u64>(GPRS[N], get_dr_raw(M));
     } else {
         GPRS[N] -= sizeof(u32);
 
@@ -952,11 +959,7 @@ static i64 i_fmov_save(const u16 instr) {
 
 static i64 i_fmov_store(const u16 instr) {
     if (FPSCR.pair_mode) {
-        if ((M & 1) != 0) {
-            write<u64>(GPRS[N], XD_RAW[M >> 1]);
-        } else {
-            write<u64>(GPRS[N], DR_RAW[M >> 1]);
-        }
+        write<u64>(GPRS[N], get_dr_raw(M));
     } else {
         write<u32>(GPRS[N], FR_RAW[M]);
     }
@@ -968,7 +971,7 @@ static i64 i_fmul(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert(((M & 1) == 0) && ((N & 1) == 0));
 
-        DR[N >> 1] *= DR[M >> 1];
+        set_dr(N, get_dr(N) * get_dr(M));
     } else {
         FR[N] *= FR[M];
     }
@@ -980,7 +983,7 @@ static i64 i_fneg(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert((N & 1) == 0);
 
-        DR_RAW[N >> 1] ^= 1ULL << 63;
+        set_dr(N, -get_dr(N));
     } else {
         FR_RAW[N] ^= 1 << 31;
     }
@@ -1022,7 +1025,7 @@ static i64 i_fsqrt(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert((N & 1) == 0);
 
-        DR[N >> 1] = std::sqrt(DR[N >> 1]);
+        set_dr(N, std::sqrt(get_dr(N)));
     } else {
         FR[N] = std::sqrt(FR[N]);
     }
@@ -1048,7 +1051,7 @@ static i64 i_fsub(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert(((M & 1) == 0) && ((N & 1) == 0));
 
-        DR[N >> 1] -= DR[M >> 1];
+        set_dr(N, get_dr(N) - get_dr(M));
     } else {
         FR[N] -= FR[M];
     }
@@ -1060,7 +1063,7 @@ static i64 i_ftrc(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert((N & 1) == 0);
 
-        FPUL = (i32)DR[N >> 1];
+        FPUL = (i32)get_dr(N);
     } else {
         FPUL = (i32)FR[N];
     }
