@@ -1331,7 +1331,26 @@ void write(const u32 addr, const u32 data) {
     }
 }
 
-template void write(u32, u64);
+template<>
+void write(const u32 addr, const u64 data) {
+    if (addr < SIZE_STORE_QUEUE_AREA) {
+        const bool is_second_queue = (addr >> 5) != 0;
+
+        const usize select_longword = (addr >> 2) & 6;
+
+        ctx.store_queues[is_second_queue].bytes[select_longword + 0] = data;
+        ctx.store_queues[is_second_queue].bytes[select_longword + 1] = data >> 32;
+
+        std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
+        return;
+    }
+
+    switch (addr) {
+        default:
+            std::printf("Unmapped SH-4 P4 write64 @ %08X = %016llX\n", addr, data);
+            exit(1);
+    }
+}
 
 void set_exception_event(const u32 event) {
     EXPEVT = event;
