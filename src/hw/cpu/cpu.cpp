@@ -1874,7 +1874,7 @@ void shutdown() {
 }
 
 static bool in_delay_slot() {
-    return NPC != (PC + sizeof(u16));
+    return NPC != (CPC + 2 * sizeof(u16));
 }
 
 static void raise_interrupt(const u32 level) {
