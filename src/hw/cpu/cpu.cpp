@@ -1226,13 +1226,13 @@ template<OperandSize size>
 static i64 i_movlg(const u16 instr) {
     switch (size) {
         case OperandSize::Byte:
-            GPRS[0] = (i8)read<u8>(GBR + D);
+            GPRS[0] = (i8)read<u8>(GBR + IMM);
             break;
         case OperandSize::Word:
-            GPRS[0] = (i16)read<u16>(GBR + (D << 1));
+            GPRS[0] = (i16)read<u16>(GBR + (IMM << 1));
             break;
         case OperandSize::Long:
-            GPRS[0] = read<u32>(GBR + (D << 2));
+            GPRS[0] = read<u32>(GBR + (IMM << 2));
             break;
     }
 
@@ -1347,13 +1347,13 @@ template<OperandSize size>
 static i64 i_movsg(const u16 instr) {
     switch (size) {
         case OperandSize::Byte:
-            write<u8>(GBR + D, GPRS[0]);
+            write<u8>(GBR + IMM, GPRS[0]);
             break;
         case OperandSize::Word:
-            write<u16>(GBR + (D << 1), GPRS[0]);
+            write<u16>(GBR + (IMM << 1), GPRS[0]);
             break;
         case OperandSize::Long:
-            write<u32>(GBR + (D << 2), GPRS[0]);
+            write<u32>(GBR + (IMM << 2), GPRS[0]);
             break;
     }
 
