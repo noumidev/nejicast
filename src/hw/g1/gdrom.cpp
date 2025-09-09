@@ -210,8 +210,9 @@ static void spi_test_unit() {
     finish_spi_non_data_command();
 }
 
-#define SPI_STARTING_ADDRESS  ctx.data_in_bytes[2]
-#define SPI_ALLOCATION_LENGTH ctx.data_in_bytes[4]
+#define SPI_STARTING_ADDRESS     ctx.data_in_bytes[2]
+#define SPI_ALLOCATION_LENGTH_HI ctx.data_in_bytes[3]
+#define SPI_ALLOCATION_LENGTH_LO ctx.data_in_bytes[4]
 
 static void spi_req_mode() {
     // Taken from washingtonDC
@@ -222,17 +223,31 @@ static void spi_req_mode() {
     '4',  '2',  '9',  '9',  '0',  '3',  '1',  '6'
     };
 
-    std::printf("SPI REQ_MODE (address: %u, length: %u)\n", SPI_STARTING_ADDRESS, SPI_ALLOCATION_LENGTH);
+    std::printf("SPI REQ_MODE (address: %u, length: %u)\n", SPI_STARTING_ADDRESS, SPI_ALLOCATION_LENGTH_LO);
 
-    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH) < sizeof(DATA));
+    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH_LO) < sizeof(DATA));
 
     reset_data_out_buffer();
 
-    for (u8 i = 0; i < SPI_ALLOCATION_LENGTH; i++) {
+    for (u8 i = 0; i < SPI_ALLOCATION_LENGTH_LO; i++) {
         ctx.data_out_bytes.push_back(DATA[SPI_STARTING_ADDRESS + i]);
     }
 
-    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH);
+    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
+}
+
+static void spi_get_toc() {
+    std::puts("SPI GET_TOC");
+
+    const u16 length = (SPI_ALLOCATION_LENGTH_HI << 8) | SPI_ALLOCATION_LENGTH_LO;
+
+    reset_data_out_buffer();
+
+    for (u16 i = 0; i < length; i++) {
+        ctx.data_out_bytes.push_back(0);
+    }
+
+    finish_spi_host_pio_command(length);
 }
 
 static void spi_init() {
@@ -358,6 +373,7 @@ static void spi_71() {
 enum {
     SPI_COMMAND_TEST_UNIT = 0x00,
     SPI_COMMAND_REQ_MODE  = 0x11,
+    SPI_COMMAND_GET_TOC   = 0x14,
     SPI_COMMAND_INIT      = 0x70, // ??
     SPI_COMMAND_71        = 0x71, // ????
 };
@@ -371,6 +387,9 @@ static void execute_spi_command(const int command) {
             break;
         case SPI_COMMAND_REQ_MODE:
             spi_req_mode();
+            break;
+        case SPI_COMMAND_GET_TOC:
+            spi_get_toc();
             break;
         case SPI_COMMAND_INIT:
             spi_init();
