@@ -151,6 +151,30 @@ void reset() {
 
 void shutdown() {}
 
+void setup_for_sideload() {
+    for (u32 i = 0; i < 16; i++) {
+        write<u16>(0x0C0000E0 + 2 * i, read<u16>(0x000000FE - 2 * i));
+    }
+
+    write<u32>(0x005F74E4, 0x001FFFFF);
+
+    std::memcpy(&ctx.dram[0x0100], g1::get_boot_rom_ptr() + 0x0100, 0x03F00);
+    std::memcpy(&ctx.dram[0x8000], g1::get_boot_rom_ptr() + 0x8000, 0x1F800);
+
+    write<u32>(0x0C00002C, 0x00000000);
+    write<u32>(0x0C0000A0, 0x00000000);
+    write<u32>(0x0C0000A4, 0xA0100000);
+    write<u32>(0x0C0000A8, 0xA0200000);
+    write<u32>(0x0C0000AC, 0xA05F7000);
+    write<u32>(0x0C0000B0, 0x8C003C00);
+    write<u32>(0x0C0000B4, 0x8C003D80);
+    write<u32>(0x0C0000B8, 0x8C003D00);
+    write<u32>(0x0C0000BC, 0x8C001000);
+    write<u32>(0x0C0000C0, 0x8C0010F0);
+    write<u32>(0x0C0000E0, 0x8C000800);
+    write<u32>(0x0CFFFFF8, 0x8C000128);
+}
+
 template<typename T>
 T read(const u32 addr) {
     assert(addr < ADDRESS_SPACE);
@@ -314,6 +338,24 @@ void block_write(const u32 addr, const u8 *bytes) {
 
     std::puts("");
     exit(1);
+}
+
+void copy_from_bytes(
+    const u32 addr,
+    const u32 copy_size,
+    const u32 total_size,
+    const u8* bytes
+) {
+    // TODO: needs to go through the CPU
+    const u32 masked_addr = addr & 0x1FFFFFFF;
+
+    for (u32 i = 0; i < copy_size; i++) {
+        write<u8>(masked_addr + i, bytes[i]);
+    }
+
+    for (u32 i = copy_size; i < total_size; i++) {
+        write<u8>(masked_addr + i, 0);
+    }
 }
 
 void dump_memory(

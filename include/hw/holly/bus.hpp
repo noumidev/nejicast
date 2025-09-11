@@ -14,6 +14,8 @@ void initialize();
 void reset();
 void shutdown();
 
+void setup_for_sideload();
+
 template<typename T>
 T read(const u32 addr);
 
@@ -23,6 +25,13 @@ template<typename T>
 void write(const u32 addr, const T data);
 
 void block_write(const u32 addr, const u8* bytes);
+
+void copy_from_bytes(
+    const u32 addr,
+    const u32 copy_size,
+    const u32 total_size,
+    const u8* bytes
+);
 
 void dump_memory(
     const u32 addr,

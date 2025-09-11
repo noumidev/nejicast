@@ -1873,6 +1873,44 @@ void shutdown() {
     ocio::shutdown();
 }
 
+void setup_for_sideload(const u32 entry) {
+    set_sr(0x600000F0);
+    set_fpscr(0x00040001);
+
+    GPRS[0] = 0x8C010000;
+    GPRS[1] = 0x00000808;
+    GPRS[2] = 0x8C00E070;
+    GPRS[3] = 0x8C010000;
+    GPRS[4] = 0x8C010000;
+    GPRS[5] = 0xF4000000;
+    GPRS[6] = 0xF4002000;
+    GPRS[6] = 0x00000044;
+    GPRS[15] = 0x8C00F400;
+
+    BANKED_GPRS[0] = 0x600000F0;
+    BANKED_GPRS[1] = 0x00000808;
+    BANKED_GPRS[2] = 0x8C00E070;
+
+    FR_RAW[4] = 0x3F266666;
+    FR_RAW[5] = 0x3FE66666;
+    FR_RAW[6] = 0x41840000;
+    FR_RAW[7] = 0x3F800000;
+    FR_RAW[8] = 0x80000000;
+    FR_RAW[9] = 0x80000000;
+    FR_RAW[11] = 0x3F800000;
+
+    GBR = 0x8C000000;
+    SSR.raw = 0x40000001;
+    SPC = 0x8C000776;
+    SGR = 0x8D000000;
+    DBR = 0x8C000010;
+    VBR = 0x8C000000;
+    PR = 0x8C00E09C;
+    FPUL = 0x00000000;
+
+    jump(entry);
+}
+
 static bool in_delay_slot() {
     return NPC != (CPC + 2 * sizeof(u16));
 }
