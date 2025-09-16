@@ -35,6 +35,8 @@ enum : u32 {
     IO_G1GDWC  = 0x005F74A4,
     IO_G1CRDYC = 0x005F74B4,
     IO_GDAPRO  = 0x005F74B8,
+    IO_GDRPRO  = 0x005F74E4,
+    IO_GDRPROS = 0x005F74EC,
 };
 
 #define SB_GDSTAR  ctx.gdrom_dma.start_address
@@ -52,6 +54,7 @@ enum : u32 {
 #define SB_G1GDWC  ctx.dma_write_timing
 #define SB_G1CRDYC ctx.enable_io_ready
 #define SB_GDAPRO  ctx.address_protection
+#define SB_GDRPRO  ctx.boot_rom_protection
 
 struct {
     std::vector<u8> boot_rom, flash_rom;
@@ -113,6 +116,8 @@ struct {
             u16                : 1;
         };
     } address_protection;
+
+    u32 boot_rom_protection;
 } ctx;
 
 void initialize(const char* boot_path, const char* flash_path) {
@@ -149,6 +154,10 @@ T read(const u32 addr) {
     exit(1);
 }
 
+enum {
+    ROM_PROTECTION_STATUS_PASSED = 3,
+};
+
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
@@ -156,6 +165,10 @@ u32 read(const u32 addr) {
             std::puts("SB_GDST read32");
 
             return SB_GDST;
+        case IO_GDRPROS:
+            std::puts("SB_GDRPROS read32");
+
+            return ROM_PROTECTION_STATUS_PASSED;
         default:
             std::printf("Unmapped G1 read32 @ %08X\n", addr);
             exit(1);
@@ -261,8 +274,10 @@ void write(const u32 addr, const u32 data) {
                 SB_GDAPRO.raw = (u16)data;
             }
             break;
-        case 0x005F74E4:
-            std::printf("Unknown G1 write32 @ %08X = %08X\n", addr, data);
+        case IO_GDRPRO:
+            std::printf("SB_GDRPRO write32 = %08X\n", data);
+
+            SB_GDRPRO = data;
             break;
         default:
             std::printf("Unmapped G1 write32 @ %08X = %08X\n", addr, data);
