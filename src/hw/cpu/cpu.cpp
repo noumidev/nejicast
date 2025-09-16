@@ -17,6 +17,7 @@
 #include <cstring>
 #include <unordered_set>
 
+#include <hw/cpu/ccn.hpp>
 #include <hw/cpu/ocio.hpp>
 #include <hw/holly/bus.hpp>
 
@@ -439,7 +440,7 @@ static void raise_exception(const u32 event, const u32 offset) {
         SR.disable_fpu = 0;
     }
 
-    ocio::set_exception_event(event);
+    ocio::ccn::set_exception_event(event);
 
     if (event == ExceptionEvent::Reset) {
         jump(RESET_VECTOR);
@@ -1931,7 +1932,7 @@ static void raise_interrupt(const u32 level) {
 
     set_sr(new_sr.raw);
 
-    ocio::set_interrupt_event(ExceptionEvent::ExternalInterrupt + 0x20 * (15 - level));
+    ocio::ccn::set_interrupt_event(ExceptionEvent::ExternalInterrupt + 0x20 * (15 - level));
 
     jump(VBR + ExceptionOffset::ExternalInterrupt);
 }

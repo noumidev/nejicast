@@ -58,7 +58,7 @@ enum : u32 {
     SIZE_AICA      = 0x00008000,
     SIZE_WAVE_RAM  = 0x00200000,
     SIZE_VRAM_32   = 0x00800000,
-    SIZE_DRAM      = 0x01000000,
+    SIZE_DRAM      = 0x02000000,
 };
 
 struct {
