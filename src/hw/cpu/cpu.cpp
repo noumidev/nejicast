@@ -19,6 +19,7 @@
 
 #include <hw/cpu/ccn.hpp>
 #include <hw/cpu/ocio.hpp>
+#include <hw/cpu/tmu.hpp>
 #include <hw/holly/bus.hpp>
 
 namespace hw::cpu {
@@ -760,6 +761,15 @@ static i64 i_div1(const u16 instr) {
     SR.t = SR.q == SR.m;
 
     return 1;
+}
+
+static i64 i_dmulu(const u16 instr) {
+    const u64 result = (u64)GPRS[N] * (u64)GPRS[M];
+
+    MACH = result >> 32;
+    MACL = result;
+
+    return 4;
 }
 
 static i64 i_dt(const u16 instr) {
@@ -1696,6 +1706,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0111", i_mull);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001000", i_clrt);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001001", i_nop);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00001010", i_sts<SystemRegister::Mach, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000001011", i_rts);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx1100", i_movl0<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx1101", i_movl0<OperandSize::Word>);
@@ -1738,6 +1749,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0010", i_cmp<Comparison::HigherSame>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0011", i_cmp<Comparison::GreaterEqual>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0100", i_div1);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0101", i_dmulu);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0110", i_cmp<Comparison::Higher>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0111", i_cmp<Comparison::GreaterThan>);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1000", i_sub);
@@ -1988,6 +2000,8 @@ void clear_interrupt(const int interrupt_level) {
 }
 
 void step() {
+    ocio::tmu::step(ctx.cycles);
+
     while (ctx.cycles > 0) {
         const u16 instr = fetch_instr();
         
