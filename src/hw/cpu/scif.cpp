@@ -10,17 +10,24 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
+
 namespace hw::cpu::ocio::scif {
 
-#define SCSMR2  ctx.serial_mode_2
-#define SCBRR2  ctx.bit_rate_2
-#define SCSCR2  ctx.serial_control_2
-#define SCFSR2  ctx.serial_status_2
-#define SCFCR2  ctx.fifo_control_2
-#define SCSPTR2 ctx.serial_port_2
+#define SCSMR2  ctx.serial_mode
+#define SCBRR2  ctx.bit_rate
+#define SCSCR2  ctx.serial_control
+#define SCFSR2  ctx.serial_status
+#define SCFCR2  ctx.fifo_control
+#define SCSPTR2 ctx.serial_port
 #define SCLSR2  ctx.overrun_error
 
+constexpr usize MAX_MSG_SIZE = 256;
+
 struct {
+    char msg[MAX_MSG_SIZE + 1];
+    usize msg_ptr;
+
     union {
         u16 raw;
 
@@ -33,9 +40,9 @@ struct {
             u16 character_length : 1;
             u16                  : 9;
         };
-    } serial_mode_2;
+    } serial_mode;
 
-    u8 bit_rate_2;
+    u8 bit_rate;
 
     union {
         u16 raw;
@@ -51,7 +58,7 @@ struct {
             u16 enable_transmit_interrupt      : 1;
             u16                                : 8;
         };
-    } serial_control_2;
+    } serial_control;
 
     union {
         u16 raw;
@@ -68,7 +75,7 @@ struct {
             u16 num_framing_errors  : 4;
             u16 num_parity_errors   : 4;
         };
-    } serial_status_2;
+    } serial_status;
 
     union {
         u16 raw;
@@ -82,7 +89,7 @@ struct {
             u16 receive_fifo_data_trigger  : 2;
             u16                            : 8;
         };
-    } fifo_control_2;
+    } fifo_control;
 
     union {
         u16 raw;
@@ -97,10 +104,27 @@ struct {
             u16 rts_port_io     : 1;
             u16                 : 8;
         };
-    } serial_port_2;
+    } serial_port;
 
     bool overrun_error;
 } ctx;
+
+static void transmit_data(const int data) {
+    assert(ctx.msg_ptr < MAX_MSG_SIZE);
+
+    ctx.msg[ctx.msg_ptr++] = data;
+
+    if (data == 0x0A) {
+        std::printf("%s", ctx.msg);
+
+        ctx.msg_ptr = 0;
+
+        std::memset(ctx.msg, 0, sizeof(ctx.msg));
+    }
+
+    SCFSR2.transmit_fifo_empty = 1;
+    SCFSR2.transmit_end = 1;
+}
 
 void initialize() {
     SCBRR2 = 0xFF;
@@ -113,39 +137,51 @@ void reset() {
 
 void shutdown() {}
 
-u16 get_serial_status_2() {
+u16 get_serial_status() {
     return SCFSR2.raw;
 }
 
-u16 get_line_status_2() {
+u16 get_line_status() {
     return SCLSR2;
 }
 
-void set_serial_mode_2(const u16 data) {
+void set_serial_mode(const u16 data) {
     SCSMR2.raw = data;
 }
 
-void set_bit_rate_2(const u8 data) {
+void set_bit_rate(const u8 data) {
     SCBRR2 = data;
 }
 
-void set_serial_control_2(const u16 data) {
+void set_serial_control(const u16 data) {
     SCSCR2.raw = data;
 }
 
-void set_serial_status_2(const u16 data) {
+void set_transmit_fifo_data(const u8 data) {
+    SCFSR2.transmit_fifo_empty = 0;
+    SCFSR2.transmit_end = 0;
+
+    scheduler::schedule_event(
+        "SCIF_TX",
+        transmit_data,
+        data,
+        1024
+    );
+}
+
+void set_serial_status(const u16 data) {
     SCFSR2.raw = data;
 }
 
-void set_fifo_control_2(const u16 data) {
+void set_fifo_control(const u16 data) {
     SCFCR2.raw = data;
 }
 
-void set_serial_port_2(const u16 data) {
+void set_serial_port(const u16 data) {
     SCSPTR2.raw = data;
 }
 
-void set_line_status_2(const u16 data) {
+void set_line_status(const u16 data) {
     SCLSR2 = data;
 }
 

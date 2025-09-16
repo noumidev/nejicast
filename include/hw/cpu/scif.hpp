@@ -14,15 +14,16 @@ void initialize();
 void reset();
 void shutdown();
 
-u16 get_serial_status_2();
-u16 get_line_status_2();
+u16 get_serial_status();
+u16 get_line_status();
 
-void set_serial_mode_2(const u16 data);
-void set_bit_rate_2(const u8 data);
-void set_serial_control_2(const u16 data);
-void set_serial_status_2(const u16 data);
-void set_fifo_control_2(const u16 data);
-void set_serial_port_2(const u16 data);
-void set_line_status_2(const u16 data);
+void set_serial_mode(const u16 data);
+void set_bit_rate(const u8 data);
+void set_serial_control(const u16 data);
+void set_transmit_fifo_data(const u8 data);
+void set_serial_status(const u16 data);
+void set_fifo_control(const u16 data);
+void set_serial_port(const u16 data);
+void set_line_status(const u16 data);
 
 }
