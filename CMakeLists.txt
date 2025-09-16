@@ -29,6 +29,7 @@ set(SOURCES
     src/hw/cpu/dmac.cpp
     src/hw/cpu/intc.cpp
     src/hw/cpu/ocio.cpp
+    src/hw/cpu/prfc.cpp
     src/hw/cpu/rtc.cpp
     src/hw/cpu/scif.cpp
     src/hw/cpu/tmu.cpp
@@ -63,6 +64,7 @@ set(HEADERS
     include/hw/cpu/dmac.hpp
     include/hw/cpu/intc.hpp
     include/hw/cpu/ocio.hpp
+    include/hw/cpu/prfc.hpp
     include/hw/cpu/rtc.hpp
     include/hw/cpu/scif.hpp
     include/hw/cpu/tmu.hpp
