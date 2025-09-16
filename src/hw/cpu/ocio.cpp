@@ -15,6 +15,7 @@
 #include <hw/cpu/cpg.hpp>
 #include <hw/cpu/dmac.hpp>
 #include <hw/cpu/intc.hpp>
+#include <hw/cpu/prfc.hpp>
 #include <hw/cpu/rtc.hpp>
 #include <hw/cpu/scif.hpp>
 #include <hw/cpu/tmu.hpp>
@@ -22,6 +23,8 @@
 #include <hw/holly/bus.hpp>
 
 namespace hw::cpu::ocio {
+
+constexpr bool SILENT_SCIF = true;
 
 enum : u32 {
     BASE_OPERAND_CACHE_TAG = 0x14000000,
@@ -43,6 +46,7 @@ enum : u32 {
     IO_PTEA    = 0x1F000034,
     IO_QACR1   = 0x1F000038,
     IO_QACR2   = 0x1F00003C,
+    IO_PMCR0   = 0x1F000084,
     IO_BARA    = 0x1F200000,
     IO_BAMRA   = 0x1F200004,
     IO_BBRA    = 0x1F200008,
@@ -107,6 +111,7 @@ enum : u32 {
     IO_SCSMR2  = 0x1FE80000,
     IO_SCBRR2  = 0x1FE80004,
     IO_SCSCR2  = 0x1FE80008,
+    IO_SCFTDR2 = 0x1FE8000C,
     IO_SCFSR2  = 0x1FE80010,
     IO_SCFCR2  = 0x1FE80018,
     IO_SCSPTR2 = 0x1FE80020,
@@ -129,6 +134,7 @@ void initialize() {
     cpg::initialize();
     dmac::initialize();
     intc::initialize();
+    prfc::initialize();
     rtc::initialize();
     scif::initialize();
     tmu::initialize();
@@ -141,6 +147,7 @@ void reset() {
     cpg::reset();
     dmac::reset();
     intc::reset();
+    prfc::reset();
     rtc::reset();
     scif::reset();
     tmu::reset();
@@ -155,6 +162,7 @@ void shutdown() {
     cpg::shutdown();
     dmac::shutdown();
     intc::shutdown();
+    prfc::shutdown();
     rtc::shutdown();
     scif::shutdown();
     tmu::shutdown();
@@ -187,6 +195,10 @@ u8 read(const u32 addr) {
 template<>
 u16 read(const u32 addr) {
     switch (addr) {
+        case IO_PMCR0:
+            std::puts("PMCR0 read16");
+
+            return prfc::get_control(prfc::CHANNEL_0);
         case IO_RFCR:
             std::puts("RFCR read16");
 
@@ -207,14 +219,22 @@ u16 read(const u32 addr) {
             std::puts("IPRC read16");
 
             return intc::get_priority(intc::PRIORITY_C);
+        case IO_TCR0:
+            std::puts("TCR0 read16");
+
+            return tmu::get_control(tmu::CHANNEL_0);
+        case IO_TCR2:
+            std::puts("TCR2 read16");
+
+            return tmu::get_control(tmu::CHANNEL_2);
         case IO_SCFSR2:
-            std::puts("SCFSR2 read16");
+            if constexpr (!SILENT_SCIF) std::puts("SCFSR2 read16");
 
-            return scif::get_serial_status_2();
+            return scif::get_serial_status();
         case IO_SCLSR2:
-            std::puts("SCLSR2 read16");
+            if constexpr (!SILENT_SCIF) std::puts("SCLSR2 read16");
 
-            return scif::get_line_status_2();
+            return scif::get_line_status();
         default:
             std::printf("Unmapped SH-4 P4 read16 @ %08X\n", addr);
             exit(1);
@@ -249,11 +269,15 @@ u32 read(const u32 addr) {
         case IO_CHCR2:
             std::puts("CHCR2 read32");
             
-            dmac::get_control(dmac::CHANNEL_2);
+            return dmac::get_control(dmac::CHANNEL_2);
         case IO_TCNT0:
             // std::puts("TCNT0 read32");
 
-            tmu::get_counter(tmu::CHANNEL_0);
+            return tmu::get_counter(tmu::CHANNEL_0);
+        case IO_TCNT2:
+            // std::puts("TCNT2 read32");
+
+            return tmu::get_counter(tmu::CHANNEL_2);
         default:
             std::printf("Unmapped SH-4 P4 read32 @ %08X\n", addr);
             exit(1);
@@ -332,9 +356,14 @@ void write(const u32 addr, const u8 data) {
             tmu::set_timer_start(data);
             break;
         case IO_SCBRR2:
-            std::printf("SCBRR2 write8 = %02X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCBRR2 write8 = %02X\n", data);
 
-            scif::set_bit_rate_2(data);
+            scif::set_bit_rate(data);
+            break;
+        case IO_SCFTDR2:
+            if constexpr (!SILENT_SCIF) std::printf("SCFTDR2 write8 = %02X\n", data);
+
+            scif::set_transmit_fifo_data(data);
             break;
         default:
             std::printf("Unmapped SH-4 P4 write8 @ %08X = %02X\n", addr, data);
@@ -345,6 +374,11 @@ void write(const u32 addr, const u8 data) {
 template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
+        case IO_PMCR0:
+            std::printf("PMCR0 write16 = %04X\n", data);
+
+            prfc::set_control(prfc::CHANNEL_0, data);
+            break;
         case IO_BBRA:
             std::printf("BBRA write16 = %04X\n", data);
 
@@ -444,34 +478,34 @@ void write(const u32 addr, const u16 data) {
             tmu::set_control(tmu::CHANNEL_2, data);
             break;
         case IO_SCSMR2:
-            std::printf("SCSMR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCSMR2 write16 = %04X\n", data);
 
-            scif::set_serial_mode_2(data);
+            scif::set_serial_mode(data);
             break;
         case IO_SCSCR2:
-            std::printf("SCSCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCSCR2 write16 = %04X\n", data);
 
-            scif::set_serial_control_2(data);
+            scif::set_serial_control(data);
             break;
         case IO_SCFSR2:
-            std::printf("SCFSR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCFSR2 write16 = %04X\n", data);
 
-            scif::set_serial_status_2(data);
+            scif::set_serial_status(data);
             break;
         case IO_SCFCR2:
-            std::printf("SCFCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCFCR2 write16 = %04X\n", data);
 
-            scif::set_fifo_control_2(data);
+            scif::set_fifo_control(data);
             break;
         case IO_SCSPTR2:
-            std::printf("SCSPTR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCSPTR2 write16 = %04X\n", data);
 
-            scif::set_serial_port_2(data);
+            scif::set_serial_port(data);
             break;
         case IO_SCLSR2:
-            std::printf("SCLSR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_SCIF) std::printf("SCLSR2 write16 = %04X\n", data);
 
-            scif::set_line_status_2(data);
+            scif::set_line_status(data);
             break;
         default:
             std::printf("Unmapped SH-4 P4 write16 @ %08X = %04X\n", addr, data);
