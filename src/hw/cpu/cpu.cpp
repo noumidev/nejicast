@@ -1391,6 +1391,16 @@ static i64 i_neg(const u16 instr) {
     return 1;
 }
 
+static i64 i_negc(const u16 instr) {
+    const u64 result = 0ULL - (u64)GPRS[M] - (u64)SR.t;
+
+    SR.t = (i64)result < 0;
+
+    GPRS[N] = (u32)result;
+
+    return 1;
+}
+
 static i64 i_nop(const u16) {
     return 1;
 }
@@ -1413,6 +1423,14 @@ static i64 i_ocbp(const u16 instr) {
     // TODO: implement operand cache?
 
     std::printf("SH-4 operand cache block purge @ %08X\n", GPRS[N]);
+
+    return 1;
+}
+
+static i64 i_ocbwb(const u16 instr) {
+    // TODO: implement operand cache?
+
+    std::printf("SH-4 operand cache block write-back @ %08X\n", GPRS[N]);
 
     return 1;
 }
@@ -1699,6 +1717,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10000011", i_pref);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10010011", i_ocbi);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10100011", i_ocbp);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10110011", i_ocbwb);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx11111010", i_stc<ControlRegister::Dbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0001xxxxxxxxxxxx", i_movs4<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0000", i_movs<OperandSize::Byte>);
@@ -1790,6 +1809,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx0111", i_not);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1000", i_swap<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1001", i_swap<OperandSize::Word>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1010", i_negc);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1011", i_neg);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1100", i_extu<OperandSize::Byte>);
     fill_table_with_pattern(ctx.instr_table.data(), "0110xxxxxxxx1101", i_extu<OperandSize::Word>);
