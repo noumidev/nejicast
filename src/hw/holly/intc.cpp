@@ -199,6 +199,11 @@ void write(const u32 addr, const u32 data) {
 
             SB_ISTNRM &= ~data;
             break;
+        case IO_ISTEXT:
+            std::printf("SB_ISTEXT write32 = %08X\n", data);
+
+            SB_ISTEXT &= ~data;
+            break;
         case IO_ISTERR:
             std::printf("SB_ISTERR write32 = %08X\n", data);
 
