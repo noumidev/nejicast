@@ -31,4 +31,6 @@ void set_constant(const int channel, const u32 data);
 void set_counter(const int channel, const u32 data);
 void set_control(const int channel, const u16 data);
 
+void step(const i64 cycles);
+
 }

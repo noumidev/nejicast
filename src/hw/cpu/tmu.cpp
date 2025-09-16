@@ -46,6 +46,7 @@ struct {
     struct {
         u32 constant;
         u32 counter;
+        u32 subcounter;
 
         union {
             u16 raw;
@@ -83,8 +84,7 @@ u8 get_timer_start() {
 u32 get_counter(const int channel) {
     assert(channel < NUM_CHANNELS);
 
-    // HACK
-    return ctx.timers[channel].counter--;
+    return ctx.timers[channel].counter;
 }
 
 u16 get_control(const int channel) {
@@ -117,6 +117,46 @@ void set_control(const int channel, const u16 data) {
     assert(channel < NUM_CHANNELS);
 
     ctx.timers[channel].control.raw = data;
+}
+
+void step(const i64 cycles) {
+    constexpr u32 PRESCALERS[5] = {
+        4, 16, 64, 256, 1024,
+    };
+
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+        auto &timer = ctx.timers[i];
+
+        if ((TSTR.start_counter & (1 << i)) == 0) {
+            // Timer is disabled
+            continue;
+        }
+
+        const int prescaler = timer.control.prescaler;
+
+        if (prescaler >= 5) {
+            std::printf("TMU Unimplemented prescaler setting %d\n", prescaler);
+            exit(1);
+        }
+
+        timer.subcounter += cycles;
+
+        while (timer.subcounter >= PRESCALERS[prescaler]) {
+            timer.subcounter -= PRESCALERS[prescaler];
+
+            timer.counter--;
+
+            if (timer.counter == ~0U) {
+                timer.control.underflow_flag = 1;
+
+                if (timer.control.enable_underflow_interrupt) {
+                    std::puts("TMU Unimplemented underflow interrupt");
+                }
+
+                timer.counter = timer.constant;
+            }
+        }
+    }
 }
 
 }
