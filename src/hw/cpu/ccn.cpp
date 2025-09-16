@@ -106,6 +106,10 @@ void reset() {
 
 void shutdown() {}
 
+u32 get_mmu_control() {
+    return MMUCR.raw;
+}
+
 u32 get_cache_control() {
     return CCR.raw;
 }

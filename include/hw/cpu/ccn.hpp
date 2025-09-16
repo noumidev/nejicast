@@ -20,6 +20,7 @@ void initialize();
 void reset();
 void shutdown();
 
+u32 get_mmu_control();
 u32 get_cache_control();
 u32 get_exception_event();
 u32 get_interrupt_event();
