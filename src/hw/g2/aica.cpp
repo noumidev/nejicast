@@ -58,8 +58,9 @@ u32 read(const u32 addr) {
 
             return ARMRST.raw;
         default:
-            std::printf("Unmapped AICA read32 @ %08X\n", addr);
-            exit(1);
+            std::printf("Unhandled AICA read32 @ %08X\n", addr);
+
+            return 0;
     }
 }
 
