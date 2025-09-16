@@ -87,6 +87,12 @@ u32 get_counter(const int channel) {
     return ctx.timers[channel].counter--;
 }
 
+u16 get_control(const int channel) {
+    assert(channel < NUM_CHANNELS);
+
+    return ctx.timers[channel].control.raw;
+}
+
 void set_timer_output_control(const u8 data) {
     TOCR.raw = data;
 }

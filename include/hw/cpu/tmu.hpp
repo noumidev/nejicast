@@ -23,6 +23,7 @@ void shutdown();
 
 u8 get_timer_start();
 u32 get_counter(const int channel);
+u16 get_control(const int channel);
 
 void set_timer_output_control(const u8 data);
 void set_timer_start(const u8 data);
