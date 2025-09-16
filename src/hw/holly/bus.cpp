@@ -18,6 +18,7 @@
 #include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/g2/modem.hpp>
+#include <hw/g2/rtc.hpp>
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/holly/maple.hpp>
@@ -42,6 +43,7 @@ enum : u32 {
     BASE_PVR_CORE  = 0x005F8000,
     BASE_MODEM     = 0x00600000,
     BASE_AICA      = 0x00700000,
+    BASE_RTC       = 0x00710000,
     BASE_WAVE_RAM  = 0x00800000,
     BASE_VRAM_64   = 0x04000000,
     BASE_VRAM_32   = 0x05000000,
@@ -203,6 +205,8 @@ T read(const u32 addr) {
             return hw::g2::read<T>(addr);
         case BASE_PVR_IF:
             return hw::pvr::interface::read<T>(addr);
+        case BASE_RTC:
+            return hw::g2::rtc::read<T>(addr);
     }
 
     if ((addr & ~(SIZE_PVR_CORE - 1)) == BASE_PVR_CORE) {
@@ -287,6 +291,8 @@ void write(const u32 addr, const T data) {
             return hw::g2::write<T>(addr, data);
         case BASE_PVR_IF:
             return hw::pvr::interface::write<T>(addr, data);
+        case BASE_RTC:
+            return hw::g2::rtc::write<T>(addr, data);
     }
 
     if ((addr & ~(SIZE_PVR_CORE - 1)) == BASE_PVR_CORE) {

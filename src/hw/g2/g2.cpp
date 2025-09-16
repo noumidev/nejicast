@@ -12,6 +12,7 @@
 
 #include <hw/g2/aica.hpp>
 #include <hw/g2/modem.hpp>
+#include <hw/g2/rtc.hpp>
 
 namespace hw::g2 {
 
@@ -143,11 +144,13 @@ struct {
 void initialize() {
     aica::initialize();
     modem::initialize();
+    rtc::initialize();
 }
 
 void reset() {
     aica::reset();
     modem::reset();
+    rtc::reset();
 
     std::memset(&ctx, 0, sizeof(ctx));
 }
@@ -155,6 +158,7 @@ void reset() {
 void shutdown() {
     aica::shutdown();
     modem::shutdown();
+    rtc::shutdown();
 }
 
 template<typename T>

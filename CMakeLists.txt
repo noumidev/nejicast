@@ -39,6 +39,7 @@ set(SOURCES
     src/hw/g2/aica.cpp
     src/hw/g2/g2.cpp
     src/hw/g2/modem.cpp
+    src/hw/g2/rtc.cpp
     src/hw/holly/bus.cpp
     src/hw/holly/holly.cpp
     src/hw/holly/intc.cpp
@@ -74,6 +75,7 @@ set(HEADERS
     include/hw/g2/aica.hpp
     include/hw/g2/g2.hpp
     include/hw/g2/modem.hpp
+    include/hw/g2/rtc.hpp
     include/hw/holly/bus.hpp
     include/hw/holly/holly.hpp
     include/hw/holly/intc.hpp
