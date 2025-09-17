@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "common/types.hpp"
 #include <hw/pvr/core.hpp>
 
 #include <array>
@@ -11,7 +10,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
+#include <scheduler.hpp>
+#include <hw/holly/intc.hpp>
 #include <hw/pvr/spg.hpp>
 #include <hw/pvr/ta.hpp>
 
@@ -21,6 +23,9 @@ enum : u32 {
     IO_ID                = 0x005F8000,
     IO_REVISION          = 0x005F8004,
     IO_SOFTRESET         = 0x005F8008,
+    IO_STARTRENDER       = 0x005F8014,
+    IO_PARAM_BASE        = 0x005F8020,
+    IO_REGION_BASE       = 0x005F802C,
     IO_SPAN_SORT_CFG     = 0x005F8030,
     IO_VO_BORDER_COLOR   = 0x005F8040,
     IO_FB_R_CTRL         = 0x005F8044,
@@ -67,6 +72,7 @@ enum : u32 {
     IO_TA_ISP_BASE       = 0x005F8128,
     IO_TA_OL_LIMIT       = 0x005F812C,
     IO_TA_ISP_LIMIT      = 0x005F8130,
+    IO_TA_ITP_CURRENT    = 0x005F8138,
     IO_TA_GLOB_TILE_CLIP = 0x005F813C,
     IO_TA_ALLOC_CTRL     = 0x005F8140,
     IO_TA_LIST_INIT      = 0x005F8144,
@@ -74,6 +80,8 @@ enum : u32 {
     IO_FOG_TABLE         = 0x005F8200,
 };
 
+#define PARAM_BASE      ctx.isp_parameter_base
+#define REGION_BASE     ctx.region_base
 #define SPAN_SORT_CFG   ctx.span_sort_configuration
 #define VO_BORDER_COLOR ctx.video_output.border_color
 #define FB_R_CTRL       ctx.frame_buffer.read_control
@@ -115,6 +123,11 @@ constexpr usize FOG_TABLE_SIZE = 0x80;
 struct {
     std::array<u8, VRAM_SIZE> video_ram;
     std::array<u16, FOG_TABLE_SIZE> fog_table;
+
+    std::vector<std::vector<Vertex>> vertex_strips;
+
+    u32 isp_parameter_base;
+    u32 region_base;
 
     union {
         u32 raw;
@@ -379,6 +392,20 @@ struct {
     } y_coefficient;
 } ctx;
 
+constexpr i64 CORE_DELAY = 8192;
+constexpr int CORE_INTERRUPT = 2;
+
+static void start_render() {
+    exit(1);
+
+    scheduler::schedule_event(
+        "CORE_IRQ",
+        hw::holly::intc::assert_normal_interrupt,
+        CORE_INTERRUPT,
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(CORE_DELAY)
+    );
+}
+
 void initialize() {
     VO_CONTROL.raw = 0x00000108;
     VO_STARTX = 0x9D;
@@ -415,6 +442,10 @@ u32 read(const u32 addr) {
             std::puts("VO_BORDER_COLOR read32");
 
             return VO_BORDER_COLOR.raw;
+        case IO_FB_R_CTRL:
+            std::puts("FB_R_CTRL read32");
+
+            return FB_R_CTRL.raw;
         case IO_SPG_VBLANK:
             std::puts("SPG_VBLANK read32");
 
@@ -427,6 +458,10 @@ u32 read(const u32 addr) {
             // std::puts("SPG_STATUS read32");
 
             return spg::get_status();
+        case IO_TA_ITP_CURRENT:
+            std::puts("TA_ITP_CURRENT read32");
+
+            return ta::get_itp_current_address();
         case IO_TA_LIST_INIT:
             std::puts("TA_LIST_INIT read32");
 
@@ -462,6 +497,21 @@ void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_SOFTRESET:
             std::printf("SOFTRESET write32 = %08X\n", data);
+            break;
+        case IO_STARTRENDER:
+            std::printf("STARTRENDER write32 = %08X\n", data);
+            
+            start_render();
+            break;
+        case IO_PARAM_BASE:
+            std::printf("PARAM_BASE write32 = %08X\n", data);
+        
+            PARAM_BASE = data;
+            break;
+        case IO_REGION_BASE:
+            std::printf("REGION_BASE write32 = %08X\n", data);
+        
+            REGION_BASE = data;
             break;
         case IO_SPAN_SORT_CFG:
             std::printf("SPAN_SORT_CFG write32 = %08X\n", data);
@@ -724,5 +774,27 @@ template void write(u32, u64);
 u8* get_video_ram_ptr() {
     return ctx.video_ram.data();
 }
+
+void begin_vertex_strip() {
+    // Create empty strip
+    ctx.vertex_strips.emplace_back(std::vector<Vertex>{});
+}
+
+void push_vertex(const Vertex vertex) {
+    const usize length = ctx.vertex_strips.size() - 1;
+
+    std::printf("CORE Strip %zu vertex %zu (x = %f, y = %f, z = %f, color = %08X\n",
+        length,
+        ctx.vertex_strips[length].size(),
+        vertex.x,
+        vertex.y,
+        vertex.z,
+        vertex.color
+    );
+
+    ctx.vertex_strips[length].push_back(vertex);
+}
+
+void end_vertex_strip() {}
 
 }

@@ -10,6 +10,11 @@
 // PVR CORE functions
 namespace hw::pvr::core {
 
+struct Vertex {
+    f32 x, y, z;
+    u32 color;
+};
+
 void initialize();
 void reset();
 void shutdown();
@@ -21,5 +26,9 @@ template<typename T>
 void write(const u32 addr, const T data);
 
 u8* get_video_ram_ptr();
+
+void begin_vertex_strip();
+void push_vertex(const Vertex vertex);
+void end_vertex_strip();
 
 }
