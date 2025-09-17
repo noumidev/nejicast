@@ -24,9 +24,11 @@
 
 namespace hw::cpu::ocio {
 
+constexpr bool SILENT_TMU = true;
 constexpr bool SILENT_SCIF = true;
 
 enum : u32 {
+    BASE_INSTRUCTION_CACHE_ADDRESS = 0x10000000,
     BASE_OPERAND_CACHE_TAG = 0x14000000,
 };
 
@@ -183,7 +185,7 @@ u8 read(const u32 addr) {
 
             return cpg::get_watchdog_timer_control();
         case IO_TSTR:
-            std::puts("TSTR read8");
+            if constexpr (!SILENT_TMU) std::puts("TSTR read8");
 
             return tmu::get_timer_start();
         default:
@@ -220,11 +222,15 @@ u16 read(const u32 addr) {
 
             return intc::get_priority(intc::PRIORITY_C);
         case IO_TCR0:
-            std::puts("TCR0 read16");
+            if constexpr (!SILENT_TMU) std::puts("TCR0 read16");
 
             return tmu::get_control(tmu::CHANNEL_0);
+        case IO_TCR1:
+            if constexpr (!SILENT_TMU) std::puts("TCR1 read16");
+
+            return tmu::get_control(tmu::CHANNEL_1);
         case IO_TCR2:
-            std::puts("TCR2 read16");
+            if constexpr (!SILENT_TMU) std::puts("TCR2 read16");
 
             return tmu::get_control(tmu::CHANNEL_2);
         case IO_SCFSR2:
@@ -246,6 +252,10 @@ constexpr u32 CPUVER = 0x040205C1;
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_MMUCR:
+            std::puts("MMUCR read32");
+
+            return ccn::get_mmu_control();
         case IO_CCR:
             std::puts("CCR read32");
 
@@ -271,11 +281,11 @@ u32 read(const u32 addr) {
             
             return dmac::get_control(dmac::CHANNEL_2);
         case IO_TCNT0:
-            // std::puts("TCNT0 read32");
+            if constexpr (!SILENT_TMU) std::puts("TCNT0 read32");
 
             return tmu::get_counter(tmu::CHANNEL_0);
         case IO_TCNT2:
-            // std::puts("TCNT2 read32");
+            if constexpr (!SILENT_TMU) std::puts("TCNT2 read32");
 
             return tmu::get_counter(tmu::CHANNEL_2);
         default:
@@ -463,17 +473,17 @@ void write(const u32 addr, const u16 data) {
             intc::set_priority(intc::PRIORITY_C, data);
             break;
         case IO_TCR0:
-            std::printf("TCR0 write16 = %04X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCR0 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_0, data);
             break;
         case IO_TCR1:
-            std::printf("TCR1 write16 = %04X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCR1 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_1, data);
             break;
         case IO_TCR2:
-            std::printf("TCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCR2 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_2, data);
             break;
@@ -522,13 +532,17 @@ void write(const u32 addr, const u32 data) {
 
         ctx.store_queues[is_second_queue].bytes[select_longword] = data;
 
-        std::printf("SQ%d[%zu] write32 = %08X\n", is_second_queue, select_longword, data);
+        // std::printf("SQ%d[%zu] write32 = %08X\n", is_second_queue, select_longword, data);
         return;
     }
 
-    if ((addr & 0xFF000000) == BASE_OPERAND_CACHE_TAG) {
-        std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
-        return;
+    switch (addr & 0xFF000000) {
+        case BASE_INSTRUCTION_CACHE_ADDRESS:
+            std::printf("SH-4 instruction cache address write32 @ %08X = %08X\n", addr, data);
+            return;
+        case BASE_OPERAND_CACHE_TAG:
+            std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
+            return;
     }
 
     switch (addr) {
@@ -703,32 +717,32 @@ void write(const u32 addr, const u32 data) {
             dmac::set_dma_operation(data);
             break;
         case IO_TCOR0:
-            std::printf("TCOR0 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCOR0 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_0, data);
             break;
         case IO_TCNT0:
-            std::printf("TCNT0 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCNT0 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_0, data);
             break;
         case IO_TCOR1:
-            std::printf("TCOR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCOR1 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_1, data);
             break;
         case IO_TCNT1:
-            std::printf("TCNT1 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCNT1 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_1, data);
             break;
         case IO_TCOR2:
-            std::printf("TCOR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCOR2 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_2, data);
             break;
         case IO_TCNT2:
-            std::printf("TCNT2 write32 = %08X\n", data);
+            if constexpr (!SILENT_TMU) std::printf("TCNT2 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_2, data);
             break;
@@ -748,7 +762,7 @@ void write(const u32 addr, const u64 data) {
         ctx.store_queues[is_second_queue].bytes[select_longword + 0] = data;
         ctx.store_queues[is_second_queue].bytes[select_longword + 1] = data >> 32;
 
-        std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
+        // std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
         return;
     }
 
@@ -764,7 +778,7 @@ void flush_store_queue(const u32 addr) {
 
     const bool is_second_queue = (addr >> 5) != 0;
 
-    std::printf("Flushing SQ%d\n", is_second_queue);
+    // std::printf("Flushing SQ%d\n", is_second_queue);
 
     hw::holly::bus::block_write(
     (addr & 0x03FFFFE0) | (ccn::get_store_queue_area(is_second_queue) << 26),
