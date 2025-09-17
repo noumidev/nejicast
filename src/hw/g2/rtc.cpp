@@ -32,9 +32,9 @@ struct {
     } counter;
 } ctx;
 
-static void increment_counter(const int) {
-    RTC.raw++;
+static void increment_counter(const int);
 
+static void schedule_increment() {
     scheduler::schedule_event(
         "AICA_RTC",
         increment_counter,
@@ -43,13 +43,14 @@ static void increment_counter(const int) {
     );
 }
 
+static void increment_counter(const int) {
+    RTC.raw++;
+
+    schedule_increment();
+}
+
 void initialize() {
-    scheduler::schedule_event(
-        "AICA_RTC",
-        increment_counter,
-        0,
-        scheduler::SCHEDULER_CLOCKRATE
-    );
+    schedule_increment();
 }
 
 void reset() {

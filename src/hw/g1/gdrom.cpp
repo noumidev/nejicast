@@ -482,6 +482,8 @@ void write(const u32 addr, const T data) {
     exit(1);
 }
 
+constexpr i64 GDROM_DELAY = 8192;
+
 template<>
 void write(const u32 addr, const u8 data) {
     switch (addr) {
@@ -510,7 +512,12 @@ void write(const u32 addr, const u8 data) {
             std::printf("GD_COMMAND write8 = %02X\n", data);
 
             // Unsure about the timings of all the commands, so we'll just delay them by a bit
-            scheduler::schedule_event("ATA", execute_ata_command, data, 4096);
+            scheduler::schedule_event(
+                "ATA",
+                execute_ata_command,
+                data,
+                scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(GDROM_DELAY)
+            );
 
             GD_STATUS.busy = 1;
             break;
@@ -532,7 +539,12 @@ void write(const u32 addr, const u16 data) {
             ctx.data_in_bytes.push_back(data >> 8);
 
             if (ctx.data_in_bytes.size() >= NUM_DATA_IN_BYTES) {
-                scheduler::schedule_event("SPI", execute_spi_command, SPI_COMMAND, 4096);
+                scheduler::schedule_event(
+                    "SPI",
+                    execute_spi_command,
+                    SPI_COMMAND,
+                    scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(GDROM_DELAY)
+                );
 
                 GD_STATUS.busy = 1;
                 GD_STATUS.data_request = 0;

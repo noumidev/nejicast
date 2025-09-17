@@ -89,6 +89,14 @@ static u32 read_word(u32& addr) {
     return data;
 }
 
+constexpr int MAPLE_INTERRUPT = 12;
+
+static void finish_maple_dma(const int) {
+    SB_MDST = false;
+
+    hw::holly::intc::assert_normal_interrupt(MAPLE_INTERRUPT);
+}
+
 enum {
     MAPLE_COMMAND_TRANSMIT_DATA,
 };
@@ -97,7 +105,7 @@ enum {
     MAPLE_NO_DEVICE = 0xFFFFFFFF,
 };
 
-constexpr int MAPLE_INTERRUPT = 12;
+constexpr i64 MAPLE_DELAY = 4096;
 
 static void execute_maple_dma() {
     std::printf("MAPLE DMA @ %08X\n", SB_MDSTAR);
@@ -135,13 +143,12 @@ static void execute_maple_dma() {
 
         if (instr.end_flag) {
             scheduler::schedule_event(
-                "MAPLE_IRQ",
-                hw::holly::intc::assert_normal_interrupt,
-                MAPLE_INTERRUPT,
-                512
+                "MAPLE_END",
+                finish_maple_dma,
+                0,
+                scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(MAPLE_DELAY)
             );
 
-            SB_MDST = false;
             break;
         }
     }

@@ -142,6 +142,17 @@ enum {
     HBLANK_MODE_EVERY_LINE,
 };
 
+static void hblank(const int);
+
+static void schedule_hblank() {
+    scheduler::schedule_event(
+        "HBLANK",
+        hblank,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::PIXEL_CLOCKRATE>(SPG_LOAD.horizontal_count)
+    );
+}
+
 static void hblank(const int) {
     switch (SPG_HBLANK_INT.interrupt_mode) {
         case HBLANK_MODE_ONESHOT:
@@ -178,12 +189,7 @@ static void hblank(const int) {
     SPG_STATUS.vsync_flag = (VCOUNTER <= SPG_VBLANK.end) || (VCOUNTER >= SPG_VBLANK.start);
     SPG_STATUS.blank_flag = SPG_STATUS.hsync_flag | SPG_STATUS.vsync_flag;
 
-    scheduler::schedule_event(
-        "HBLANK",
-        hblank,
-        0,
-        scheduler::to_scheduler_cycles<scheduler::PIXEL_CLOCKRATE>(SPG_LOAD.horizontal_count)
-    );
+    schedule_hblank();
 }
 
 void initialize() {
@@ -193,12 +199,7 @@ void initialize() {
     SPG_LOAD.raw = 0x01060359;
     SPG_VBLANK.raw = 0x01500104;
 
-    scheduler::schedule_event(
-        "HBLANK",
-        hblank,
-        0,
-        scheduler::to_scheduler_cycles<scheduler::PIXEL_CLOCKRATE>(SPG_LOAD.horizontal_count)
-    );
+    schedule_hblank();
 }
 
 void reset() {
