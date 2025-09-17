@@ -73,6 +73,11 @@ constexpr usize NUM_FPRS = 16;
 
 constexpr usize INSTR_TABLE_SIZE = 0x10000;
 
+enum {
+    STATE_RUNNING,
+    STATE_SLEEPING,
+};
+
 struct {
     // PC and delay slot helpers
     u32 pc, current_pc, next_pc;
@@ -133,10 +138,16 @@ struct {
 
     std::array<i64(*)(const u16), INSTR_TABLE_SIZE> instr_table;
 
+    int state;
+
     u16 pending_interrupts;
 
     i64 cycles;
 } ctx;
+
+static void set_state(const int state) {
+    ctx.state = state;
+}
 
 static void dump_registers() {
     u32* bank_0 = (SR.select_bank) ? BANKED_GPRS : GPRS; 
@@ -1165,6 +1176,14 @@ static i64 i_mova(const u16 instr) {
     return 1;
 }
 
+static i64 i_movca(const u16 instr) {
+    // TODO: emulate operand cache?
+
+    write<u32>(GPRS[N], GPRS[0]);
+
+    return 3;
+}
+
 template<OperandSize size>
 static i64 i_movi(const u16 instr) {
     switch (size) {
@@ -1463,7 +1482,7 @@ static i64 i_or(const u16 instr) {
 static i64 i_pref(const u16 instr) {
     // TODO: implement operand cache?
 
-    std::printf("SH-4 operand cache prefetch @ %08X\n", GPRS[N]);
+    // std::printf("SH-4 operand cache prefetch @ %08X\n", GPRS[N]);
 
     if (GPRS[N] >= REGION_P4) {
         ocio::flush_store_queue(GPRS[N] & PRIV_MASK);
@@ -1586,8 +1605,14 @@ static i64 i_shlr(const u16 instr) {
     return 1;
 }
 
+static i64 i_sleep(const u16) {
+    set_state(STATE_SLEEPING);
+
+    return 1;
+}
+
 template <ControlRegister control_register, AddressingMode mode>
-i64 i_stc(const u16 instr) {
+static i64 i_stc(const u16 instr) {
     if constexpr (mode == AddressingMode::RegisterDirect) {
         GPRS[N] = get_control_register<control_register>(M & 7);
     } else {
@@ -1602,7 +1627,7 @@ i64 i_stc(const u16 instr) {
 }
 
 template <SystemRegister system_register, AddressingMode mode>
-i64 i_sts(const u16 instr) {
+static i64 i_sts(const u16 instr) {
     if constexpr (mode == AddressingMode::RegisterDirect) {
         GPRS[N] = get_system_register<system_register>();
     } else {
@@ -1715,6 +1740,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000011000", i_sett);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000011001", i_div0<false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00011010", i_sts<SystemRegister::Macl, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000011011", i_sleep);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00100010", i_stc<ControlRegister::Vbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00100011", i_bra<false, false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101001", i_movt);
@@ -1729,6 +1755,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10010011", i_ocbi);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10100011", i_ocbp);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx10110011", i_ocbwb);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx11000011", i_movca);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx11111010", i_stc<ControlRegister::Dbr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0001xxxxxxxxxxxx", i_movs4<OperandSize::Long>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx0000", i_movs<OperandSize::Byte>);
@@ -1807,6 +1834,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01100110", i_lds<SystemRegister::Fpscr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx01101010", i_lds<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx1xxx0011", i_stc<ControlRegister::Rbank, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx1xxx0111", i_ldc<ControlRegister::Rbank, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx11110010", i_stc<ControlRegister::Dbr, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx11110110", i_ldc<ControlRegister::Dbr, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx11111010", i_ldc<ControlRegister::Dbr, AddressingMode::RegisterDirect>);
@@ -1894,6 +1922,8 @@ void initialize() {
     raise_exception(ExceptionEvent::Reset, ExceptionOffset::Reset);
 
     initialize_instr_table();
+
+    set_state(STATE_RUNNING);
 }
 
 void reset() {
@@ -1967,6 +1997,8 @@ static void raise_interrupt(const u32 level) {
     ocio::ccn::set_interrupt_event(ExceptionEvent::ExternalInterrupt + 0x20 * (15 - level));
 
     jump(VBR + ExceptionOffset::ExternalInterrupt);
+
+    set_state(STATE_RUNNING);
 }
 
 static void check_pending_interrupts() {
@@ -2001,6 +2033,15 @@ void clear_interrupt(const int interrupt_level) {
 
 void step() {
     ocio::tmu::step(ctx.cycles);
+
+    if (ctx.state == STATE_SLEEPING) {
+        // Zzz...
+        ctx.cycles = 0;
+
+        check_pending_interrupts();
+
+        return;
+    }
 
     while (ctx.cycles > 0) {
         const u16 instr = fetch_instr();
