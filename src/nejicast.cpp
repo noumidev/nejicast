@@ -70,6 +70,9 @@ void sideload(const u32 entry) {
 
 }
 
+using nejicast::SCREEN_WIDTH;
+using nejicast::SCREEN_HEIGHT;
+
 static struct {
     SDL_Renderer* renderer;
     SDL_Window* window;
@@ -85,8 +88,8 @@ SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
 
     if (!SDL_CreateWindowAndRenderer(
             "nejicast",
-            640,
-            480,
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
             0,
             &screen.window,
             &screen.renderer
@@ -97,7 +100,13 @@ SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
         return SDL_APP_FAILURE;
     }
 
-    screen.texture = SDL_CreateTexture(screen.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 640, 480);
+    screen.texture = SDL_CreateTexture(
+        screen.renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT
+    );
 
     if (screen.texture == nullptr) {
         SDL_Log("Failed to create texture: %s", SDL_GetError());
@@ -131,7 +140,7 @@ SDL_AppResult SDL_AppIterate(void*) {
     // Run emulator for a frame
     while (scheduler::run()) {}
 
-    SDL_UpdateTexture(screen.texture, nullptr, hw::pvr::get_color_buffer_ptr(), sizeof(u32) * 640);
+    SDL_UpdateTexture(screen.texture, nullptr, hw::pvr::get_color_buffer_ptr(), sizeof(u32) * SCREEN_WIDTH);
     SDL_RenderClear(screen.renderer);
     SDL_RenderTexture(screen.renderer, screen.texture, nullptr, nullptr);
     SDL_RenderPresent(screen.renderer);

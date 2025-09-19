@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <nejicast.hpp>
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 #include <hw/pvr/spg.hpp>
@@ -19,8 +20,8 @@
 
 namespace hw::pvr {
 
-constexpr int SCREEN_WIDTH = 640;
-constexpr int SCREEN_HEIGHT = 480;
+using nejicast::SCREEN_WIDTH;
+using nejicast::SCREEN_HEIGHT;
 
 struct {
     std::array<u32, SCREEN_WIDTH * SCREEN_HEIGHT> color_buffer;
