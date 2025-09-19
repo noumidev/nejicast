@@ -161,4 +161,8 @@ void submit_triangle(const Vertex* vertices) {
     draw_triangle(vertices);
 }
 
+u32* get_color_buffer_ptr() {
+    return ctx.color_buffer.data();
+}
+
 }

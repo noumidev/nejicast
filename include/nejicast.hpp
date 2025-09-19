@@ -16,6 +16,4 @@ void shutdown();
 
 void sideload(const u32 entry);
 
-void run();
-
 }

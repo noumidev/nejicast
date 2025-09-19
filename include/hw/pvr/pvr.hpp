@@ -34,4 +34,6 @@ void clear_buffers();
 void submit_triangle(const Vertex* vertices);
 void finish_render();
 
+u32* get_color_buffer_ptr();
+
 }

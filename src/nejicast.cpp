@@ -3,7 +3,17 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "SDL3/SDL_hints.h"
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_render.h"
+#include "SDL3/SDL_video.h"
 #include <nejicast.hpp>
+
+#define SDL_MAIN_USE_CALLBACKS 1
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 
 #include <cstdio>
 #include <cstring>
@@ -58,19 +68,44 @@ void sideload(const u32 entry) {
     hw::cpu::setup_for_sideload(entry);
 }
 
-void run() {
-    while (true) {
-        scheduler::run();
-    }
 }
 
-}
+static struct {
+    SDL_Renderer* renderer;
+    SDL_Window* window;
+    SDL_Texture* texture;
+} screen;
 
-int main(int argc, char** argv) {
+SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
     if (argc < NUM_ARGS) {
         std::puts("Usage: nejicast [path to boot ROM] [path to FLASH ROM] [path to ELF]");
-        return 1;
+
+        return SDL_APP_FAILURE;
     }
+
+    if (!SDL_CreateWindowAndRenderer(
+            "nejicast",
+            640,
+            480,
+            0,
+            &screen.window,
+            &screen.renderer
+        )
+    ) {
+        SDL_Log("Failed to create window and renderer: %s", SDL_GetError());
+
+        return SDL_APP_FAILURE;
+    }
+
+    screen.texture = SDL_CreateTexture(screen.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 640, 480);
+
+    if (screen.texture == nullptr) {
+        SDL_Log("Failed to create texture: %s", SDL_GetError());
+
+        return SDL_APP_FAILURE;
+    }
+
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
 
     common::Config config {
         .boot_path = argv[1],
@@ -80,8 +115,34 @@ int main(int argc, char** argv) {
     
     nejicast::reset();
     nejicast::initialize(config);
-    nejicast::run();
-    nejicast::shutdown();
 
-    return 0;
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void*, SDL_Event* event) {
+    if (event->type == SDL_EVENT_QUIT) {
+        return SDL_APP_SUCCESS;
+    }
+
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppIterate(void*) {
+    // Run emulator for a frame
+    while (scheduler::run()) {}
+
+    SDL_UpdateTexture(screen.texture, nullptr, hw::pvr::get_color_buffer_ptr(), sizeof(u32) * 640);
+    SDL_RenderClear(screen.renderer);
+    SDL_RenderTexture(screen.renderer, screen.texture, nullptr, nullptr);
+    SDL_RenderPresent(screen.renderer);
+
+    return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void*, SDL_AppResult) {
+    SDL_DestroyTexture(screen.texture);
+    SDL_DestroyRenderer(screen.renderer);
+    SDL_DestroyWindow(screen.window);
+
+    nejicast::shutdown();
 }
