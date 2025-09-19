@@ -1608,6 +1608,9 @@ static i64 i_shlr(const u16 instr) {
 static i64 i_sleep(const u16) {
     set_state(STATE_SLEEPING);
 
+    // Make sure CPU actually sleeps after this
+    ctx.cycles = 1;
+
     return 1;
 }
 
