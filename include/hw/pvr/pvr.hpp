@@ -30,6 +30,8 @@ void initialize();
 void reset();
 void shutdown();
 
+void set_gouraud_shading(const bool use_gouraud_shading);
+
 void clear_buffers();
 void submit_triangle(const Vertex* vertices);
 void finish_render();

@@ -25,6 +25,6 @@ u8* get_video_ram_ptr();
 
 void begin_vertex_strip();
 void push_vertex(const pvr::Vertex vertex);
-void end_vertex_strip();
+void end_vertex_strip(const bool use_gouraud_shading);
 
 }

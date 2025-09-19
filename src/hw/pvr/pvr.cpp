@@ -26,6 +26,8 @@ using nejicast::SCREEN_HEIGHT;
 struct {
     std::array<u32, SCREEN_WIDTH * SCREEN_HEIGHT> color_buffer;
     std::array<f32, SCREEN_WIDTH * SCREEN_HEIGHT> depth_buffer;
+
+    bool use_gouraud_shading;
 } ctx;
 
 static f32 edge_function(const Vertex& a, const Vertex& b, const Vertex& c) {
@@ -109,7 +111,7 @@ static void draw_triangle(const Vertex* vertices) {
                     continue;
                 }
 
-                ctx.color_buffer[SCREEN_WIDTH * y + x] = interpolate_colors(w0, w1, w2, a, b, c, area);
+                ctx.color_buffer[SCREEN_WIDTH * y + x] = (ctx.use_gouraud_shading) ? interpolate_colors(w0, w1, w2, a, b, c, area) : c.color.raw;
                 ctx.depth_buffer[SCREEN_WIDTH * y + x] = z;
             }
         }
@@ -151,6 +153,10 @@ void shutdown() {
     interface::shutdown();
     spg::shutdown();
     ta::shutdown();
+}
+
+void set_gouraud_shading(const bool use_gouraud_shading) {
+    ctx.use_gouraud_shading = use_gouraud_shading;
 }
 
 void clear_buffers() {

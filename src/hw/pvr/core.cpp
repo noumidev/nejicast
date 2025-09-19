@@ -121,11 +121,17 @@ enum : u32 {
 constexpr usize VRAM_SIZE = 0x800000;
 constexpr usize FOG_TABLE_SIZE = 0x80;
 
+struct VertexStrip {
+    bool use_gouraud_shading;
+
+    std::vector<Vertex> vertices;
+};
+
 struct {
     std::array<u8, VRAM_SIZE> video_ram;
     std::array<u16, FOG_TABLE_SIZE> fog_table;
 
-    std::vector<std::vector<Vertex>> vertex_strips;
+    std::vector<VertexStrip> vertex_strips;
 
     u32 isp_parameter_base;
     u32 region_base;
@@ -400,10 +406,12 @@ static void start_render() {
     pvr::clear_buffers();
 
     for (const auto& strip : ctx.vertex_strips) {
-        assert(strip.size() > 2);
+        assert(strip.vertices.size() > 2);
+
+        pvr::set_gouraud_shading(strip.use_gouraud_shading);
         
-        for (usize i = 0; i < (strip.size() - 2); i++) {
-            pvr::submit_triangle(&strip[i]);
+        for (usize i = 0; i < (strip.vertices.size() - 2); i++) {
+            pvr::submit_triangle(&strip.vertices[i]);
         }
     }
 
@@ -790,7 +798,7 @@ u8* get_video_ram_ptr() {
 
 void begin_vertex_strip() {
     // Create empty strip
-    ctx.vertex_strips.emplace_back(std::vector<Vertex>{});
+    ctx.vertex_strips.emplace_back(VertexStrip{});
 }
 
 void push_vertex(const Vertex vertex) {
@@ -798,16 +806,18 @@ void push_vertex(const Vertex vertex) {
 
     std::printf("CORE Strip %zu vertex %zu (x = %f, y = %f, z = %f, color = %08X\n",
         length,
-        ctx.vertex_strips[length].size(),
+        ctx.vertex_strips[length].vertices.size(),
         vertex.x,
         vertex.y,
         vertex.z,
         vertex.color.raw
     );
 
-    ctx.vertex_strips[length].push_back(vertex);
+    ctx.vertex_strips[length].vertices.push_back(vertex);
 }
 
-void end_vertex_strip() {}
+void end_vertex_strip(const bool use_gouraud_shading) {
+    ctx.vertex_strips[ctx.vertex_strips.size() - 1].use_gouraud_shading = use_gouraud_shading;
+}
 
 }

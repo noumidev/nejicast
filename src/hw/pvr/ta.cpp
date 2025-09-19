@@ -32,12 +32,18 @@ union ParameterControlWord {
     u32 raw;
 
     struct {
-        u32 object_control : 16;
-        u32 group_control  :  8;
-        u32 list_type      :  3;
-        u32                :  1;
-        u32 end_of_strip   :  1;
-        u32 parameter_type :  3;
+        u32 use_short_texture_coordinates : 1;
+        u32 use_gouraud_shading           : 1;
+        u32 use_bump_mapping              : 1;
+        u32 use_texture_mapping           : 1;
+        u32 color_type                    : 2;
+        u32 volume_type                   : 2;
+        u32                               : 8;
+        u32 group_control                 : 8;
+        u32 list_type                     : 3;
+        u32                               : 1;
+        u32 end_of_strip                  : 1;
+        u32 parameter_type                : 3;
     };
 };
 
@@ -211,7 +217,7 @@ void fifo_block_write(const u8 *bytes) {
             );
 
             if (parameter_control.end_of_strip) {
-                core::end_vertex_strip();
+                core::end_vertex_strip(ctx.current_global_parameter.use_gouraud_shading);
 
                 ctx.is_first_vertex = true;
             }
