@@ -14,6 +14,7 @@
 
 #include <scheduler.hpp>
 #include <hw/holly/intc.hpp>
+#include <hw/pvr/pvr.hpp>
 #include <hw/pvr/spg.hpp>
 #include <hw/pvr/ta.hpp>
 
@@ -392,11 +393,21 @@ struct {
     } y_coefficient;
 } ctx;
 
-constexpr i64 CORE_DELAY = 8192;
+constexpr i64 CORE_DELAY = 0x8000;
 constexpr int CORE_INTERRUPT = 2;
 
 static void start_render() {
-    exit(1);
+    pvr::clear_buffers();
+
+    for (const auto& strip : ctx.vertex_strips) {
+        assert(strip.size() > 2);
+        
+        for (usize i = 0; i < (strip.size() - 2); i++) {
+            pvr::submit_triangle(&strip[i]);
+        }
+    }
+
+    pvr::finish_render();
 
     scheduler::schedule_event(
         "CORE_IRQ",
@@ -404,6 +415,8 @@ static void start_render() {
         CORE_INTERRUPT,
         scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(CORE_DELAY)
     );
+
+    ctx.vertex_strips.clear();
 }
 
 void initialize() {
@@ -789,7 +802,7 @@ void push_vertex(const Vertex vertex) {
         vertex.x,
         vertex.y,
         vertex.z,
-        vertex.color
+        vertex.color.raw
     );
 
     ctx.vertex_strips[length].push_back(vertex);

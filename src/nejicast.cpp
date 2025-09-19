@@ -15,10 +15,7 @@
 #include <hw/g2/g2.hpp>
 #include <hw/holly/bus.hpp>
 #include <hw/holly/holly.hpp>
-#include <hw/pvr/core.hpp>
-#include <hw/pvr/interface.hpp>
-#include <hw/pvr/spg.hpp>
-#include <hw/pvr/ta.hpp>
+#include <hw/pvr/pvr.hpp>
 
 constexpr int NUM_ARGS = 4;
 
@@ -31,10 +28,7 @@ void initialize(const common::Config& config) {
     hw::g1::initialize(config.boot_path, config.flash_path);
     hw::g2::initialize();
     hw::holly::initialize();
-    hw::pvr::core::initialize();
-    hw::pvr::interface::initialize();
-    hw::pvr::spg::initialize();
-    hw::pvr::ta::initialize();
+    hw::pvr::initialize();
 
     common::load_elf(config.elf_path);
 }
@@ -46,10 +40,7 @@ void shutdown() {
     hw::g1::shutdown();
     hw::g2::shutdown();
     hw::holly::shutdown();
-    hw::pvr::core::shutdown();
-    hw::pvr::interface::shutdown();
-    hw::pvr::spg::shutdown();
-    hw::pvr::ta::shutdown();
+    hw::pvr::shutdown();
 }
 
 void reset() {
@@ -59,10 +50,7 @@ void reset() {
     hw::g1::reset();
     hw::g2::reset();
     hw::holly::reset();
-    hw::pvr::core::reset();
-    hw::pvr::interface::reset();
-    hw::pvr::spg::reset();
-    hw::pvr::ta::reset();
+    hw::pvr::reset();
 }
 
 void sideload(const u32 entry) {

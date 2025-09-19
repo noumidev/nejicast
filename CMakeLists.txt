@@ -46,6 +46,7 @@ set(SOURCES
     src/hw/holly/maple.cpp
     src/hw/pvr/core.cpp
     src/hw/pvr/interface.cpp
+    src/hw/pvr/pvr.cpp
     src/hw/pvr/spg.cpp
     src/hw/pvr/ta.cpp
 )
@@ -82,6 +83,7 @@ set(HEADERS
     include/hw/holly/maple.hpp
     include/hw/pvr/core.hpp
     include/hw/pvr/interface.hpp
+    include/hw/pvr/pvr.hpp
     include/hw/pvr/spg.hpp
     include/hw/pvr/ta.hpp
 )

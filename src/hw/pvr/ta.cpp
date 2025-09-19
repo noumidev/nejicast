@@ -13,6 +13,7 @@
 #include <scheduler.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/pvr/core.hpp>
+#include <hw/pvr/pvr.hpp>
 
 namespace hw::pvr::ta {
 
@@ -135,7 +136,7 @@ enum {
     LIST_TYPE_OPAQUE = 0,
 };
 
-constexpr i64 TA_DELAY = 1024;
+constexpr i64 TA_DELAY = 0x4000;
 
 static void finish_list(const int list_type) {
     assert(ctx.has_list_type);
@@ -201,11 +202,11 @@ void fifo_block_write(const u8 *bytes) {
             }
 
             core::push_vertex(
-                core::Vertex {
+                pvr::Vertex {
                     to_f32(fifo_bytes[1]),
                     to_f32(fifo_bytes[2]),
                     to_f32(fifo_bytes[3]),
-                    fifo_bytes[6]
+                    {fifo_bytes[6]}
                 }
             );
 
