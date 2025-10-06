@@ -66,6 +66,7 @@ enum : u32 {
     IO_VO_STARTX         = 0x005F80EC,
     IO_VO_STARTY         = 0x005F80F0,
     IO_SCALER_CTL        = 0x005F80F4,
+    IO_PAL_RAM_CTRL      = 0x005F8108,
     IO_SPG_STATUS        = 0x005F810C,
     IO_FB_BURSTCTRL      = 0x005F8110,
     IO_Y_COEFF           = 0x005F8118,
@@ -115,20 +116,23 @@ enum : u32 {
 #define VO_STARTX       ctx.video_output.horizontal_start
 #define VO_STARTY       ctx.video_output.vertical_start
 #define SCALER_CTL      ctx.scaler_control
+#define PAL_RAM_CTRL    ctx.palette_color_format
 #define FB_BURSTCTRL    ctx.frame_buffer.burst_control
 #define Y_COEFF         ctx.y_coefficient
 
-constexpr usize VRAM_SIZE = 0x800000;
 constexpr usize FOG_TABLE_SIZE = 0x80;
 
 struct VertexStrip {
     bool use_gouraud_shading;
+    bool use_texture_mapping;
+
+    u32 tsp_instr;
+    u32 texture_control;
 
     std::vector<Vertex> vertices;
 };
 
 struct {
-    std::array<u8, VRAM_SIZE> video_ram;
     std::array<u16, FOG_TABLE_SIZE> fog_table;
 
     std::vector<VertexStrip> vertex_strips;
@@ -388,6 +392,8 @@ struct {
         };
     } scaler_control;
 
+    u32 palette_color_format;
+
     union {
         u32 raw;
 
@@ -409,6 +415,9 @@ static void start_render() {
         assert(strip.vertices.size() > 2);
 
         pvr::set_gouraud_shading(strip.use_gouraud_shading);
+        pvr::set_texture_mapping(strip.use_texture_mapping);
+        pvr::set_texture_size(8 << ((strip.tsp_instr >> 3) & 7), 8 << (strip.tsp_instr & 7));
+        pvr::set_texture_address((strip.texture_control & 0x1FFFFF) << 3);
         
         for (usize i = 0; i < (strip.vertices.size() - 2); i++) {
             pvr::submit_triangle(&strip.vertices[i]);
@@ -729,6 +738,11 @@ void write(const u32 addr, const u32 data) {
         
             SCALER_CTL.raw = data;
             break;
+        case IO_PAL_RAM_CTRL:
+            std::printf("PAL_RAM_CTRL write32 = %08X\n", data);
+        
+            PAL_RAM_CTRL = data;
+            break;
         case IO_FB_BURSTCTRL:
             std::printf("FB_BURSTCTRL write32 = %08X\n", data);
         
@@ -791,14 +805,17 @@ template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
 
-// For HOLLY access
-u8* get_video_ram_ptr() {
-    return ctx.video_ram.data();
-}
-
-void begin_vertex_strip() {
+void begin_vertex_strip(
+    const u32 tsp_instr,
+    const u32 texture_control
+) {
     // Create empty strip
-    ctx.vertex_strips.emplace_back(VertexStrip{});
+    VertexStrip strip{};
+
+    strip.tsp_instr = tsp_instr;
+    strip.texture_control = texture_control;
+
+    ctx.vertex_strips.push_back(strip);
 }
 
 void push_vertex(const Vertex vertex) {
@@ -816,8 +833,14 @@ void push_vertex(const Vertex vertex) {
     ctx.vertex_strips[length].vertices.push_back(vertex);
 }
 
-void end_vertex_strip(const bool use_gouraud_shading) {
-    ctx.vertex_strips[ctx.vertex_strips.size() - 1].use_gouraud_shading = use_gouraud_shading;
+void end_vertex_strip(
+    const bool use_gouraud_shading,
+    const bool use_texture_mapping
+) {
+    VertexStrip& strip = ctx.vertex_strips[ctx.vertex_strips.size() - 1];
+
+    strip.use_gouraud_shading = use_gouraud_shading;
+    strip.use_texture_mapping = use_texture_mapping;
 }
 
 }

@@ -21,10 +21,16 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
-u8* get_video_ram_ptr();
+void begin_vertex_strip(
+    const u32 tsp_instr,
+    const u32 texture_control
+);
 
-void begin_vertex_strip();
 void push_vertex(const pvr::Vertex vertex);
-void end_vertex_strip(const bool use_gouraud_shading);
+
+void end_vertex_strip(
+    const bool use_gouraud_shading,
+    const bool use_texture_mapping
+);
 
 }

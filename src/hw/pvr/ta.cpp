@@ -17,7 +17,7 @@
 
 namespace hw::pvr::ta {
 
-constexpr bool SILENT_TA = true;
+constexpr bool SILENT_TA = false;
 
 #define TA_ALLOC_CTRL     ctx.allocation_control
 #define TA_GLOB_TILE_CLIP ctx.global_tile_clip
@@ -49,6 +49,9 @@ union ParameterControlWord {
 
 struct {
     ParameterControlWord current_global_parameter;
+
+    u32 current_tsp_instr;
+    u32 current_texture_control;
 
     bool has_list_type;
     bool is_first_vertex;
@@ -139,28 +142,61 @@ void initialize_lists() {
 }
 
 enum {
-    LIST_TYPE_OPAQUE = 0,
+    LIST_TYPE_OPAQUE       = 0,
+    LIST_TYPE_TRANSLUCENT  = 2,
+    LIST_TYPE_PUNCHTHROUGH = 4,
 };
 
-constexpr i64 TA_DELAY = 0x4000;
+enum {
+    INTERRUPT_OPAQUE_LIST               =  7,
+    INTERRUPT_OPAQUE_MODIFIER_LIST      =  8,
+    INTERRUPT_TRANSLUCENT_LIST          =  9,
+    INTERRUPT_TRANSLUCENT_MODIFIER_LIST = 10,
+    INTERRUPT_PUNCHTHROUGH_LIST         = 21,
+};
+
+static void send_interrupt(const int list_type) {
+    if (list_type == LIST_TYPE_PUNCHTHROUGH) {
+        hw::holly::intc::assert_normal_interrupt(INTERRUPT_PUNCHTHROUGH_LIST);
+    } else {
+        hw::holly::intc::assert_normal_interrupt(list_type + INTERRUPT_OPAQUE_LIST);
+    }
+}
+
+constexpr i64 TA_DELAY = 0x400;
 
 static void finish_list(const int list_type) {
     assert(ctx.has_list_type);
 
     scheduler::schedule_event(
         "TA_LIST_END",
-        hw::holly::intc::assert_normal_interrupt,
-        7 + list_type,
-        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(TA_DELAY)
+        send_interrupt,
+        list_type,
+        // NOTE: how long does this actually take?
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>((1 + list_type) * TA_DELAY)
     );
 
     ctx.has_list_type = false;
+}
+
+static Color from_floats(const u32* float_bytes) {
+    return Color{
+        .b = (u8)(255.0F * to_f32(float_bytes[3])),
+        .g = (u8)(255.0F * to_f32(float_bytes[2])),
+        .r = (u8)(255.0F * to_f32(float_bytes[1])),
+        .a = (u8)(255.0F * to_f32(float_bytes[0]))
+    };
 }
 
 enum {
     PARAM_TYPE_END_OF_LIST    = 0,
     PARAM_TYPE_GLOBAL_POLYGON = 4,
     PARAM_TYPE_VERTEX         = 7,
+};
+
+enum {
+    COLOR_TYPE_PACKED,
+    COLOR_TYPE_FLOAT,
 };
 
 void fifo_block_write(const u8 *bytes) {
@@ -187,10 +223,27 @@ void fifo_block_write(const u8 *bytes) {
 
             ctx.current_global_parameter = parameter_control;
 
+            ctx.current_tsp_instr = fifo_bytes[2];
+            ctx.current_texture_control = fifo_bytes[3];
+
+            assert(!ctx.current_global_parameter.use_bump_mapping);
+            assert(ctx.current_global_parameter.color_type < 2);
+            assert(ctx.current_global_parameter.volume_type == 0);
+
+            if (ctx.current_global_parameter.use_texture_mapping) {
+                std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr);
+            }
+
             if (!ctx.has_list_type) {
                 switch (ctx.current_global_parameter.list_type) {
                     case LIST_TYPE_OPAQUE:
                         if constexpr (!SILENT_TA) std::puts("TA Opaque list");
+                        break;
+                    case LIST_TYPE_TRANSLUCENT:
+                        if constexpr (!SILENT_TA) std::puts("TA Translucent list");
+                        break;
+                    case LIST_TYPE_PUNCHTHROUGH:
+                        if constexpr (!SILENT_TA) std::puts("TA Punchthrough list");
                         break;
                     default:
                         printf("Unimplemented TA list type %u\n", ctx.current_global_parameter.list_type);
@@ -202,22 +255,47 @@ void fifo_block_write(const u8 *bytes) {
             break;
         case PARAM_TYPE_VERTEX:
             if (ctx.is_first_vertex) {
-                core::begin_vertex_strip();
+                core::begin_vertex_strip(
+                    ctx.current_tsp_instr,
+                    ctx.current_texture_control
+                );
 
                 ctx.is_first_vertex = false;
             }
 
-            core::push_vertex(
-                pvr::Vertex {
-                    to_f32(fifo_bytes[1]),
-                    to_f32(fifo_bytes[2]),
-                    to_f32(fifo_bytes[3]),
-                    {fifo_bytes[6]}
+            {
+                Color color;
+
+                switch (ctx.current_global_parameter.color_type) {
+                    case COLOR_TYPE_PACKED:
+                        color.raw = fifo_bytes[6];
+                        break;
+                    case COLOR_TYPE_FLOAT:
+                        color = from_floats(&fifo_bytes[4]);
+                        break;
+                    default:
+                        std::printf("PVR Unimplemented color type %u\n", ctx.current_global_parameter.color_type);
+                        exit(1);
                 }
-            );
+
+                // FIXME: this only works for a small number of vertex configs
+                core::push_vertex(
+                    pvr::Vertex {
+                        to_f32(fifo_bytes[1]),
+                        to_f32(fifo_bytes[2]),
+                        to_f32(fifo_bytes[3]),
+                        to_f32(fifo_bytes[4]),
+                        to_f32(fifo_bytes[5]),
+                        color
+                    }
+                );
+            }
 
             if (parameter_control.end_of_strip) {
-                core::end_vertex_strip(ctx.current_global_parameter.use_gouraud_shading);
+                core::end_vertex_strip(
+                    ctx.current_global_parameter.use_gouraud_shading,
+                    ctx.current_global_parameter.use_texture_mapping
+                );
 
                 ctx.is_first_vertex = true;
             }
