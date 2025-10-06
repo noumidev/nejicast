@@ -250,6 +250,16 @@ static f64 get_dr(const usize n) {
     return data;
 }
 
+static u64 get_dr_move(const usize n) {
+    const u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    u64 data;
+
+    std::memcpy(&data, fr, sizeof(data));
+
+    return data;
+}
+
 static u64 get_dr_raw(const usize n) {
     assert(n < NUM_FPRS);
 
@@ -281,6 +291,12 @@ static void set_dr_raw(const usize n, const u64 data) {
     std::memcpy(fr + 1, (u8*)&data + 0, sizeof(u32));
 }
 
+static void set_dr_move(const usize n, const u64 data) {
+    u32* fr = (n & 1) ? &XR_RAW[n & ~1] : &FR_RAW[n & ~1];
+
+    std::memcpy(fr, &data, sizeof(data));
+}
+
 [[maybe_unused]]
 static void add_jump_target(const u32 addr) {
     static std::unordered_set<u32> jump_targets;
@@ -298,7 +314,7 @@ static void jump(const u32 addr) {
     PC = addr;
     NPC = addr + sizeof(u16);
 
-    // add_jump_target(addr);
+    add_jump_target(addr);
 }
 
 static void delayed_jump(const u32 addr) {
@@ -306,7 +322,7 @@ static void delayed_jump(const u32 addr) {
 
     NPC = addr;
 
-    // add_jump_target(addr);
+    add_jump_target(addr);
 }
 
 enum class ControlRegister {
@@ -665,6 +681,12 @@ static i64 i_bt(const u16 instr) {
     return 2;
 }
 
+static i64 i_clrs(const u16) {
+    SR.saturate_mac = 0;
+
+    return 1;
+}
+
 static i64 i_clrt(const u16) {
     SR.t = 0;
 
@@ -855,6 +877,24 @@ static i64 i_fcmp(const u16 instr) {
     return 2 + FPSCR.precision_mode;
 }
 
+static i64 i_fcnvds(const u16 instr) {
+    assert(FPSCR.precision_mode);
+    assert((N & 1) == 0);
+
+    FPUL = from_f32((f32)get_dr(N));
+
+    return 4;
+}
+
+static i64 i_fcnvsd(const u16 instr) {
+    assert(FPSCR.precision_mode);
+    assert((N & 1) == 0);
+
+    set_dr(N, (f64)to_f32(FPUL));
+
+    return 3;
+}
+
 static i64 i_fdiv(const u16 instr) {
     if (FPSCR.precision_mode) {
         assert(((M & 1) == 0) && ((N & 1) == 0));
@@ -867,15 +907,16 @@ static i64 i_fdiv(const u16 instr) {
     return 12 + (12 * FPSCR.precision_mode);
 }
 
+static f32 fipr_core(const f32* fvn, const f32* fvm) {
+    return
+        fvn[0] * fvm[0] +
+        fvn[1] * fvm[1] +
+        fvn[2] * fvm[2] +
+        fvn[3] * fvm[3];
+}
+
 static i64 i_fipr(const u16 instr) {
-    f32 result = 0.0;
-
-    result += (FV[N & ~3])[0] * (FV[N << 2])[0];
-    result += (FV[N & ~3])[1] * (FV[N << 2])[1];
-    result += (FV[N & ~3])[2] * (FV[N << 2])[2];
-    result += (FV[N & ~3])[3] * (FV[N << 2])[3];
-
-    (FV[N & ~3])[3] = result;
+    (FV[N & ~3])[3] = fipr_core(FV[N & ~3], FV[(N & 3) << 2]);
 
     return 4;
 }
@@ -887,6 +928,12 @@ static i64 i_fldi(const u16 instr) {
     } else {
         FR[N] = 0.0;
     }
+
+    return 1;
+}
+
+static i64 i_flds(const u16 instr) {
+    FPUL = FR_RAW[N];
 
     return 1;
 }
@@ -923,7 +970,7 @@ static i64 i_fmov(const u16 instr) {
 
 static i64 i_fmov_index_load(const u16 instr) {
     if (FPSCR.pair_mode) {
-        set_dr_raw(N, read<u64>(GPRS[0] + GPRS[M]));
+        set_dr_move(N, read<u64>(GPRS[0] + GPRS[M]));
     } else {
         FR_RAW[N] = read<u32>(GPRS[0] + GPRS[M]);
     }
@@ -933,7 +980,7 @@ static i64 i_fmov_index_load(const u16 instr) {
 
 static i64 i_fmov_index_store(const u16 instr) {
     if (FPSCR.pair_mode) {
-        write<u64>(GPRS[0] + GPRS[N], get_dr_raw(M));
+        write<u64>(GPRS[0] + GPRS[N], get_dr_move(M));
     } else {
         write<u32>(GPRS[0] + GPRS[N], FR_RAW[M]);
     }
@@ -943,7 +990,7 @@ static i64 i_fmov_index_store(const u16 instr) {
 
 static i64 i_fmov_load(const u16 instr) {
     if (FPSCR.pair_mode) {
-        set_dr_raw(N, read<u64>(GPRS[M]));
+        set_dr_move(N, read<u64>(GPRS[M]));
     } else {
         FR_RAW[N] = read<u32>(GPRS[M]);
     }
@@ -953,7 +1000,7 @@ static i64 i_fmov_load(const u16 instr) {
 
 static i64 i_fmov_restore(const u16 instr) {
     if (FPSCR.pair_mode) {
-        set_dr_raw(N, read<u64>(GPRS[M]));
+        set_dr_move(N, read<u64>(GPRS[M]));
 
         GPRS[M] += sizeof(u64);
     } else {
@@ -969,7 +1016,7 @@ static i64 i_fmov_save(const u16 instr) {
     if (FPSCR.pair_mode) {
         GPRS[N] -= sizeof(u64);
 
-        write<u64>(GPRS[N], get_dr_raw(M));
+        write<u64>(GPRS[N], get_dr_move(M));
     } else {
         GPRS[N] -= sizeof(u32);
 
@@ -981,7 +1028,7 @@ static i64 i_fmov_save(const u16 instr) {
 
 static i64 i_fmov_store(const u16 instr) {
     if (FPSCR.pair_mode) {
-        write<u64>(GPRS[N], get_dr_raw(M));
+        write<u64>(GPRS[N], get_dr_move(M));
     } else {
         write<u32>(GPRS[N], FR_RAW[M]);
     }
@@ -1062,8 +1109,6 @@ static i64 i_fsrra(const u16 instr) {
 }
 
 static i64 i_fsts(const u16 instr) {
-    assert(!FPSCR.precision_mode);
-
     FR_RAW[N] = FPUL;
 
     return 1;
@@ -1108,13 +1153,10 @@ static i64 i_ftrv(const u16 instr) {
         xmtrx[3][i] = XR[4 * i + 3];
     }
 
-    f32 result[4] = {0.0, 0.0, 0.0, 0.0};
+    f32 result[4];
 
     for (int i = 0; i < 4; i++) {
-        result[i] += xmtrx[i][0] * fvn[0];
-        result[i] += xmtrx[i][1] * fvn[1];
-        result[i] += xmtrx[i][2] * fvn[2];
-        result[i] += xmtrx[i][3] * fvn[3];
+        result[i] = fipr_core(xmtrx[i], fvn);
     }
 
     std::memcpy(fvn, result, sizeof(result));
@@ -1723,6 +1765,12 @@ static i64 i_xor(const u16 instr) {
     return 1;
 }
 
+static i64 i_xtrct(const u16 instr) {
+    GPRS[N] = (GPRS[M] << 16) | (GPRS[N] >> 16);
+
+    return 1;
+}
+
 static void initialize_instr_table() {
     ctx.instr_table.fill(i_undefined);
 
@@ -1751,6 +1799,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000101011", i_rte);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00110010", i_stc<ControlRegister::Ssr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01000010", i_stc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000001001000", i_clrs);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01011010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01101010", i_sts<SystemRegister::Fpscr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx1xxx0010", i_stc<ControlRegister::Rbank, AddressingMode::RegisterDirect>);
@@ -1773,6 +1822,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1010", i_xor<AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1011", i_or<AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1100", i_cmp<Comparison::String>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1101", i_xtrct);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1110", i_mulu);
     fill_table_with_pattern(ctx.instr_table.data(), "0010xxxxxxxx1111", i_muls);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx0000", i_cmp<Comparison::Equal>);
@@ -1895,6 +1945,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0100", i_fcmp<Comparison::Equal>);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxxxxxx0101", i_fcmp<Comparison::GreaterThan>);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00001101", i_fsts);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00011101", i_flds);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00101101", i_float);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00111101", i_ftrc);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01001101", i_fneg);
@@ -1902,6 +1953,8 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01111101", i_fsrra);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10001101", i_fldi<false>);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10011101", i_fldi<true>);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10101101", i_fcnvsd);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10111101", i_fcnvds);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx11101101", i_fipr);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxx011111101", i_fsca);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xx0111111101", i_ftrv);
