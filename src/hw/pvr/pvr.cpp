@@ -23,12 +23,47 @@ namespace hw::pvr {
 using nejicast::SCREEN_WIDTH;
 using nejicast::SCREEN_HEIGHT;
 
+constexpr usize VRAM_SIZE = 0x800000;
+
 struct {
+    std::array<u8, VRAM_SIZE> video_ram;
+
     std::array<u32, SCREEN_WIDTH * SCREEN_HEIGHT> color_buffer;
     std::array<f32, SCREEN_WIDTH * SCREEN_HEIGHT> depth_buffer;
 
     bool use_gouraud_shading;
+    bool use_texture_mapping;
+
+    // Texture control
+    int u_size;
+    int v_size;
+
+    u32 texture_address;
 } ctx;
+
+template<typename T>
+static T read_texel(const u32, const u32) {
+    std::printf("Unmapped texture memory read%zu\n", 8 * sizeof(T));
+    exit(1);
+}
+
+template<>
+u16 read_texel(const u32 x, const u32 y) {
+    const u32 addr = ctx.texture_address + (ctx.u_size * y + x) * 2;
+    const u32 offset = addr >> 2;
+
+    u32 data;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        std::memcpy(&data, &ctx.video_ram[(VRAM_SIZE >> 1) + sizeof(u32) * (offset >> 1)], sizeof(data));
+    } else {
+        // First VRAM module
+        std::memcpy(&data, &ctx.video_ram[sizeof(u32) * (offset >> 1)], sizeof(data));
+    }
+
+    return ((addr & 1) != 0) ? data >> 16 : data;
+}
 
 static f32 edge_function(const Vertex& a, const Vertex& b, const Vertex& c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -97,7 +132,10 @@ static void draw_triangle(const Vertex* vertices) {
 
     for (int y = y_min; y < y_max; y++) {
         for (int x = x_min; x < x_max; x++) {
-            Vertex p{(f32)x, (f32)y, 0.0, {0}};
+            Vertex p{};
+
+            p.x = (f32)x;
+            p.y = (f32)y;
 
             // Calculate weights
             const f32 w0 = edge_function(b, c, p);
@@ -111,7 +149,32 @@ static void draw_triangle(const Vertex* vertices) {
                     continue;
                 }
 
-                ctx.color_buffer[SCREEN_WIDTH * y + x] = (ctx.use_gouraud_shading) ? interpolate_colors(w0, w1, w2, a, b, c, area) : c.color.raw;
+                Color color = c.color;
+
+                if (ctx.use_texture_mapping) {
+                    const f32 u = interpolate(w0, w1, w2, a.u, b.u, c.u, area);
+                    const f32 v = interpolate(w0, w1, w2, a.v, b.v, c.v, area);
+
+                    assert((u >= 0.0) && (u <= 1.0));
+                    assert((v >= 0.0) && (v <= 1.0));
+
+                    const int tex_x = ctx.u_size * u;
+                    const int tex_y = ctx.v_size * v;
+
+                    const u16 tex_color = read_texel<u16>(tex_x, tex_y);
+
+                    color.a = 0xFF;
+                    color.r = (tex_color >> 11) << 3;
+                    color.g = (tex_color >> 5) << 2;
+                    color.b = (tex_color >> 0) << 3;
+                    color.r |= color.r >> 5;
+                    color.g |= color.g >> 6;
+                    color.b |= color.b >> 5;
+                } else if (ctx.use_gouraud_shading) {
+                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
+                }
+
+                ctx.color_buffer[SCREEN_WIDTH * y + x] = color.raw;
                 ctx.depth_buffer[SCREEN_WIDTH * y + x] = z;
             }
         }
@@ -159,6 +222,19 @@ void set_gouraud_shading(const bool use_gouraud_shading) {
     ctx.use_gouraud_shading = use_gouraud_shading;
 }
 
+void set_texture_mapping(const bool use_texture_mapping) {
+    ctx.use_texture_mapping = use_texture_mapping;
+}
+
+void set_texture_size(const int u_size, const int v_size) {
+    ctx.u_size = u_size;
+    ctx.v_size = v_size;
+}
+
+void set_texture_address(const u32 addr) {
+    ctx.texture_address = addr;
+}
+
 void clear_buffers() {
     ctx.color_buffer.fill(0);
     ctx.depth_buffer.fill(0.0);
@@ -170,6 +246,11 @@ void submit_triangle(const Vertex* vertices) {
 
 u32* get_color_buffer_ptr() {
     return ctx.color_buffer.data();
+}
+
+// For HOLLY access
+u8* get_video_ram_ptr() {
+    return ctx.video_ram.data();
 }
 
 }
