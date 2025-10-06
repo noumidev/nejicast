@@ -759,8 +759,11 @@ void write(const u32 addr, const u64 data) {
 
         const usize select_longword = (addr >> 2) & 6;
 
-        ctx.store_queues[is_second_queue].bytes[select_longword + 0] = data;
-        ctx.store_queues[is_second_queue].bytes[select_longword + 1] = data >> 32;
+        std::memcpy(
+            &ctx.store_queues[is_second_queue].bytes[select_longword],
+            &data,
+            sizeof(data)
+        );
 
         // std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
         return;
