@@ -24,6 +24,7 @@
 #include <hw/holly/maple.hpp>
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
+#include <hw/pvr/pvr.hpp>
 
 namespace hw::holly::bus {
 
@@ -131,7 +132,7 @@ void initialize() {
     );
 
     map_memory(
-        pvr::core::get_video_ram_ptr(),
+        pvr::get_video_ram_ptr(),
         BASE_VRAM_32,
         SIZE_VRAM_32,
         true,
@@ -178,6 +179,25 @@ void setup_for_sideload() {
 }
 
 template<typename T>
+static T read_texture_memory(const u32 addr) {
+    std::printf("Unmapped texture memory read%zu @ %08X\n", 8 * sizeof(T), addr);
+    exit(1);
+}
+
+template<>
+u32 read_texture_memory(const u32 addr) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        return read<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1));
+    } else {
+        // First VRAM module
+        return read<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1));
+    }
+}
+
+template<typename T>
 T read(const u32 addr) {
     assert(addr < ADDRESS_SPACE);
 
@@ -219,6 +239,10 @@ T read(const u32 addr) {
 
     if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
         return hw::g2::aica::read<T>(addr);
+    }
+    
+    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
+        return read_texture_memory<T>(addr);
     }
 
     // Redirect read
@@ -331,7 +355,19 @@ void block_write(const u32 addr, const u8 *bytes) {
         return;
     }
 
-    if (addr == BASE_TA_FIFO) {
+    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
+        u32 data[8];
+
+        std::memcpy(data, bytes, BLOCK_SIZE);
+
+        for (int i = 0; i < 8; i++) {
+            write_texture_memory<u32>(addr + sizeof(u32) * i, data[i]);
+        }
+
+        return;
+    }
+
+    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_TA_FIFO) {
         hw::pvr::ta::fifo_block_write(bytes);
         return;
     }
