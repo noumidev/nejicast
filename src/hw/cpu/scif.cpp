@@ -115,7 +115,7 @@ static void transmit_data(const int data) {
     ctx.msg[ctx.msg_ptr++] = data;
 
     if (data == 0x0A) {
-        std::printf("%s", ctx.msg);
+        std::printf("DEBUG: %s", ctx.msg);
 
         ctx.msg_ptr = 0;
 
