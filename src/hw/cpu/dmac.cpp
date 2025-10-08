@@ -134,47 +134,51 @@ void execute_channel_2_dma(u32 &start_address, u32 &length, bool &start) {
     assert((start_address % 32) == 0);
     assert((length % 32) == 0);
 
-    if (CHCR2.enable_interrupt) {
-        scheduler::schedule_event(
-            "CH2_IRQ",
-            hw::holly::intc::assert_normal_interrupt,
-            CHANNEL_2_INTERRUPT,
-            8 * length
-        );
-    }
+    scheduler::schedule_event(
+        "CH2_IRQ",
+        hw::holly::intc::assert_normal_interrupt,
+        CHANNEL_2_INTERRUPT,
+        8 * length
+    );
 
     // TODO: mask this through CPU
     SAR2 &= 0x1FFFFFFF;
     
     u8 dma_bytes[32];
 
+    u32 source_increment = 0;
+
+    switch (CHCR2.source_mode) {
+        case 1:
+            source_increment = sizeof(dma_bytes);
+            break;
+        case 2:
+            source_increment = -(u32)sizeof(dma_bytes);
+            break;
+    }
+
+    u32 destination_increment = 0;
+
+    if ((start_address & 0xFF000000) == 0x11000000) {
+        // When using the direct texture path, the address needs to be incremented here
+        destination_increment = 32;
+    } else {
+        switch (CHCR2.destination_mode) {
+            case 1:
+                destination_increment = sizeof(dma_bytes);
+                break;
+            case 2:
+                destination_increment = -(u32)sizeof(dma_bytes);
+                break;
+        }
+    }
+
     while (length > 0) {
         hw::holly::bus::block_read(SAR2, dma_bytes);
         hw::holly::bus::block_write(start_address, dma_bytes);
 
-        switch (CHCR2.source_mode) {
-            case 0: // Fixed
-            case 3: // ??
-                break;
-            case 1:
-                SAR2 += sizeof(dma_bytes);
-                break;
-            case 2:
-                SAR2 -= sizeof(dma_bytes);
-                break;
-        }
-
-        switch (CHCR2.destination_mode) {
-            case 0: // Fixed
-            case 3: // ??
-                break;
-            case 1:
-                start_address += sizeof(dma_bytes);
-                break;
-            case 2:
-                start_address -= sizeof(dma_bytes);
-                break;
-        }
+        SAR2 += source_increment;
+        start_address += destination_increment;
 
         length -= sizeof(dma_bytes);
     }
