@@ -120,6 +120,8 @@ enum : u32 {
 #define FB_BURSTCTRL    ctx.frame_buffer.burst_control
 #define Y_COEFF         ctx.y_coefficient
 
+constexpr bool SILENT_CORE = true;
+
 constexpr usize FOG_TABLE_SIZE = 0x80;
 
 struct VertexStrip {
@@ -416,7 +418,9 @@ static void start_render() {
 
         pvr::set_gouraud_shading(strip.use_gouraud_shading);
         pvr::set_texture_mapping(strip.use_texture_mapping);
+        pvr::set_texture_format((strip.texture_control >> 27) & 7);
         pvr::set_texture_size(8 << ((strip.tsp_instr >> 3) & 7), 8 << (strip.tsp_instr & 7));
+        pvr::set_texture_swizzling((strip.texture_control & (1 << 26)) == 0);
         pvr::set_texture_address((strip.texture_control & 0x1FFFFF) << 3);
         
         for (usize i = 0; i < (strip.vertices.size() - 2); i++) {
@@ -821,14 +825,16 @@ void begin_vertex_strip(
 void push_vertex(const Vertex vertex) {
     const usize length = ctx.vertex_strips.size() - 1;
 
-    std::printf("CORE Strip %zu vertex %zu (x = %f, y = %f, z = %f, color = %08X\n",
-        length,
-        ctx.vertex_strips[length].vertices.size(),
-        vertex.x,
-        vertex.y,
-        vertex.z,
-        vertex.color.raw
-    );
+    if constexpr (!SILENT_CORE) {
+        std::printf("CORE Strip %zu vertex %zu (x = %f, y = %f, z = %f, color = %08X\n",
+            length,
+            ctx.vertex_strips[length].vertices.size(),
+            vertex.x,
+            vertex.y,
+            vertex.z,
+            vertex.color.raw
+        );
+    }
 
     ctx.vertex_strips[length].vertices.push_back(vertex);
 }
