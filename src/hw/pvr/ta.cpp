@@ -17,7 +17,7 @@
 
 namespace hw::pvr::ta {
 
-constexpr bool SILENT_TA = false;
+constexpr bool SILENT_TA = true;
 
 #define TA_ALLOC_CTRL     ctx.allocation_control
 #define TA_GLOB_TILE_CLIP ctx.global_tile_clip
@@ -49,6 +49,8 @@ union ParameterControlWord {
 
 struct {
     ParameterControlWord current_global_parameter;
+
+    u32 intensity_colors[4];
 
     u32 current_tsp_instr;
     u32 current_texture_control;
@@ -142,9 +144,11 @@ void initialize_lists() {
 }
 
 enum {
-    LIST_TYPE_OPAQUE       = 0,
-    LIST_TYPE_TRANSLUCENT  = 2,
-    LIST_TYPE_PUNCHTHROUGH = 4,
+    LIST_TYPE_OPAQUE               = 0,
+    LIST_TYPE_OPAQUE_MODIFIER      = 1,
+    LIST_TYPE_TRANSLUCENT          = 2,
+    LIST_TYPE_TRANSLUCENT_MODIFIER = 3,
+    LIST_TYPE_PUNCHTHROUGH         = 4,
 };
 
 enum {
@@ -163,7 +167,7 @@ static void send_interrupt(const int list_type) {
     }
 }
 
-constexpr i64 TA_DELAY = 0x400;
+constexpr i64 TA_DELAY = 0x1000;
 
 static void finish_list(const int list_type) {
     assert(ctx.has_list_type);
@@ -173,7 +177,7 @@ static void finish_list(const int list_type) {
         send_interrupt,
         list_type,
         // NOTE: how long does this actually take?
-        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>((1 + list_type) * TA_DELAY)
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(TA_DELAY)
     );
 
     ctx.has_list_type = false;
@@ -197,6 +201,7 @@ enum {
 enum {
     COLOR_TYPE_PACKED,
     COLOR_TYPE_FLOAT,
+    COLOR_TYPE_INTENSITY_1,
 };
 
 void fifo_block_write(const u8 *bytes) {
@@ -223,11 +228,16 @@ void fifo_block_write(const u8 *bytes) {
 
             ctx.current_global_parameter = parameter_control;
 
+            std::memcpy(ctx.intensity_colors, &fifo_bytes[4], sizeof(ctx.intensity_colors));
+
             ctx.current_tsp_instr = fifo_bytes[2];
             ctx.current_texture_control = fifo_bytes[3];
 
+            if (ctx.current_texture_control != 0) {
+                std::printf("TSP instruction = %08X\n", ctx.current_texture_control);
+            }
+
             assert(!ctx.current_global_parameter.use_bump_mapping);
-            assert(ctx.current_global_parameter.color_type < 2);
             assert(ctx.current_global_parameter.volume_type == 0);
 
             if (ctx.current_global_parameter.use_texture_mapping) {
@@ -239,8 +249,14 @@ void fifo_block_write(const u8 *bytes) {
                     case LIST_TYPE_OPAQUE:
                         if constexpr (!SILENT_TA) std::puts("TA Opaque list");
                         break;
+                    case LIST_TYPE_OPAQUE_MODIFIER:
+                        if constexpr (!SILENT_TA) std::puts("TA Opaque Modifier list");
+                        break;
                     case LIST_TYPE_TRANSLUCENT:
                         if constexpr (!SILENT_TA) std::puts("TA Translucent list");
+                        break;
+                    case LIST_TYPE_TRANSLUCENT_MODIFIER:
+                        if constexpr (!SILENT_TA) std::puts("TA Translucent Modifier list");
                         break;
                     case LIST_TYPE_PUNCHTHROUGH:
                         if constexpr (!SILENT_TA) std::puts("TA Punchthrough list");
@@ -272,6 +288,9 @@ void fifo_block_write(const u8 *bytes) {
                         break;
                     case COLOR_TYPE_FLOAT:
                         color = from_floats(&fifo_bytes[4]);
+                        break;
+                    case COLOR_TYPE_INTENSITY_1:
+                        color = from_floats(ctx.intensity_colors);
                         break;
                     default:
                         std::printf("PVR Unimplemented color type %u\n", ctx.current_global_parameter.color_type);
