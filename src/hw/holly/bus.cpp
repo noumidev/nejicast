@@ -21,7 +21,7 @@
 #include <hw/g2/rtc.hpp>
 #include <hw/holly/holly.hpp>
 #include <hw/holly/intc.hpp>
-#include <hw/holly/maple.hpp>
+#include <hw/maple/maple.hpp>
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 #include <hw/pvr/pvr.hpp>
@@ -50,6 +50,7 @@ enum : u32 {
     BASE_VRAM_32   = 0x05000000,
     BASE_DRAM      = 0x0C000000,
     BASE_TA_FIFO   = 0x10000000,
+    BASE_TEX_PATH  = 0x11000000,
 };
 
 enum : u32 {
@@ -216,7 +217,7 @@ T read(const u32 addr) {
         case BASE_INTC:
             return hw::holly::intc::read<T>(addr);
         case BASE_MAPLE:
-            return hw::holly::maple::read<T>(addr);
+            return hw::maple::read<T>(addr);
         case BASE_GDROM:
             return hw::g1::gdrom::read<T>(addr);
         case BASE_G1:
@@ -306,7 +307,7 @@ void write(const u32 addr, const T data) {
         case BASE_INTC:
             return hw::holly::intc::write<T>(addr, data);
         case BASE_MAPLE:
-            return hw::holly::maple::write<T>(addr, data);
+            return hw::maple::write<T>(addr, data);
         case BASE_GDROM:
             return hw::g1::gdrom::write<T>(addr, data);
         case BASE_G1:
@@ -355,31 +356,36 @@ void block_write(const u32 addr, const u8 *bytes) {
         return;
     }
 
-    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
-        u32 data[8];
+    u32 tex_addr = addr;
 
-        std::memcpy(data, bytes, BLOCK_SIZE);
+    switch (addr & ~(SIZE_VRAM_32 - 1)) {
+        case BASE_TEX_PATH:
+            tex_addr -= BASE_TEX_PATH;
+            tex_addr += BASE_VRAM_64;
+        case BASE_VRAM_64:
+            {
+                u32 data[8];
 
-        for (int i = 0; i < 8; i++) {
-            write_texture_memory<u32>(addr + sizeof(u32) * i, data[i]);
-        }
+                std::memcpy(data, bytes, BLOCK_SIZE);
 
-        return;
+                for (int i = 0; i < 8; i++) {
+                    write_texture_memory<u32>(tex_addr + sizeof(u32) * i, data[i]);
+                }
+            }
+            break;
+        case BASE_TA_FIFO:
+            hw::pvr::ta::fifo_block_write(bytes);
+            break;
+        default:
+            std::printf("Unmapped block write @ %08X = ", addr);
+
+            for (usize i = 0; i < BLOCK_SIZE; i++) {
+                std::printf("%02X", bytes[i]);
+            }
+
+            std::puts("");
+            exit(1);
     }
-
-    if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_TA_FIFO) {
-        hw::pvr::ta::fifo_block_write(bytes);
-        return;
-    }
-
-    std::printf("Unmapped block write @ %08X = ", addr);
-
-    for (usize i = 0; i < BLOCK_SIZE; i++) {
-        std::printf("%02X", bytes[i]);
-    }
-
-    std::puts("");
-    exit(1);
 }
 
 void copy_from_bytes(

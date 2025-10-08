@@ -48,7 +48,7 @@ set(SOURCES
     src/hw/holly/bus.cpp
     src/hw/holly/holly.cpp
     src/hw/holly/intc.cpp
-    src/hw/holly/maple.cpp
+    src/hw/maple/maple.cpp
     src/hw/pvr/core.cpp
     src/hw/pvr/interface.cpp
     src/hw/pvr/pvr.cpp
@@ -85,7 +85,7 @@ set(HEADERS
     include/hw/holly/bus.hpp
     include/hw/holly/holly.hpp
     include/hw/holly/intc.hpp
-    include/hw/holly/maple.hpp
+    include/hw/maple/maple.hpp
     include/hw/pvr/core.hpp
     include/hw/pvr/interface.hpp
     include/hw/pvr/pvr.hpp

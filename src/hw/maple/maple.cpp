@@ -3,7 +3,7 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include <hw/holly/maple.hpp>
+#include <hw/maple/maple.hpp>
 
 #include <scheduler.hpp>
 #include <cassert>
@@ -14,7 +14,7 @@
 #include <hw/holly/bus.hpp>
 #include <hw/holly/intc.hpp>
 
-namespace hw::holly::maple {
+namespace hw::maple {
 
 enum : u32 {
     IO_MDSTAR = 0x005F6C04,

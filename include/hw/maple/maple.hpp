@@ -8,7 +8,7 @@
 #include <common/types.hpp>
 
 // MAPLE functions
-namespace hw::holly::maple {
+namespace hw::maple {
 
 void initialize();
 void reset();

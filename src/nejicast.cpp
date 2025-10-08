@@ -3,11 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "SDL3/SDL_hints.h"
-#include "SDL3/SDL_init.h"
-#include "SDL3/SDL_pixels.h"
-#include "SDL3/SDL_render.h"
-#include "SDL3/SDL_video.h"
 #include <nejicast.hpp>
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -25,6 +20,7 @@
 #include <hw/g2/g2.hpp>
 #include <hw/holly/bus.hpp>
 #include <hw/holly/holly.hpp>
+#include <hw/maple/maple.hpp>
 #include <hw/pvr/pvr.hpp>
 
 constexpr int NUM_ARGS = 4;
@@ -38,6 +34,7 @@ void initialize(const common::Config& config) {
     hw::g1::initialize(config.boot_path, config.flash_path);
     hw::g2::initialize();
     hw::holly::initialize();
+    hw::maple::initialize();
     hw::pvr::initialize();
 
     common::load_elf(config.elf_path);
@@ -50,6 +47,7 @@ void shutdown() {
     hw::g1::shutdown();
     hw::g2::shutdown();
     hw::holly::shutdown();
+    hw::maple::shutdown();
     hw::pvr::shutdown();
 }
 
@@ -60,6 +58,7 @@ void reset() {
     hw::g1::reset();
     hw::g2::reset();
     hw::holly::reset();
+    hw::maple::reset();
     hw::pvr::reset();
 }
 
