@@ -85,6 +85,8 @@ set(HEADERS
     include/hw/holly/bus.hpp
     include/hw/holly/holly.hpp
     include/hw/holly/intc.hpp
+    include/hw/maple/controller.hpp
+    include/hw/maple/device.hpp
     include/hw/maple/maple.hpp
     include/hw/pvr/core.hpp
     include/hw/pvr/interface.hpp

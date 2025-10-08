@@ -5,14 +5,17 @@
 
 #include <hw/maple/maple.hpp>
 
-#include <scheduler.hpp>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
+#include <scheduler.hpp>
 #include <hw/holly/bus.hpp>
 #include <hw/holly/intc.hpp>
+#include <hw/maple/controller.hpp>
+#include <hw/maple/device.hpp>
 
 namespace hw::maple {
 
@@ -33,6 +36,8 @@ enum : u32 {
 #define SB_MSYS   ctx.interface_control
 #define SB_MDAPRO ctx.address_protection
 #define SB_MMSEL  ctx.is_msb_bit_31
+
+constexpr usize NUM_DEVICES = 4;
 
 struct {
     u32 command_table_address;
@@ -66,6 +71,8 @@ struct {
     } address_protection;
 
     bool is_msb_bit_31;
+
+    MapleDevice* devices[NUM_DEVICES];
 } ctx;
 
 union Instruction {
@@ -89,6 +96,12 @@ static u32 read_word(u32& addr) {
     return data;
 }
 
+static void write_word(u32& addr, const u32 data) {
+    hw::holly::bus::write<u32>(addr, data);
+
+    addr += sizeof(data);
+}
+
 constexpr int MAPLE_INTERRUPT = 12;
 
 static void finish_maple_dma(const int) {
@@ -102,8 +115,57 @@ enum {
 };
 
 enum {
-    MAPLE_NO_DEVICE = 0xFFFFFFFF,
+    MAPLE_DEVICE_COMMAND_INFO_REQUEST  = 0x01,
+    MAPLE_DEVICE_COMMAND_GET_CONDITION = 0x09,
 };
+
+enum {
+    MAPLE_DEVICE_CONTROLLER = 0x00000001,
+    MAPLE_DEVICE_NONE       = 0xFFFFFFFF,
+};
+
+struct Frame {
+    // This goes to a peripheral
+    u8 port;
+    u8 command;
+    std::vector<u32> send_bytes;
+
+    // This goes back to SH-4
+    u32 receive_addr;
+    std::vector<u32> receive_bytes;
+};
+
+static Frame decode_frame(const Instruction instr, u32& addr) {
+    Frame frame{};
+
+    frame.port = instr.select_port;
+    frame.receive_addr = read_word(addr);
+    frame.command = read_word(addr);
+
+    for (u32 i = 0; i < instr.transfer_length; i++) {
+        frame.receive_bytes.push_back(read_word(addr));
+    }
+
+    return frame;
+}
+
+static void transmit_data(Frame& frame) {
+    std::printf("MAPLE Port %c receive address = %08X\n", 'A' + frame.port, frame.receive_addr);
+    std::printf("MAPLE Port %c command %02X\n", 'A' + frame.port, frame.command);
+
+    if (ctx.devices[frame.port] != nullptr) {
+        switch (frame.command) {
+            case MAPLE_DEVICE_COMMAND_INFO_REQUEST:
+                // TODO
+                break;
+            default:
+                std::printf("MAPLE Unimplemented device command %02X\n", frame.command);
+                exit(1);
+        }
+    } else {
+        frame.receive_bytes.push_back(MAPLE_DEVICE_NONE);
+    }
+}
 
 constexpr i64 MAPLE_DELAY = 4096;
 
@@ -118,27 +180,20 @@ static void execute_maple_dma() {
         const Instruction instr = Instruction{.raw = read_word(addr)};
 
         std::printf("MAPLE instruction @ %08lX = %08X\n", addr - sizeof(instr), instr.raw);
+
+        Frame frame = decode_frame(instr, addr);
         
         switch (instr.command) {
             case MAPLE_COMMAND_TRANSMIT_DATA:
-                {
-                    [[maybe_unused]]
-                    u32 transfer_length = instr.transfer_length + 1;
-
-                    assert(transfer_length == 1);
-
-                    const u32 receive_addr = read_word(addr);
-
-                    std::printf("MAPLE Port %c receive address = %08X\n", 'A' + instr.select_port, receive_addr);
-                    std::printf("MAPLE Port %c frame = %08X\n", 'A' + instr.select_port, read_word(addr));
-
-                    // Simulate no device response
-                    hw::holly::bus::write<u32>(receive_addr, MAPLE_NO_DEVICE);
-                }
+                transmit_data(frame);
                 break;
             default:
                 std::printf("Unimplemented MAPLE command %u\n", instr.command);
                 exit(1);
+        }
+
+        for (u32 data : frame.receive_bytes) {
+            write_word(frame.receive_addr, data);
         }
 
         if (instr.end_flag) {
@@ -154,13 +209,21 @@ static void execute_maple_dma() {
     }
 }
 
-void initialize() {}
+void initialize() {
+    ctx.devices[0] = new Controller();
+}
 
 void reset() {
     std::memset(&ctx, 0, sizeof(ctx));
 }
 
-void shutdown() {}
+void shutdown() {
+    for (auto device : ctx.devices) {
+        if (device != nullptr) {
+            delete device;
+        }
+    }
+}
 
 template<typename T>
 T read(const u32 addr) {
