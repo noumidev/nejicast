@@ -32,8 +32,10 @@ void reset();
 void shutdown();
 
 void set_gouraud_shading(const bool use_gouraud_shading);
+void set_texture_format(const u32 texture_format);
 void set_texture_mapping(const bool use_texture_mapping);
 void set_texture_size(const int u_size, const int v_size);
+void set_texture_swizzling(const bool use_swizzling);
 void set_texture_address(const u32 addr);
 
 void clear_buffers();

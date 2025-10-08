@@ -23,6 +23,8 @@ namespace hw::pvr {
 using nejicast::SCREEN_WIDTH;
 using nejicast::SCREEN_HEIGHT;
 
+constexpr bool SILENT_PVR = true;
+
 constexpr usize VRAM_SIZE = 0x800000;
 
 struct {
@@ -38,6 +40,9 @@ struct {
     int u_size;
     int v_size;
 
+    u32 texture_format;
+    bool use_swizzling;
+
     u32 texture_address;
 } ctx;
 
@@ -49,7 +54,21 @@ static T read_texel(const u32, const u32) {
 
 template<>
 u16 read_texel(const u32 x, const u32 y) {
-    const u32 addr = ctx.texture_address + (ctx.u_size * y + x) * 2;
+    u32 addr = ctx.texture_address;
+
+    if (ctx.use_swizzling) {
+        u32 z = 0;
+
+        for (u32 i = 0; i < 16; i++) {
+            z |= ((y >> i) & 1) << (2 * i);
+            z |= ((x >> i) & 1) << (2 * i + 1);
+        }
+
+        addr += 2 * z;
+    } else {
+        addr += 2 * (ctx.u_size * y + x);
+    }
+
     const u32 offset = addr >> 2;
 
     u32 data;
@@ -107,6 +126,11 @@ static u32 interpolate_colors(
     return Color{.b = blue, .g = green, .r = red, .a = a.color.a}.raw;
 }
 
+enum : u32 {
+    TEXTURE_FORMAT_RGB565   = 1,
+    TEXTURE_FORMAT_ARGB4444 = 2,
+};
+
 static void draw_triangle(const Vertex* vertices) {
     const Vertex& a = vertices[0];
     Vertex b = vertices[1];
@@ -124,7 +148,7 @@ static void draw_triangle(const Vertex* vertices) {
     const int y_min = std::max(std::min(c.y, std::min(a.y, b.y)), 0.0F);
     const int y_max = std::min(std::max(c.y, std::max(a.y, b.y)), (f32)SCREEN_HEIGHT);
 
-    std::printf("PVR Bounding box (xmin: %d, xmax: %d, ymin: %d, ymax: %d)\n", x_min, x_max, y_min, y_max);
+    if constexpr (!SILENT_PVR) std::printf("PVR Bounding box (xmin: %d, xmax: %d, ymin: %d, ymax: %d)\n", x_min, x_max, y_min, y_max);
 
     if ((x_min >= x_max) || (y_min >= y_max)) {
         return;
@@ -152,8 +176,13 @@ static void draw_triangle(const Vertex* vertices) {
                 Color color = c.color;
 
                 if (ctx.use_texture_mapping) {
-                    const f32 u = interpolate(w0, w1, w2, a.u, b.u, c.u, area);
-                    const f32 v = interpolate(w0, w1, w2, a.v, b.v, c.v, area);
+                    f32 u = interpolate(w0, w1, w2, a.u / a.z, b.u / b.z, c.u / c.z, area);
+                    f32 v = interpolate(w0, w1, w2, a.v / a.z, b.v / b.z, c.v / c.z, area);
+
+                    const f32 correct_z = interpolate(w0, w1, w2, 1.0 / a.z, 1.0 / b.z, 1.0 / c.z, area);
+
+                    u *= 1.0 / correct_z;
+                    v *= 1.0 / correct_z;
 
                     assert((u >= 0.0) && (u <= 1.0));
                     assert((v >= 0.0) && (v <= 1.0));
@@ -163,13 +192,34 @@ static void draw_triangle(const Vertex* vertices) {
 
                     const u16 tex_color = read_texel<u16>(tex_x, tex_y);
 
-                    color.a = 0xFF;
-                    color.r = (tex_color >> 11) << 3;
-                    color.g = (tex_color >> 5) << 2;
-                    color.b = (tex_color >> 0) << 3;
-                    color.r |= color.r >> 5;
-                    color.g |= color.g >> 6;
-                    color.b |= color.b >> 5;
+                    if (tex_color == 0) {
+                        continue;
+                    }
+
+                    switch (ctx.texture_format) {
+                        case TEXTURE_FORMAT_RGB565:
+                            color.a = 0xFF;
+                            color.r = (tex_color >> 11) << 3;
+                            color.g = (tex_color >>  5) << 2;
+                            color.b = (tex_color >>  0) << 3;
+                            color.r |= color.r >> 5;
+                            color.g |= color.g >> 6;
+                            color.b |= color.b >> 5;
+                            break;
+                        case TEXTURE_FORMAT_ARGB4444:
+                            color.a = (tex_color >> 12) << 4;
+                            color.r = (tex_color >>  8) << 4;
+                            color.g = (tex_color >>  4) << 4;
+                            color.b = (tex_color >>  0) << 4;
+                            color.a |= color.a >> 4;
+                            color.r |= color.r >> 4;
+                            color.g |= color.g >> 4;
+                            color.b |= color.b >> 4;
+                            break;
+                        default:
+                            std::printf("PVR Unimplemented texture format %u\n", ctx.texture_format);
+                            exit(1);
+                    }
                 } else if (ctx.use_gouraud_shading) {
                     color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
                 }
@@ -222,6 +272,10 @@ void set_gouraud_shading(const bool use_gouraud_shading) {
     ctx.use_gouraud_shading = use_gouraud_shading;
 }
 
+void set_texture_format(const u32 texture_format) {
+    ctx.texture_format = texture_format;
+}
+
 void set_texture_mapping(const bool use_texture_mapping) {
     ctx.use_texture_mapping = use_texture_mapping;
 }
@@ -229,6 +283,10 @@ void set_texture_mapping(const bool use_texture_mapping) {
 void set_texture_size(const int u_size, const int v_size) {
     ctx.u_size = u_size;
     ctx.v_size = v_size;
+}
+
+void set_texture_swizzling(const bool use_swizzling) {
+    ctx.use_swizzling = use_swizzling;
 }
 
 void set_texture_address(const u32 addr) {
