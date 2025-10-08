@@ -314,7 +314,7 @@ static void jump(const u32 addr) {
     PC = addr;
     NPC = addr + sizeof(u16);
 
-    add_jump_target(addr);
+    // add_jump_target(addr);
 }
 
 static void delayed_jump(const u32 addr) {
@@ -322,7 +322,7 @@ static void delayed_jump(const u32 addr) {
 
     NPC = addr;
 
-    add_jump_target(addr);
+    // add_jump_target(addr);
 }
 
 enum class ControlRegister {
@@ -805,6 +805,15 @@ static i64 i_dmulu(const u16 instr) {
     return 4;
 }
 
+static i64 i_dmuls(const u16 instr) {
+    const u64 result = (i64)(i32)GPRS[N] * (i64)(i32)GPRS[M];
+
+    MACH = result >> 32;
+    MACL = result;
+
+    return 4;
+}
+
 static i64 i_dt(const u16 instr) {
     GPRS[N] -= 1;
 
@@ -836,6 +845,18 @@ static i64 i_extu(const u16 instr) {
         case OperandSize::Word:
             GPRS[N] = (u16)GPRS[M];
             break;
+    }
+
+    return 1;
+}
+
+static i64 i_fabs(const u16 instr) {
+    if (FPSCR.precision_mode) {
+        assert((N & 1) == 0);
+
+        set_dr_raw(N, get_dr_raw(N) & ~(1LL << 63));
+    } else {
+        FR_RAW[N] &= ~(1 << 31);
     }
 
     return 1;
@@ -1835,6 +1856,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1000", i_sub);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1010", i_subc);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1100", i_add<false>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1101", i_dmuls);
     fill_table_with_pattern(ctx.instr_table.data(), "0011xxxxxxxx1110", i_addc);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000000", i_shll<1>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000001", i_shlr<1>);
@@ -1949,6 +1971,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00101101", i_float);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx00111101", i_ftrc);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01001101", i_fneg);
+    fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01011101", i_fabs);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01101101", i_fsqrt);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx01111101", i_fsrra);
     fill_table_with_pattern(ctx.instr_table.data(), "1111xxxx10001101", i_fldi<false>);
