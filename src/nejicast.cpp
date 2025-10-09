@@ -3,6 +3,9 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_keycode.h"
 #include <nejicast.hpp>
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -26,6 +29,61 @@
 constexpr int NUM_ARGS = 4;
 
 namespace nejicast {
+
+// All pressed
+static u16 BUTTON_STATE = 0xFF;
+
+static u16 get_button_from_keycode(const SDL_Keycode keycode) {
+    switch (keycode) {
+        // U/D/L/R
+        case SDLK_W:
+            return 4;
+        case SDLK_S:
+            return 5;
+        case SDLK_A:
+            return 6;
+        case SDLK_D:
+            return 7;
+        // Y/A/X/B
+        case SDLK_I:
+            return 9;
+        case SDLK_K:
+            return 2;
+        case SDLK_J:
+            return 10;
+        case SDLK_L:
+            return 1;
+        // Start
+        case SDLK_RETURN:
+            return 3;
+        default:
+            return 16;
+    }
+}
+
+static void press_button(const SDL_Keycode keycode) {
+    const u16 button = get_button_from_keycode(keycode);
+
+    if (button >= 16) {
+        return;
+    }
+
+    BUTTON_STATE &= ~(1 << button);
+}
+
+static void release_button(const SDL_Keycode keycode) {
+    const u16 button = get_button_from_keycode(keycode);
+
+    if (button >= 16) {
+        return;
+    }
+
+    BUTTON_STATE |= 1 << button;
+}
+
+u16 get_button_state() {
+    return BUTTON_STATE;
+}
 
 void initialize(const common::Config& config) {
     scheduler::initialize();
@@ -128,8 +186,15 @@ SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
 }
 
 SDL_AppResult SDL_AppEvent(void*, SDL_Event* event) {
-    if (event->type == SDL_EVENT_QUIT) {
-        return SDL_APP_SUCCESS;
+    switch (event->type) {
+        case SDL_EVENT_QUIT:
+            return SDL_APP_SUCCESS;
+        case SDL_EVENT_KEY_DOWN:
+            nejicast::press_button(event->key.key);
+            break;
+        case SDL_EVENT_KEY_UP:
+            nejicast::release_button(event->key.key);
+            break;
     }
 
     return SDL_APP_CONTINUE;

@@ -8,6 +8,7 @@
 #include <cassert>
 #include <vector>
 
+#include <nejicast.hpp>
 #include <common/types.hpp>
 #include <hw/maple/device.hpp>
 #include <hw/maple/maple.hpp>
@@ -36,8 +37,10 @@ public:
 
         frame.receive_bytes.push_back(MAPLE_DEVICE_CONTROLLER);
 
-        frame.receive_bytes.push_back(0xFFFF0000);
+        frame.receive_bytes.push_back(nejicast::get_button_state());
         frame.receive_bytes.push_back(0x80808080);
+
+        frame.result_code = 0x08;
     }
 };
 

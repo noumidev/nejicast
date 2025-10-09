@@ -13,6 +13,8 @@ namespace nejicast {
 constexpr int SCREEN_WIDTH = 640;
 constexpr int SCREEN_HEIGHT = 480;
 
+u16 get_button_state();
+
 void initialize(const common::Config& config);
 void reset();
 void shutdown();
