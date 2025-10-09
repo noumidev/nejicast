@@ -154,8 +154,8 @@ static void draw_triangle(const Vertex* vertices) {
         return;
     }
 
-    for (int y = y_min; y < y_max; y++) {
-        for (int x = x_min; x < x_max; x++) {
+    for (int y = y_min; y <= y_max; y++) {
+        for (int x = x_min; x <= x_max; x++) {
             Vertex p{};
 
             p.x = (f32)x;
