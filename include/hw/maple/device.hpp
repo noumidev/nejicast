@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <common/types.hpp>
+#include <hw/maple/maple.hpp>
 
 namespace hw::maple {
 
@@ -17,7 +18,8 @@ public:
     MapleDevice() {}
     virtual ~MapleDevice() {}
 
-    virtual std::vector<u8> get_device_info() = 0;
+    virtual void get_device_info(Frame& frame) = 0;
+    virtual void get_condition(Frame& frame) = 0;
 };
 
 }

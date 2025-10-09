@@ -119,31 +119,19 @@ enum {
     MAPLE_DEVICE_COMMAND_GET_CONDITION = 0x09,
 };
 
-enum {
-    MAPLE_DEVICE_CONTROLLER = 0x00000001,
-    MAPLE_DEVICE_NONE       = 0xFFFFFFFF,
-};
-
-struct Frame {
-    // This goes to a peripheral
-    u8 port;
-    u8 command;
-    std::vector<u32> send_bytes;
-
-    // This goes back to SH-4
-    u32 receive_addr;
-    std::vector<u32> receive_bytes;
-};
-
 static Frame decode_frame(const Instruction instr, u32& addr) {
     Frame frame{};
 
     frame.port = instr.select_port;
     frame.receive_addr = read_word(addr);
-    frame.command = read_word(addr);
+
+    const u32 maple_frame = read_word(addr);
+
+    frame.maple_addr = maple_frame >> 8;
+    frame.command = maple_frame;
 
     for (u32 i = 0; i < instr.transfer_length; i++) {
-        frame.receive_bytes.push_back(read_word(addr));
+        frame.send_bytes.push_back(read_word(addr));
     }
 
     return frame;
@@ -156,7 +144,10 @@ static void transmit_data(Frame& frame) {
     if (ctx.devices[frame.port] != nullptr) {
         switch (frame.command) {
             case MAPLE_DEVICE_COMMAND_INFO_REQUEST:
-                // TODO
+                ctx.devices[frame.port]->get_device_info(frame);
+                break;
+            case MAPLE_DEVICE_COMMAND_GET_CONDITION:
+                ctx.devices[frame.port]->get_condition(frame);
                 break;
             default:
                 std::printf("MAPLE Unimplemented device command %02X\n", frame.command);
@@ -191,6 +182,8 @@ static void execute_maple_dma() {
                 std::printf("Unimplemented MAPLE command %u\n", instr.command);
                 exit(1);
         }
+
+        write_word(frame.receive_addr, frame.result_code | (frame.maple_addr << 8) | (frame.receive_bytes.size() << 24));
 
         for (u32 data : frame.receive_bytes) {
             write_word(frame.receive_addr, data);
