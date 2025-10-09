@@ -15,8 +15,9 @@
 namespace hw::g2::rtc {
 
 enum : u32 {
-    IO_RTC_HI  = 0x00710000,
-    IO_RTC_LO  = 0x00710004,
+    IO_RTC_HI   = 0x00710000,
+    IO_RTC_LO   = 0x00710004,
+    IO_RTC_PROT = 0x00710008,
 };
 
 #define RTC ctx.counter
@@ -30,6 +31,8 @@ struct {
             u16 hi;
         };
     } counter;
+
+    bool enable_writes;
 } ctx;
 
 static void increment_counter(const int);
@@ -92,9 +95,38 @@ void write(const u32 addr, const T data) {
     exit(1);
 }
 
+template<>
+void write(const u32 addr, const u32 data) {
+    switch (addr) {
+        case IO_RTC_HI:
+            std::printf("RTC_HI write32 = %08X\n", data);
+            
+            if (ctx.enable_writes) {
+                ctx.counter.hi = data;
+
+                ctx.enable_writes = false;
+            }
+            break;
+        case IO_RTC_LO:
+            std::printf("RTC_LO write32 = %08X\n", data);
+            
+            if (ctx.enable_writes) {
+                ctx.counter.lo = data;
+            }
+            break;
+        case IO_RTC_PROT:
+            std::printf("RTC_PROT write32 = %08X\n", data);
+
+            ctx.enable_writes = (data & 1) != 0;
+            break;
+        default:
+            std::printf("Unmapped RTC write32 @ %08X = %08X\n",  addr, data);
+            exit(1);
+    }
+}
+
 template void write(u32, u8);
 template void write(u32, u16);
-template void write(u32, u32);
 template void write(u32, u64);
 
 }
