@@ -3,11 +3,13 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "common/types.hpp"
 #include <hw/pvr/pvr.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -30,46 +32,45 @@ constexpr usize VRAM_SIZE = 0x800000;
 struct {
     std::array<u8, VRAM_SIZE> video_ram;
 
-    std::array<u32, SCREEN_WIDTH * SCREEN_HEIGHT> color_buffer;
+    std::array<u32, SCREEN_WIDTH * SCREEN_HEIGHT> color_buffer, secondary_buffer;
     std::array<f32, SCREEN_WIDTH * SCREEN_HEIGHT> depth_buffer;
 
-    bool use_gouraud_shading;
-    bool use_texture_mapping;
+    IspInstruction isp_instr;
+    TspInstruction tsp_instr;
+    TextureControlWord texture_control;
+
+    // TSP
+    u32 u_size, v_size;
 
     // Texture control
-    int u_size;
-    int v_size;
+    u32 texture_addr;
 
-    u32 texture_format;
-    bool use_swizzling;
-
-    u32 texture_address;
+    bool is_translucent;
 } ctx;
 
 template<typename T>
-static T read_texel(const u32, const u32) {
-    std::printf("Unmapped texture memory read%zu\n", 8 * sizeof(T));
+T read_vram_linear(const u32 addr) {
+    T data;
+
+    std::memcpy(&data, &ctx.video_ram[addr & (VRAM_SIZE - 1)], sizeof(data));
+
+    return data;
+}
+
+template u16 read_vram_linear(u32);
+template u32 read_vram_linear(u32);
+
+template<typename T>
+T read_vram_interleaved(const u32 addr) {
+    std::printf("Unimplemented texture memory read%zu @ %08X\n", 8 * sizeof(T), addr);
     exit(1);
 }
 
 template<>
-u16 read_texel(const u32 x, const u32 y) {
-    u32 addr = ctx.texture_address;
+u16 read_vram_interleaved(const u32 addr) {
+    const u32 masked_addr = addr & (VRAM_SIZE - 1);
 
-    if (ctx.use_swizzling) {
-        u32 z = 0;
-
-        for (u32 i = 0; i < 16; i++) {
-            z |= ((y >> i) & 1) << (2 * i);
-            z |= ((x >> i) & 1) << (2 * i + 1);
-        }
-
-        addr += 2 * z;
-    } else {
-        addr += 2 * (ctx.u_size * y + x);
-    }
-
-    const u32 offset = addr >> 2;
+    const u32 offset = masked_addr >> 2;
 
     u32 data;
 
@@ -82,6 +83,44 @@ u16 read_texel(const u32 x, const u32 y) {
     }
 
     return ((addr & 1) != 0) ? data >> 16 : data;
+}
+
+template u32 read_vram_interleaved(u32);
+
+static u32 swizzle_to_linear(const u32 x, const u32 y) {
+    u32 n = 0;
+
+    // Interleave bits
+    for (u32 i = 0; i < 16; i++) {
+        n |= ((y >> i) & 1) << (2 * i);
+        n |= ((x >> i) & 1) << (2 * i + 1);
+    }
+
+    return n;
+}
+
+enum {
+    SCAN_ORDER_SWIZZLED,
+    SCAN_ORDER_LINEAR,
+};
+
+template<typename T>
+static T read_texel(const u32, const u32) {
+    std::printf("Unmapped texel read%zu\n", 8 * sizeof(T));
+    exit(1);
+}
+
+template<>
+u16 read_texel(const u32 x, const u32 y) {
+    u32 addr = ctx.texture_addr;
+
+    if (ctx.texture_control.regular.scan_order == SCAN_ORDER_SWIZZLED) {
+        addr += 2 * swizzle_to_linear(x, y);
+    } else {
+        addr += 2 * (ctx.u_size * y + x);
+    }
+
+    return read_vram_interleaved<u16>(addr);
 }
 
 static f32 edge_function(const Vertex& a, const Vertex& b, const Vertex& c) {
@@ -110,6 +149,43 @@ static u8 clamp_color_channel(const f32 channel) {
     return (u8)channel;
 }
 
+static u8 clamp_color_channel(const int channel) {
+    if (channel < 0) {
+        return 0;
+    } else if (channel > 255) {
+        return 255;
+    }
+
+    return (u8)channel;
+}
+
+static Color add_and_clamp(const Color color, const Color other_color) {
+    return Color{
+        .a = clamp_color_channel(color.a + other_color.a),
+        .r = clamp_color_channel(color.r + other_color.r),
+        .g = clamp_color_channel(color.g + other_color.g),
+        .b = clamp_color_channel(color.b + other_color.b),
+    };
+}
+
+static f32 clamp_uv(const f32 uv) {
+    if (uv < 0.0) {
+        return 0.0;
+    } else if (uv > 1.0) {
+        return 1.0;
+    }
+
+    return uv;
+}
+
+static f32 repeat_uv(const f32 uv) {
+    if ((uv < 0.0) || (uv > 1.0)) {
+        return std::abs(std::fmodf(uv, 1.0));
+    }
+
+    return uv;
+}
+
 static u32 interpolate_colors(
     const f32 w0,
     const f32 w1,
@@ -131,6 +207,184 @@ enum : u32 {
     TEXTURE_FORMAT_ARGB4444 = 2,
 };
 
+static Color unpack_texel(const u16 texel) {
+    Color color;
+
+    switch (ctx.texture_control.regular.pixel_format) {
+        case TEXTURE_FORMAT_RGB565:
+            color.a = 0xFF;
+            color.r = (texel >> 11) << 3;
+            color.g = (texel >>  5) << 2;
+            color.b = (texel >>  0) << 3;
+            color.r |= color.r >> 5;
+            color.g |= color.g >> 6;
+            color.b |= color.b >> 5;
+            break;
+        case TEXTURE_FORMAT_ARGB4444:
+            color.a = (texel >> 12) << 4;
+            color.r = (texel >>  8) << 4;
+            color.g = (texel >>  4) << 4;
+            color.b = (texel >>  0) << 4;
+            color.a |= color.a >> 4;
+            color.r |= color.r >> 4;
+            color.g |= color.g >> 4;
+            color.b |= color.b >> 4;
+            break;
+        default:
+            std::printf("TSP Unimplemented texture format %u\n", ctx.texture_control.regular.pixel_format);
+            exit(1);
+    }
+
+    if (ctx.tsp_instr.ignore_tex_alpha) {
+        color.a = 0xFF;
+    }
+
+    return color;
+}
+
+enum {
+    DEPTH_MODE_NEVER,
+    DEPTH_MODE_LESS,
+    DEPTH_MODE_EQUAL,
+    DEPTH_MODE_LESS_OR_EQUAL,
+    DEPTH_MODE_GREATER,
+    DEPTH_MODE_NOT_EQUAL,
+    DEPTH_MODE_GREATER_OR_EQUAL,
+    DEPTH_MODE_ALWAYS,
+};
+
+static bool depth_test(const f32 z, const u32 x, const u32 y) {
+    const f32 old_z = ctx.depth_buffer[SCREEN_WIDTH * y + x];
+
+    bool passed = true;
+
+    switch (ctx.isp_instr.regular.depth_mode) {
+        case DEPTH_MODE_NEVER:
+            // Never writes back new Z
+            return false;
+        case DEPTH_MODE_LESS:
+            passed = z < old_z;
+            break;
+        case DEPTH_MODE_EQUAL:
+            // No need to write new Z
+            return z == old_z;
+        case DEPTH_MODE_LESS_OR_EQUAL:
+            passed = z <= old_z;
+            break;
+        case DEPTH_MODE_GREATER:
+            passed = z > old_z;
+            break;
+        case DEPTH_MODE_NOT_EQUAL:
+            passed = z != old_z;
+            break;
+        case DEPTH_MODE_GREATER_OR_EQUAL:
+            passed = z >= old_z;
+            break;
+        case DEPTH_MODE_ALWAYS:
+            break;
+    }
+
+    if (passed && !ctx.isp_instr.regular.disable_z_write) {
+        ctx.depth_buffer[SCREEN_WIDTH * y + x] = z;
+    }
+
+    return passed;
+}
+
+enum {
+    COMBINE_MODE_MODULATE       = 1,
+    COMBINE_MODE_MODULATE_ALPHA = 3,
+};
+
+static u8 color_multiply(const u8 color, const u8 other_color) {
+    return (color * other_color) / 255;
+}
+
+static Color combine_colors(const Color vertex_color, const Color texel_color) {
+    Color color{};
+
+    switch (ctx.tsp_instr.shading_instr) {
+        case COMBINE_MODE_MODULATE:
+            color.a = texel_color.a;
+            color.r = color_multiply(vertex_color.r, texel_color.r);
+            color.g = color_multiply(vertex_color.g, texel_color.g);
+            color.b = color_multiply(vertex_color.b, texel_color.b);
+            break;
+        case COMBINE_MODE_MODULATE_ALPHA:
+            color.a = color_multiply(vertex_color.a, texel_color.a);
+            color.r = color_multiply(vertex_color.r, texel_color.r);
+            color.g = color_multiply(vertex_color.g, texel_color.g);
+            color.b = color_multiply(vertex_color.b, texel_color.b);
+            break;
+        default:
+            std::printf("Unimplemented shading instruction %u\n", ctx.tsp_instr.shading_instr);
+            exit(1);
+    }
+
+    return color;
+}
+
+enum {
+    BLEND_FUNCTION_ZERO                 = 0,
+    BLEND_FUNCTION_ONE                  = 1,
+    BLEND_FUNCTION_SOURCE_ALPHA         = 4,
+    BLEND_FUNCTION_INVERSE_SOURCE_ALPHA = 5,
+};
+
+static void blend_and_flush(const Color source_color, const u32 x, const u32 y) {
+    Color src = source_color;
+
+    if (ctx.tsp_instr.source_select) {
+        src = Color{.raw = ctx.secondary_buffer[SCREEN_WIDTH * y + x]};
+    }
+
+    Color dst;
+
+    if (ctx.tsp_instr.destination_select) {
+        dst = Color{.raw = ctx.secondary_buffer[SCREEN_WIDTH * y + x]};
+    } else {
+        dst = Color{.raw = ctx.color_buffer[SCREEN_WIDTH * y + x]};
+    }
+
+    switch (ctx.tsp_instr.source_instr) {
+        case BLEND_FUNCTION_ONE:
+            // Nothing to do here
+            break;
+        case BLEND_FUNCTION_SOURCE_ALPHA:
+            src.r = color_multiply(src.r, src.a);
+            src.g = color_multiply(src.g, src.a);
+            src.b = color_multiply(src.b, src.a);
+            src.a = color_multiply(src.a, src.a);
+            break;
+        default:
+            std::printf("Unimplemented source blend function %u\n", ctx.tsp_instr.source_instr);
+            exit(1);
+    }
+
+    switch (ctx.tsp_instr.destination_instr) {
+        case BLEND_FUNCTION_ZERO:
+            dst.raw = 0;
+            break;
+        case BLEND_FUNCTION_INVERSE_SOURCE_ALPHA:
+            dst.a = color_multiply(dst.a, 255 - src.a);
+            dst.r = color_multiply(dst.r, 255 - src.a);
+            dst.g = color_multiply(dst.g, 255 - src.a);
+            dst.b = color_multiply(dst.b, 255 - src.a);
+            break;
+        default:
+            std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
+            exit(1);
+    }
+
+    dst = add_and_clamp(src, dst);
+    
+    if (ctx.tsp_instr.destination_select) {
+        ctx.secondary_buffer[SCREEN_WIDTH * y + x] = dst.raw;
+    } else {
+        ctx.color_buffer[SCREEN_WIDTH * y + x] = dst.raw;
+    }
+}
+
 static void draw_triangle(const Vertex* vertices) {
     const Vertex& a = vertices[0];
     Vertex b = vertices[1];
@@ -144,9 +398,9 @@ static void draw_triangle(const Vertex* vertices) {
 
     // Calculate bounding box
     const int x_min = std::max(std::min(c.x, std::min(a.x, b.x)), 0.0F);
-    const int x_max = std::min(std::max(c.x, std::max(a.x, b.x)), (f32)SCREEN_WIDTH);
+    const int x_max = std::min(std::max(c.x, std::max(a.x, b.x)), (f32)SCREEN_WIDTH - 1);
     const int y_min = std::max(std::min(c.y, std::min(a.y, b.y)), 0.0F);
-    const int y_max = std::min(std::max(c.y, std::max(a.y, b.y)), (f32)SCREEN_HEIGHT);
+    const int y_max = std::min(std::max(c.y, std::max(a.y, b.y)), (f32)SCREEN_HEIGHT - 1);
 
     if constexpr (!SILENT_PVR) std::printf("PVR Bounding box (xmin: %d, xmax: %d, ymin: %d, ymax: %d)\n", x_min, x_max, y_min, y_max);
 
@@ -169,13 +423,19 @@ static void draw_triangle(const Vertex* vertices) {
             if ((w0 >= 0.0) && (w1 >= 0.0) && (w2 >= 0.0)) {
                 const f32 z = interpolate(w0, w1, w2, a.z, b.z, c.z, area);
 
-                if (z < ctx.depth_buffer[SCREEN_WIDTH * y + x]) {
+                if (!depth_test(z, x, y)) {
                     continue;
                 }
 
                 Color color = c.color;
 
-                if (ctx.use_texture_mapping) {
+                if (!ctx.tsp_instr.use_alpha) {
+                    color.a = 0xFF;
+                } else if (ctx.isp_instr.regular.use_gouraud_shading) {
+                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
+                }
+
+                if (ctx.isp_instr.regular.use_texture_mapping) {
                     f32 u = interpolate(w0, w1, w2, a.u / a.z, b.u / b.z, c.u / c.z, area);
                     f32 v = interpolate(w0, w1, w2, a.v / a.z, b.v / b.z, c.v / c.z, area);
 
@@ -184,48 +444,28 @@ static void draw_triangle(const Vertex* vertices) {
                     u *= 1.0 / correct_z;
                     v *= 1.0 / correct_z;
 
-                    assert((u >= 0.0) && (u <= 1.0));
-                    assert((v >= 0.0) && (v <= 1.0));
+                    if (ctx.tsp_instr.clamp_u) {
+                        u = clamp_uv(u);
+                    } else {
+                        u = repeat_uv(u);
+                    }
+
+                    if (ctx.tsp_instr.clamp_v) {
+                        v = clamp_uv(v);
+                    } else {
+                        v = repeat_uv(v);
+                    }
 
                     const int tex_x = ctx.u_size * u;
                     const int tex_y = ctx.v_size * v;
 
-                    const u16 tex_color = read_texel<u16>(tex_x, tex_y);
-
-                    if (tex_color == 0) {
-                        continue;
-                    }
-
-                    switch (ctx.texture_format) {
-                        case TEXTURE_FORMAT_RGB565:
-                            color.a = 0xFF;
-                            color.r = (tex_color >> 11) << 3;
-                            color.g = (tex_color >>  5) << 2;
-                            color.b = (tex_color >>  0) << 3;
-                            color.r |= color.r >> 5;
-                            color.g |= color.g >> 6;
-                            color.b |= color.b >> 5;
-                            break;
-                        case TEXTURE_FORMAT_ARGB4444:
-                            color.a = (tex_color >> 12) << 4;
-                            color.r = (tex_color >>  8) << 4;
-                            color.g = (tex_color >>  4) << 4;
-                            color.b = (tex_color >>  0) << 4;
-                            color.a |= color.a >> 4;
-                            color.r |= color.r >> 4;
-                            color.g |= color.g >> 4;
-                            color.b |= color.b >> 4;
-                            break;
-                        default:
-                            std::printf("PVR Unimplemented texture format %u\n", ctx.texture_format);
-                            exit(1);
-                    }
-                } else if (ctx.use_gouraud_shading) {
-                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
+                    color = combine_colors(
+                        color,
+                        unpack_texel(read_texel<u16>(tex_x, tex_y))
+                    );
                 }
 
-                ctx.color_buffer[SCREEN_WIDTH * y + x] = color.raw;
-                ctx.depth_buffer[SCREEN_WIDTH * y + x] = z;
+                blend_and_flush(color, x, y);
             }
         }
     }
@@ -268,33 +508,32 @@ void shutdown() {
     ta::shutdown();
 }
 
-void set_gouraud_shading(const bool use_gouraud_shading) {
-    ctx.use_gouraud_shading = use_gouraud_shading;
+void set_isp_instruction(const IspInstruction isp_instr) {
+    ctx.isp_instr = isp_instr;
 }
 
-void set_texture_format(const u32 texture_format) {
-    ctx.texture_format = texture_format;
+void set_tsp_instruction(const TspInstruction tsp_instr) {
+    ctx.tsp_instr = tsp_instr;
+
+    // Update settings
+    ctx.u_size = 8 << tsp_instr.u_size;
+    ctx.v_size = 8 << tsp_instr.v_size;
 }
 
-void set_texture_mapping(const bool use_texture_mapping) {
-    ctx.use_texture_mapping = use_texture_mapping;
+void set_texture_control(const TextureControlWord texture_control) {
+    ctx.texture_control = texture_control;
+
+    // Update settings
+    ctx.texture_addr = texture_control.regular.texture_addr * sizeof(u64);
 }
 
-void set_texture_size(const int u_size, const int v_size) {
-    ctx.u_size = u_size;
-    ctx.v_size = v_size;
-}
-
-void set_texture_swizzling(const bool use_swizzling) {
-    ctx.use_swizzling = use_swizzling;
-}
-
-void set_texture_address(const u32 addr) {
-    ctx.texture_address = addr;
+void set_translucent(const bool is_translucent) {
+    ctx.is_translucent = is_translucent;
 }
 
 void clear_buffers() {
     ctx.color_buffer.fill(0);
+    ctx.secondary_buffer.fill(0);
     ctx.depth_buffer.fill(0.0);
 }
 

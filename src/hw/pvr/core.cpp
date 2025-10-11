@@ -125,11 +125,11 @@ constexpr bool SILENT_CORE = true;
 constexpr usize FOG_TABLE_SIZE = 0x80;
 
 struct VertexStrip {
-    bool use_gouraud_shading;
-    bool use_texture_mapping;
-
-    u32 tsp_instr;
-    u32 texture_control;
+    IspInstruction isp_instr;
+    TspInstruction tsp_instr;
+    TextureControlWord texture_control;
+    
+    bool is_translucent;
 
     std::vector<Vertex> vertices;
 };
@@ -410,18 +410,85 @@ struct {
 constexpr i64 CORE_DELAY = 0x8000;
 constexpr int CORE_INTERRUPT = 2;
 
+static void draw_background() {
+    if (ISP_BACKGND_T.skip != 1) {
+        std::printf("CORE Unimplemented skip %u\n", ISP_BACKGND_T.skip);
+        return;
+    }
+
+    const u32 background_addr = (ISP_BACKGND_T.tag_address << 2) + PARAM_BASE;
+
+    const IspInstruction isp_instr = IspInstruction{.raw = read_vram_linear<u32>(background_addr)};
+    const TspInstruction tsp_instr = TspInstruction{.raw = read_vram_linear<u32>(background_addr + 4)};
+    const TextureControlWord texture_control = TextureControlWord{.raw = read_vram_linear<u32>(background_addr + 8)};
+
+    std::printf("ISP instruction = %08X\n", isp_instr.raw);
+    std::printf("TSP instruction = %08X\n", tsp_instr.raw);
+    std::printf("Texture control = %08X\n", texture_control.raw);
+
+    VertexStrip background_strip{.isp_instr = isp_instr, .tsp_instr = tsp_instr, .texture_control = texture_control};
+
+    for (u32 i = 0; i < 3; i++) {
+        const u32 vertex_addr = background_addr + 12 + 4 * i * sizeof(u32);
+
+        Vertex vertex{
+            .x = to_f32(read_vram_linear<u32>(vertex_addr)),
+            .y = to_f32(read_vram_linear<u32>(vertex_addr + 1 * sizeof(u32))),
+            // .z = to_f32(read_texture_memory<u32>(vertex_addr + 2 * sizeof(u32))),
+            .z = ISP_BACKGND_D,
+            .color.raw = read_vram_linear<u32>(vertex_addr + 3 * sizeof(u32))
+        };
+
+        background_strip.vertices.push_back(vertex);
+
+        if (i == 2) {
+            background_strip.vertices.emplace_back(
+                Vertex{
+                    .x = background_strip.vertices[1].x,
+                    .y = background_strip.vertices[2].y,
+                    .z = background_strip.vertices[0].z,
+                    .color = background_strip.vertices[0].color
+                }
+            );
+        }
+    }
+
+    for (int i = 0; i < 4; i++) {
+        auto& vertex = background_strip.vertices[i];
+
+        std::printf("ISP Background vertex %d (x = %f, y = %f, z = %f, u = %f, v = %f, color = %08X)\n",
+            i,
+            vertex.x,
+            vertex.y,
+            vertex.z,
+            vertex.u,
+            vertex.v,
+            vertex.color.raw
+        );
+    }
+
+    pvr::set_isp_instruction(background_strip.isp_instr);
+    pvr::set_tsp_instruction(background_strip.tsp_instr);
+    pvr::set_texture_control(background_strip.texture_control);
+    pvr::set_translucent(false);
+    
+    for (usize i = 0; i < (background_strip.vertices.size() - 2); i++) {
+        pvr::submit_triangle(&background_strip.vertices[i]);
+    }
+}
+
 static void start_render() {
     pvr::clear_buffers();
+
+    draw_background();
 
     for (const auto& strip : ctx.vertex_strips) {
         assert(strip.vertices.size() > 2);
 
-        pvr::set_gouraud_shading(strip.use_gouraud_shading);
-        pvr::set_texture_mapping(strip.use_texture_mapping);
-        pvr::set_texture_format((strip.texture_control >> 27) & 7);
-        pvr::set_texture_size(8 << ((strip.tsp_instr >> 3) & 7), 8 << (strip.tsp_instr & 7));
-        pvr::set_texture_swizzling((strip.texture_control & (1 << 26)) == 0);
-        pvr::set_texture_address((strip.texture_control & 0x1FFFFF) << 3);
+        pvr::set_isp_instruction(strip.isp_instr);
+        pvr::set_tsp_instruction(strip.tsp_instr);
+        pvr::set_texture_control(strip.texture_control);
+        pvr::set_translucent(strip.is_translucent);
         
         for (usize i = 0; i < (strip.vertices.size() - 2); i++) {
             pvr::submit_triangle(&strip.vertices[i]);
@@ -810,16 +877,13 @@ template void write(u32, u16);
 template void write(u32, u64);
 
 void begin_vertex_strip(
-    const u32 tsp_instr,
-    const u32 texture_control
+    const IspInstruction isp_instr,
+    const TspInstruction tsp_instr,
+    const TextureControlWord texture_control
 ) {
-    // Create empty strip
-    VertexStrip strip{};
-
-    strip.tsp_instr = tsp_instr;
-    strip.texture_control = texture_control;
-
-    ctx.vertex_strips.push_back(strip);
+    ctx.vertex_strips.emplace_back(
+        VertexStrip{.isp_instr = isp_instr, .tsp_instr = tsp_instr, .texture_control = texture_control}
+    );
 }
 
 void push_vertex(const Vertex vertex) {
@@ -839,14 +903,10 @@ void push_vertex(const Vertex vertex) {
     ctx.vertex_strips[length].vertices.push_back(vertex);
 }
 
-void end_vertex_strip(
-    const bool use_gouraud_shading,
-    const bool use_texture_mapping
-) {
+void end_vertex_strip(const bool is_translucent) {
     VertexStrip& strip = ctx.vertex_strips[ctx.vertex_strips.size() - 1];
 
-    strip.use_gouraud_shading = use_gouraud_shading;
-    strip.use_texture_mapping = use_texture_mapping;
+    strip.is_translucent = is_translucent;
 }
 
 }

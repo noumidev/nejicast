@@ -22,15 +22,13 @@ template<typename T>
 void write(const u32 addr, const T data);
 
 void begin_vertex_strip(
-    const u32 tsp_instr,
-    const u32 texture_control
+    const IspInstruction isp_instr,
+    const TspInstruction tsp_instr,
+    const TextureControlWord texture_control
 );
 
 void push_vertex(const pvr::Vertex vertex);
 
-void end_vertex_strip(
-    const bool use_gouraud_shading,
-    const bool use_texture_mapping
-);
+void end_vertex_strip(const bool is_translucent);
 
 }

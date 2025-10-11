@@ -50,10 +50,11 @@ union ParameterControlWord {
 struct {
     ParameterControlWord current_global_parameter;
 
-    u32 intensity_colors[4];
+    IspInstruction current_isp_instr;
+    TspInstruction current_tsp_instr;
+    TextureControlWord current_texture_control;
 
-    u32 current_tsp_instr;
-    u32 current_texture_control;
+    u32 intensity_colors[4];
 
     bool has_list_type;
     bool is_first_vertex;
@@ -228,21 +229,25 @@ void fifo_block_write(const u8 *bytes) {
 
             ctx.current_global_parameter = parameter_control;
 
+            ctx.current_isp_instr = IspInstruction{.raw = fifo_bytes[1]};
+            ctx.current_tsp_instr = TspInstruction{.raw = fifo_bytes[2]};
+            ctx.current_texture_control = TextureControlWord{.raw = fifo_bytes[3]};
+
+            ctx.current_isp_instr.regular.short_uv = ctx.current_global_parameter.use_short_texture_coordinates;
+            ctx.current_isp_instr.regular.use_gouraud_shading = ctx.current_global_parameter.use_gouraud_shading;
+            ctx.current_isp_instr.regular.use_texture_mapping = ctx.current_global_parameter.use_texture_mapping;
+            ctx.current_isp_instr.regular.use_offset_color = ctx.current_global_parameter.use_bump_mapping;
+
             std::memcpy(ctx.intensity_colors, &fifo_bytes[4], sizeof(ctx.intensity_colors));
-
-            ctx.current_tsp_instr = fifo_bytes[2];
-            ctx.current_texture_control = fifo_bytes[3];
-
-            if (ctx.current_texture_control != 0) {
-                std::printf("TSP instruction = %08X\n", ctx.current_texture_control);
+            
+            if constexpr (!SILENT_TA) {
+                std::printf("ISP instruction = %08X\n", ctx.current_isp_instr.raw);
+                std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr.raw);
+                std::printf("Texture control = %08X\n", ctx.current_texture_control.raw);   
             }
 
             assert(!ctx.current_global_parameter.use_bump_mapping);
             assert(ctx.current_global_parameter.volume_type == 0);
-
-            if (ctx.current_global_parameter.use_texture_mapping) {
-                std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr);
-            }
 
             if (!ctx.has_list_type) {
                 switch (ctx.current_global_parameter.list_type) {
@@ -272,6 +277,7 @@ void fifo_block_write(const u8 *bytes) {
         case PARAM_TYPE_VERTEX:
             if (ctx.is_first_vertex) {
                 core::begin_vertex_strip(
+                    ctx.current_isp_instr,
                     ctx.current_tsp_instr,
                     ctx.current_texture_control
                 );
@@ -312,8 +318,7 @@ void fifo_block_write(const u8 *bytes) {
 
             if (parameter_control.end_of_strip) {
                 core::end_vertex_strip(
-                    ctx.current_global_parameter.use_gouraud_shading,
-                    ctx.current_global_parameter.use_texture_mapping
+                    ctx.current_global_parameter.list_type >= LIST_TYPE_TRANSLUCENT
                 );
 
                 ctx.is_first_vertex = true;
