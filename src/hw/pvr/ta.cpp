@@ -253,6 +253,8 @@ void fifo_block_write(const u8 *bytes) {
                 switch (ctx.current_global_parameter.list_type) {
                     case LIST_TYPE_OPAQUE:
                         if constexpr (!SILENT_TA) std::puts("TA Opaque list");
+
+                        core::begin_display_list();
                         break;
                     case LIST_TYPE_OPAQUE_MODIFIER:
                         if constexpr (!SILENT_TA) std::puts("TA Opaque Modifier list");

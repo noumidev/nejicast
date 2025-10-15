@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <queue>
 #include <vector>
 
 #include <scheduler.hpp>
@@ -134,10 +135,14 @@ struct VertexStrip {
     std::vector<Vertex> vertices;
 };
 
+struct DisplayList {
+    std::vector<VertexStrip> strips;
+};
+
 struct {
     std::array<u16, FOG_TABLE_SIZE> fog_table;
 
-    std::vector<VertexStrip> vertex_strips;
+    std::queue<DisplayList> display_lists;
 
     u32 isp_parameter_base;
     u32 region_base;
@@ -478,11 +483,18 @@ static void draw_background() {
 }
 
 static void start_render() {
+    if (ctx.display_lists.empty()) {
+        std::puts("CORE has no display lists");
+        exit(1);
+    }
+
     pvr::clear_buffers();
 
     draw_background();
 
-    for (const auto& strip : ctx.vertex_strips) {
+    const auto& display_list = ctx.display_lists.front();
+
+    for (const auto& strip : display_list.strips) {
         assert(strip.vertices.size() > 2);
 
         pvr::set_isp_instruction(strip.isp_instr);
@@ -504,7 +516,7 @@ static void start_render() {
         scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(CORE_DELAY)
     );
 
-    ctx.vertex_strips.clear();
+    ctx.display_lists.pop();
 }
 
 void initialize() {
@@ -596,6 +608,9 @@ void write(const u32 addr, const u32 data) {
     }
 
     switch (addr) {
+        case IO_ID: // ??
+            std::printf("ID write32 = %08X\n", data);
+            break;
         case IO_SOFTRESET:
             std::printf("SOFTRESET write32 = %08X\n", data);
             break;
@@ -876,23 +891,29 @@ template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
 
+void begin_display_list() {
+    ctx.display_lists.emplace(DisplayList{});
+}
+
 void begin_vertex_strip(
     const IspInstruction isp_instr,
     const TspInstruction tsp_instr,
     const TextureControlWord texture_control
 ) {
-    ctx.vertex_strips.emplace_back(
+    ctx.display_lists.back().strips.emplace_back(
         VertexStrip{.isp_instr = isp_instr, .tsp_instr = tsp_instr, .texture_control = texture_control}
     );
 }
 
 void push_vertex(const Vertex vertex) {
-    const usize length = ctx.vertex_strips.size() - 1;
+    auto& strips = ctx.display_lists.back().strips;
+
+    const usize length = strips.size() - 1;
 
     if constexpr (!SILENT_CORE) {
         std::printf("CORE Strip %zu vertex %zu (x = %f, y = %f, z = %f, color = %08X\n",
             length,
-            ctx.vertex_strips[length].vertices.size(),
+            strips.back().vertices.size(),
             vertex.x,
             vertex.y,
             vertex.z,
@@ -900,13 +921,13 @@ void push_vertex(const Vertex vertex) {
         );
     }
 
-    ctx.vertex_strips[length].vertices.push_back(vertex);
+    strips.back().vertices.push_back(vertex);
 }
 
 void end_vertex_strip(const bool is_translucent) {
-    VertexStrip& strip = ctx.vertex_strips[ctx.vertex_strips.size() - 1];
+    auto& strips = ctx.display_lists.back().strips;
 
-    strip.is_translucent = is_translucent;
+    strips.back().is_translucent = is_translucent;
 }
 
 }

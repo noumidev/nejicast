@@ -21,6 +21,8 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
+void begin_display_list();
+
 void begin_vertex_strip(
     const IspInstruction isp_instr,
     const TspInstruction tsp_instr,
