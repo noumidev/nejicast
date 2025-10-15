@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "common/types.hpp"
 #include <hw/pvr/pvr.hpp>
 
 #include <algorithm>
@@ -82,7 +81,7 @@ u16 read_vram_interleaved(const u32 addr) {
         std::memcpy(&data, &ctx.video_ram[sizeof(u32) * (offset >> 1)], sizeof(data));
     }
 
-    return ((addr & 1) != 0) ? data >> 16 : data;
+    return ((addr & 2) != 0) ? data >> 16 : data;
 }
 
 template u32 read_vram_interleaved(u32);
@@ -150,9 +149,7 @@ static u8 clamp_color_channel(const f32 channel) {
 }
 
 static u8 clamp_color_channel(const int channel) {
-    if (channel < 0) {
-        return 0;
-    } else if (channel > 255) {
+    if (channel > 255) {
         return 255;
     }
 
@@ -179,11 +176,7 @@ static f32 clamp_uv(const f32 uv) {
 }
 
 static f32 repeat_uv(const f32 uv) {
-    if ((uv < 0.0) || (uv > 1.0)) {
-        return std::abs(std::fmodf(uv, 1.0));
-    }
-
-    return uv;
+    return std::abs(std::fmodf(uv, 1.0));
 }
 
 static u32 interpolate_colors(
@@ -346,15 +339,17 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
         dst = Color{.raw = ctx.color_buffer[SCREEN_WIDTH * y + x]};
     }
 
+    const Color src_saved = src;
+
     switch (ctx.tsp_instr.source_instr) {
         case BLEND_FUNCTION_ONE:
             // Nothing to do here
             break;
         case BLEND_FUNCTION_SOURCE_ALPHA:
-            src.r = color_multiply(src.r, src.a);
-            src.g = color_multiply(src.g, src.a);
-            src.b = color_multiply(src.b, src.a);
-            src.a = color_multiply(src.a, src.a);
+            src.r = color_multiply(src.r, src_saved.a);
+            src.g = color_multiply(src.g, src_saved.a);
+            src.b = color_multiply(src.b, src_saved.a);
+            src.a = color_multiply(src.a, src_saved.a);
             break;
         default:
             std::printf("Unimplemented source blend function %u\n", ctx.tsp_instr.source_instr);
@@ -366,10 +361,10 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
             dst.raw = 0;
             break;
         case BLEND_FUNCTION_INVERSE_SOURCE_ALPHA:
-            dst.a = color_multiply(dst.a, 255 - src.a);
-            dst.r = color_multiply(dst.r, 255 - src.a);
-            dst.g = color_multiply(dst.g, 255 - src.a);
-            dst.b = color_multiply(dst.b, 255 - src.a);
+            dst.a = color_multiply(dst.a, 255 - src_saved.a);
+            dst.r = color_multiply(dst.r, 255 - src_saved.a);
+            dst.g = color_multiply(dst.g, 255 - src_saved.a);
+            dst.b = color_multiply(dst.b, 255 - src_saved.a);
             break;
         default:
             std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
@@ -429,10 +424,12 @@ static void draw_triangle(const Vertex* vertices) {
 
                 Color color = c.color;
 
+                if (ctx.isp_instr.regular.use_gouraud_shading) {
+                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
+                }
+
                 if (!ctx.tsp_instr.use_alpha) {
                     color.a = 0xFF;
-                } else if (ctx.isp_instr.regular.use_gouraud_shading) {
-                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
                 }
 
                 if (ctx.isp_instr.regular.use_texture_mapping) {
@@ -454,6 +451,14 @@ static void draw_triangle(const Vertex* vertices) {
                         v = clamp_uv(v);
                     } else {
                         v = repeat_uv(v);
+                    }
+
+                    if (ctx.tsp_instr.flip_u) {
+                        u = 1.0 - u;
+                    }
+
+                    if (ctx.tsp_instr.flip_v) {
+                        v = 1.0 - v;
                     }
 
                     const int tex_x = ctx.u_size * u;
