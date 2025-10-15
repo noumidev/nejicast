@@ -159,7 +159,7 @@ SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
 
     screen.texture = SDL_CreateTexture(
         screen.renderer,
-        SDL_PIXELFORMAT_ARGB8888,
+        SDL_PIXELFORMAT_XRGB8888,
         SDL_TEXTUREACCESS_STREAMING,
         SCREEN_WIDTH,
         SCREEN_HEIGHT
