@@ -433,13 +433,11 @@ static void draw_triangle(const Vertex* vertices) {
                 }
 
                 if (ctx.isp_instr.regular.use_texture_mapping) {
-                    f32 u = interpolate(w0, w1, w2, a.u / a.z, b.u / b.z, c.u / c.z, area);
-                    f32 v = interpolate(w0, w1, w2, a.v / a.z, b.v / b.z, c.v / c.z, area);
+                    f32 u = interpolate(w0, w1, w2, a.u / (1.0 / a.z), b.u / (1.0 / b.z), c.u / (1.0 / c.z), area);
+                    f32 v = interpolate(w0, w1, w2, a.v / (1.0 / a.z), b.v / (1.0 / b.z), c.v / (1.0 / c.z), area);
 
-                    const f32 correct_z = interpolate(w0, w1, w2, 1.0 / a.z, 1.0 / b.z, 1.0 / c.z, area);
-
-                    u *= 1.0 / correct_z;
-                    v *= 1.0 / correct_z;
+                    u /= z;
+                    v /= z;
 
                     if (ctx.tsp_instr.clamp_u) {
                         u = clamp_uv(u);
