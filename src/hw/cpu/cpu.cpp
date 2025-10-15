@@ -21,6 +21,7 @@
 #include <hw/cpu/ocio.hpp>
 #include <hw/cpu/tmu.hpp>
 #include <hw/holly/bus.hpp>
+#include <hw/holly/intc.hpp>
 
 namespace hw::cpu {
 
@@ -1503,26 +1504,26 @@ static i64 i_not(const u16 instr) {
     return 1;
 }
 
-static i64 i_ocbi(const u16 instr) {
+static i64 i_ocbi(const u16) {
     // TODO: implement operand cache?
 
-    std::printf("SH-4 operand cache block invalidate @ %08X\n", GPRS[N]);
+    // std::printf("SH-4 operand cache block invalidate @ %08X\n", GPRS[N]);
 
     return 1;
 }
 
-static i64 i_ocbp(const u16 instr) {
+static i64 i_ocbp(const u16) {
     // TODO: implement operand cache?
 
-    std::printf("SH-4 operand cache block purge @ %08X\n", GPRS[N]);
+    // std::printf("SH-4 operand cache block purge @ %08X\n", GPRS[N]);
 
     return 1;
 }
 
-static i64 i_ocbwb(const u16 instr) {
+static i64 i_ocbwb(const u16) {
     // TODO: implement operand cache?
 
-    std::printf("SH-4 operand cache block write-back @ %08X\n", GPRS[N]);
+    // std::printf("SH-4 operand cache block write-back @ %08X\n", GPRS[N]);
 
     return 1;
 }
