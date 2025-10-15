@@ -29,7 +29,7 @@ constexpr bool SILENT_SCIF = true;
 
 enum : u32 {
     BASE_INSTRUCTION_CACHE_ADDRESS = 0x10000000,
-    BASE_OPERAND_CACHE_TAG = 0x14000000,
+    BASE_OPERAND_CACHE_TAG         = 0x14000000,
 };
 
 enum : u32 {
@@ -251,6 +251,15 @@ constexpr u32 CPUVER = 0x040205C1;
 
 template<>
 u32 read(const u32 addr) {
+    switch (addr & 0xFF000000) {
+        case BASE_INSTRUCTION_CACHE_ADDRESS:
+            std::printf("SH-4 instruction cache address read32 @ %08X\n", addr);
+            return 0;
+        case BASE_OPERAND_CACHE_TAG:
+            std::printf("SH-4 operand cache tag read32 @ %08X\n", addr);
+            return 0;
+    }
+
     switch (addr) {
         case IO_MMUCR:
             std::puts("MMUCR read32");
@@ -597,12 +606,12 @@ void write(const u32 addr, const u32 data) {
             ccn::set_page_table_assistance(data);
             break;
         case IO_QACR1:
-            std::printf("QACR1 write32 = %08X\n", data);
+            // std::printf("QACR1 write32 = %08X\n", data);
             
             ccn::set_queue_address_control(ccn::STORE_QUEUE_1, data);
             break;
         case IO_QACR2:
-            std::printf("QACR2 write32 = %08X\n", data);
+            // std::printf("QACR2 write32 = %08X\n", data);
             
             ccn::set_queue_address_control(ccn::STORE_QUEUE_2, data);
             break;
