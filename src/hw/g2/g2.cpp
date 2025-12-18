@@ -170,18 +170,34 @@ T read(const u32 addr) {
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_ADEN:
+            std::puts("SB_ADEN read32");
+
+            return SB_ADEN;
         case IO_ADST:
             std::puts("SB_ADST read32");
 
             return SB_ADST;
+        case IO_E1EN:
+            std::puts("SB_E1EN read32");
+
+            return SB_E1EN;
         case IO_E1ST:
             std::puts("SB_E1ST read32");
 
             return SB_E1ST;
+        case IO_E2EN:
+            std::puts("SB_E2EN read32");
+
+            return SB_E2EN;
         case IO_E2ST:
             std::puts("SB_E2ST read32");
 
             return SB_E2ST;
+        case IO_DDEN:
+            std::puts("SB_DDEN read32");
+
+            return SB_DDEN;
         case IO_DDST:
             std::puts("SB_DDST read32");
 

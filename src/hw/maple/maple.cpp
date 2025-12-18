@@ -227,6 +227,10 @@ T read(const u32 addr) {
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_MDEN:
+            std::puts("SB_MDEN read32");
+
+            return SB_MDEN;
         case IO_MDST:
             std::puts("SB_MDST read32");
 

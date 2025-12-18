@@ -69,9 +69,21 @@ T read(const u32 addr) {
     exit(1);
 }
 
+template<>
+u32 read(const u32 addr) {
+    switch (addr) {
+        case IO_PDEN:
+            std::puts("SB_PDEN read32");
+
+            return SB_PDEN;
+        default:
+            std::printf("Unmapped PVR I/F read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
 template u8 read(u32);
 template u16 read(u32);
-template u32 read(u32);
 template u64 read(u32);
 
 template<typename T>

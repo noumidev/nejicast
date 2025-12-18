@@ -115,6 +115,10 @@ u32 read(const u32 addr) {
             std::puts("SB_C2DST read32");
 
             return SB_C2DST;
+        case IO_SDST:
+            std::puts("SB_SDST read32");
+
+            return SB_SDST;
         case IO_FFST:
             // There's no need to implement this properly (yet?)
             // std::puts("SB_FFST read32");
