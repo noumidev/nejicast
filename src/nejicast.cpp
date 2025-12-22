@@ -3,9 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "SDL3/SDL_events.h"
-#include "SDL3/SDL_init.h"
-#include "SDL3/SDL_keycode.h"
 #include <nejicast.hpp>
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -17,7 +14,9 @@
 #include <cstring>
 
 #include <scheduler.hpp>
+#include <common/cdi.hpp>
 #include <common/elf.hpp>
+#include <common/file.hpp>
 #include <hw/cpu/cpu.hpp>
 #include <hw/g1/g1.hpp>
 #include <hw/g2/g2.hpp>
@@ -26,7 +25,7 @@
 #include <hw/maple/maple.hpp>
 #include <hw/pvr/pvr.hpp>
 
-constexpr int NUM_ARGS = 4;
+constexpr int NUM_MIN_ARGS = 3;
 
 namespace nejicast {
 
@@ -95,7 +94,14 @@ void initialize(const common::Config& config) {
     hw::maple::initialize();
     hw::pvr::initialize();
 
-    common::load_elf(config.elf_path);
+    if (config.app_path != nullptr) {
+        if (common::elf::is_elf(config.app_path)) {
+            common::elf::load(config.app_path);
+        } else {
+            // Assume CDI
+            common::cdi::load(config.app_path);
+        }
+    }
 }
 
 void shutdown() {
@@ -137,8 +143,8 @@ static struct {
 } screen;
 
 SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
-    if (argc < NUM_ARGS) {
-        std::puts("Usage: nejicast [path to boot ROM] [path to FLASH ROM] [path to ELF]");
+    if (argc < NUM_MIN_ARGS) {
+        std::puts("Usage: nejicast [path to boot ROM] [path to FLASH ROM] (path to ELF|CDI)");
 
         return SDL_APP_FAILURE;
     }
@@ -175,9 +181,12 @@ SDL_AppResult SDL_AppInit(void**, int argc, char** argv) {
 
     common::Config config {
         .boot_path = argv[1],
-        .flash_path = argv[2],
-        .elf_path = argv[3]
+        .flash_path = argv[2]
     };
+
+    if (argc >= NUM_MIN_ARGS) {
+        config.app_path = argv[3];
+    }
     
     nejicast::reset();
     nejicast::initialize(config);
