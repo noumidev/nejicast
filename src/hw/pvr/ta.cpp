@@ -246,8 +246,15 @@ void fifo_block_write(const u8 *bytes) {
                 std::printf("Texture control = %08X\n", ctx.current_texture_control.raw);   
             }
 
-            assert(!ctx.current_global_parameter.use_bump_mapping);
-            assert(ctx.current_global_parameter.volume_type == 0);
+            if (ctx.current_global_parameter.use_bump_mapping) {
+                // std::puts("TA Unimplemented bump mapping");
+                // exit(1);
+            }
+
+            if (ctx.current_global_parameter.volume_type != 0) {
+                std::printf("TA Unimplemented volume type %u\n", ctx.current_global_parameter.volume_type);
+                exit(1);
+            }
 
             if (!ctx.has_list_type) {
                 switch (ctx.current_global_parameter.list_type) {
