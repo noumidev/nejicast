@@ -25,6 +25,7 @@ add_subdirectory(external/SDL EXCLUDE_FROM_ALL)
 set(SOURCES
     src/nejicast.cpp
     src/scheduler.cpp
+    src/common/cdi.cpp
     src/common/elf.cpp
     src/common/file.cpp
     src/hw/cpu/bsc.cpp
@@ -40,6 +41,7 @@ set(SOURCES
     src/hw/cpu/tmu.cpp
     src/hw/cpu/ubc.cpp
     src/hw/g1/g1.cpp
+    src/hw/g1/flash.cpp
     src/hw/g1/gdrom.cpp
     src/hw/g2/aica.cpp
     src/hw/g2/g2.cpp
@@ -60,6 +62,7 @@ set(SOURCES
 set(HEADERS
     include/nejicast.hpp
     include/scheduler.hpp
+    include/common/cdi.hpp
     include/common/config.hpp
     include/common/elf.hpp
     include/common/file.hpp
@@ -77,6 +80,7 @@ set(HEADERS
     include/hw/cpu/tmu.hpp
     include/hw/cpu/ubc.hpp
     include/hw/g1/g1.hpp
+    include/hw/g1/flash.hpp
     include/hw/g1/gdrom.hpp
     include/hw/g2/aica.hpp
     include/hw/g2/g2.hpp
