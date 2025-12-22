@@ -106,7 +106,7 @@ T read(const u32 addr) {
     exit(1);
 }
 
-constexpr u32 SB_REV = 1;
+constexpr u32 SB_REV = 16;
 
 template<>
 u32 read(const u32 addr) {
