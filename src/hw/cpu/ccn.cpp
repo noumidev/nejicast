@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hw/holly/bus.hpp>
+
 namespace hw::cpu::ocio::ccn {
 
 #define PTEH   ctx.page_table.entry_hi
@@ -167,6 +169,8 @@ void set_cache_control(const u32 data) {
 
         CCR.invalidate_instruction_cache = 0;
     }
+
+    hw::holly::bus::remap_scratchpad(CCR.enable_operand_cache_ram, CCR.enable_operand_cache_index);
 }
 
 void set_trapa_exception(const u32 data) {

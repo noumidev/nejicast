@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "hw/pvr/ta.hpp"
 #include <hw/holly/bus.hpp>
 
 #include <array>
@@ -26,6 +25,7 @@
 #include <hw/pvr/core.hpp>
 #include <hw/pvr/interface.hpp>
 #include <hw/pvr/pvr.hpp>
+#include <hw/pvr/ta.hpp>
 
 namespace hw::holly::bus {
 
@@ -47,11 +47,13 @@ enum : u32 {
     BASE_AICA      = 0x00700000,
     BASE_RTC       = 0x00710000,
     BASE_WAVE_RAM  = 0x00800000,
+    BASE_EXTDEV    = 0x01000000,
     BASE_VRAM_64   = 0x04000000,
     BASE_VRAM_32   = 0x05000000,
     BASE_DRAM      = 0x0C000000,
     BASE_TA_FIFO   = 0x10000000,
     BASE_TEX_PATH  = 0x11000000,
+    BASE_OCRAM     = 0x1C000000,
 };
 
 enum : u32 {
@@ -61,16 +63,21 @@ enum : u32 {
     SIZE_MODEM     = 0x00000800,
     SIZE_PVR_CORE  = 0x00002000,
     SIZE_AICA      = 0x00008000,
+    SIZE_EXTDEV    = 0x01000000,
     SIZE_WAVE_RAM  = 0x00200000,
     SIZE_VRAM_32   = 0x00800000,
-    SIZE_DRAM      = 0x02000000,
+    SIZE_DRAM      = 0x01000000,
+    SIZE_OCRAM     = 0x04000000,
 };
+
+constexpr usize SIZE_SCRATCHPAD = 0x2000;
 
 struct {
     // Pagetables for software fastmem
     std::array<u8*, ADDRESS_SPACE / PAGE_SIZE> rd_table, wr_table;
 
     std::array<u8, SIZE_DRAM> dram;
+    std::array<u8, SIZE_SCRATCHPAD> scratchpad;
 } ctx;
 
 [[maybe_unused]]
@@ -104,6 +111,29 @@ static void map_memory(
             assert(ctx.wr_table[page] == nullptr);
 
             ctx.wr_table[page] = &mem[mem_idx * PAGE_SIZE];
+        }
+    }
+}
+
+static void unmap_memory(
+    const u32 addr,
+    const u32 size,
+    const bool unmap_for_read,
+    const bool unmap_for_write
+) {
+    assert(is_aligned(addr, PAGE_SIZE));
+    assert(is_aligned(size, PAGE_SIZE));
+
+    const u32 first_page = addr / PAGE_SIZE;
+    const u32 num_pages = size / PAGE_SIZE;
+
+    for (u32 page = first_page; page < (first_page + num_pages); page++) {
+        if (unmap_for_read) {
+            ctx.rd_table[page] = nullptr;
+        }
+
+        if (unmap_for_write) {
+            ctx.wr_table[page] = nullptr;
         }
     }
 }
@@ -217,6 +247,10 @@ T read(const u32 addr) {
         return data;
     }
 
+    if ((addr & ~(SIZE_EXTDEV - 1)) == SIZE_EXTDEV) {
+        return 0xFF;
+    }
+
     switch (addr & ~(SIZE_IO - 1)) {
         case BASE_INTC:
             return hw::holly::intc::read<T>(addr);
@@ -313,6 +347,10 @@ void write(const u32 addr, const T data) {
         return;
     }
 
+    if ((addr & ~(SIZE_EXTDEV - 1)) == SIZE_EXTDEV) {
+        return;
+    }
+
     if ((addr & ~(SIZE_FLASH_ROM - 1)) == BASE_FLASH_ROM) {
         g1::flash::write<T>(addr, data);
         return;
@@ -403,6 +441,63 @@ void block_write(const u32 addr, const u8 *bytes) {
 
             std::puts("");
             exit(1);
+    }
+}
+
+void remap_scratchpad(const bool enable_scratchpad, const bool indexed_mode) {
+    constexpr usize HALF_SIZE_SCRATCHPAD = SIZE_SCRATCHPAD / 2;
+
+    unmap_memory(
+        BASE_OCRAM,
+        SIZE_OCRAM,
+        true,
+        true
+    );
+
+    if (enable_scratchpad) {
+        if (indexed_mode) {
+            std::puts("HOLLY Mapping OCRAM for indexed mode");
+
+            for (u32 addr = BASE_OCRAM; addr < (BASE_OCRAM + SIZE_OCRAM / 2); addr += HALF_SIZE_SCRATCHPAD) {
+                map_memory(
+                    &ctx.scratchpad[0],
+                    addr,
+                    HALF_SIZE_SCRATCHPAD,
+                    true,
+                    true
+                );
+
+                map_memory(
+                    &ctx.scratchpad[HALF_SIZE_SCRATCHPAD],
+                    addr + SIZE_OCRAM / 2,
+                    HALF_SIZE_SCRATCHPAD,
+                    true,
+                    true
+                );
+            }
+        } else {
+            std::puts("HOLLY Mapping OCRAM for normal mode");
+
+            for (u64 addr = BASE_OCRAM; addr < ((u64)BASE_OCRAM + (u64)SIZE_OCRAM); addr += HALF_SIZE_SCRATCHPAD) {
+                if ((addr & SIZE_SCRATCHPAD) != 0) {
+                    map_memory(
+                        &ctx.scratchpad[HALF_SIZE_SCRATCHPAD],
+                        addr,
+                        HALF_SIZE_SCRATCHPAD,
+                        true,
+                        true
+                    );
+                } else {
+                    map_memory(
+                        &ctx.scratchpad[0],
+                        addr,
+                        HALF_SIZE_SCRATCHPAD,
+                        true,
+                        true
+                    );
+                }
+            }
+        }
     }
 }
 
