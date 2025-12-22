@@ -180,6 +180,9 @@ void load(const char* path) {
 
     // Seek to header
     switch (version) {
+        case 0x80000004:
+            seek_stream(header_offset, SEEK_SET);
+            break;
         case 0x80000006:
             // Header is at the end of the CDI file
             seek_stream(-header_offset, SEEK_END);
