@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <hw/g1/g1.hpp>
+#include <hw/g1/flash.hpp>
 #include <hw/g1/gdrom.hpp>
 #include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
@@ -117,7 +118,7 @@ void initialize() {
     );
 
     map_memory(
-        g1::get_flash_rom_ptr(),
+        g1::flash::get_flash_rom_ptr(),
         BASE_FLASH_ROM,
         SIZE_FLASH_ROM,
         true,
@@ -200,7 +201,10 @@ u32 read_texture_memory(const u32 addr) {
 
 template<typename T>
 T read(const u32 addr) {
-    assert(addr < ADDRESS_SPACE);
+    if (addr >= ADDRESS_SPACE) {
+        std::printf("HOLLY Read address out of bounds (%08X)\n", addr);
+        exit(1);
+    }
 
     const u32 page = addr / PAGE_SIZE;
     const u32 offset = addr & PAGE_MASK;
@@ -258,7 +262,10 @@ template u64 read(u32);
 constexpr usize BLOCK_SIZE = 32;
 
 void block_read(const u32 addr, u8 *bytes) {
-    assert(addr < ADDRESS_SPACE);
+    if (addr >= ADDRESS_SPACE) {
+        std::printf("HOLLY Block read address out of bounds (%08X)\n", addr);
+        exit(1);
+    }
 
     const u32 page = addr / PAGE_SIZE;
     const u32 offset = addr & PAGE_MASK;
@@ -293,13 +300,21 @@ void write_texture_memory(const u32 addr, const u32 data) {
 
 template<typename T>
 void write(const u32 addr, const T data) {
-    assert(addr < ADDRESS_SPACE);
+    if (addr >= ADDRESS_SPACE) {
+        std::printf("HOLLY Write address out of bounds (%08X)\n", addr);
+        exit(1);
+    }
 
     const u32 page = addr / PAGE_SIZE;
     const u32 offset = addr & PAGE_MASK;
 
     if (ctx.wr_table[page] != nullptr) {
         std::memcpy(&ctx.wr_table[page][offset], &data, sizeof(data));
+        return;
+    }
+
+    if ((addr & ~(SIZE_FLASH_ROM - 1)) == BASE_FLASH_ROM) {
+        g1::flash::write<T>(addr, data);
         return;
     }
 
@@ -346,7 +361,10 @@ template void write(u32, u32);
 template void write(u32, u64);
 
 void block_write(const u32 addr, const u8 *bytes) {
-    assert(addr < ADDRESS_SPACE);
+    if (addr >= ADDRESS_SPACE) {
+        std::printf("HOLLY Block write address out of bounds (%08X)\n", addr);
+        exit(1);
+    }
 
     const u32 page = addr / PAGE_SIZE;
     const u32 offset = addr & PAGE_MASK;
