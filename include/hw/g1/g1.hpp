@@ -25,4 +25,6 @@ u8* get_boot_rom_ptr();
 void try_gdrom_dma();
 void execute_gdrom_dma();
 
+void set_gdrom_dma_ready(const bool ready);
+
 }

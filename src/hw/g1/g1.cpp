@@ -155,8 +155,6 @@ static void finish_gdrom_dma(const int) {
 }
 
 void try_gdrom_dma() {
-    ctx.gdrom_dma.dma_ready = true;
-
     execute_gdrom_dma();
 }
 
@@ -172,8 +170,6 @@ void execute_gdrom_dma() {
 
     std::printf("GD-ROM DMA @ %08X\n", SB_GDSTAR);
 
-    ctx.gdrom_dma.dma_ready = false;
-
     holly::bus::copy_from_bytes(
         SB_GDSTAR,
         SB_GDLEN,
@@ -185,8 +181,12 @@ void execute_gdrom_dma() {
         "GDROM_DMA_END",
         finish_gdrom_dma,
         0,
-        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(8 * 8196)
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(16 * SB_GDLEN)
     );
+}
+
+void set_gdrom_dma_ready(const bool ready) {
+    ctx.gdrom_dma.dma_ready = ready;
 }
 
 template<typename T>
@@ -215,7 +215,7 @@ u32 read(const u32 addr) {
 
             return ROM_PROTECTION_STATUS_PASSED;
         default:
-            std::printf("Unmapped G1 read32 @ %08X\n", addr);
+            // std::printf("Unmapped G1 read32 @ %08X\n", addr);
             return 0;
     }
 }
