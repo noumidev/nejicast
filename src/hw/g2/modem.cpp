@@ -13,10 +13,12 @@
 namespace hw::g2::modem {
 
 enum : u32 {
-    IO_ID1  = 0x00600004,
+    IO_ID0 = 0x00600000,
+    IO_ID1 = 0x00600004,
 };
 
 enum {
+    ID0_NO_MODEM = 0xFF, // Is this what happens on hardware?
     ID1_NO_MODEM = 0xFF, // Is this what happens on hardware?
 };
 
@@ -39,6 +41,10 @@ T read(const u32 addr) {
 template<>
 u8 read(const u32 addr) {
     switch (addr) {
+        case IO_ID0:
+            std::puts("MODEM_ID0 read8");
+
+            return ID0_NO_MODEM;
         case IO_ID1:
             std::puts("MODEM_ID1 read8");
 
