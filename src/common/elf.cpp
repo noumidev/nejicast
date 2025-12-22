@@ -15,7 +15,7 @@
 #include <common/file.hpp>
 #include <hw/holly/bus.hpp>
 
-namespace common {
+namespace common::elf {
 
 constexpr u32 ELF_SIGNATURE = 0x464C457F;
 
@@ -59,7 +59,26 @@ static T get(const std::vector<u8>& bytes, const usize offset) {
     return data;
 }
 
-void load_elf(const char* path) {
+bool is_elf(const char* path) {
+    FILE* file = std::fopen(path, "rb");
+
+    if (file == nullptr) {
+        return false;
+    }
+
+    std::vector<u8> bytes(4);
+
+    if (std::fread(bytes.data(), sizeof(u8), bytes.size(), file) != bytes.size()) {
+        std::fclose(file);
+        return false;
+    }
+
+    std::fclose(file);
+
+    return get<u32>(bytes, ELF_OFFSET_SIGNATURE) == ELF_SIGNATURE;
+}
+
+void load(const char* path) {
     const std::vector<u8> elf_bytes = load_file(path);
 
     // Sanity checks

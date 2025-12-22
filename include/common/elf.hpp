@@ -5,8 +5,10 @@
 
 #pragma once
 
-namespace common {
+namespace common::elf {
 
-void load_elf(const char* path);
+bool is_elf(const char* path);
+
+void load(const char* path);
 
 }
