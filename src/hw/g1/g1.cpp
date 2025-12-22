@@ -11,13 +11,16 @@
 #include <cstring>
 #include <vector>
 
+#include <scheduler.hpp>
 #include <common/file.hpp>
+#include <hw/holly/bus.hpp>
+#include <hw/holly/intc.hpp>
+#include <hw/g1/flash.hpp>
 #include <hw/g1/gdrom.hpp>
 
 namespace hw::g1 {
 
 constexpr usize BOOT_ROM_SIZE = 0x200000;
-constexpr usize FLASH_ROM_SIZE = 0x20000;
 
 enum : u32 {
     IO_GDSTAR  = 0x005F7404,
@@ -57,7 +60,7 @@ enum : u32 {
 #define SB_GDRPRO  ctx.boot_rom_protection
 
 struct {
-    std::vector<u8> boot_rom, flash_rom;
+    std::vector<u8> boot_rom;
 
     struct {
         u32 start_address;
@@ -65,6 +68,7 @@ struct {
         bool from_gdrom;
         bool enable;
         bool is_running;
+        bool dma_ready;
     } gdrom_dma;
 
     union {
@@ -121,19 +125,13 @@ struct {
 } ctx;
 
 void initialize(const char* boot_path, const char* flash_path) {
+    flash::initialize(flash_path);
     gdrom::initialize();
 
     ctx.boot_rom = common::load_file(boot_path);
 
     if (ctx.boot_rom.size() != BOOT_ROM_SIZE) {
         std::printf("Invalid boot ROM size %zu\n", ctx.boot_rom.size());
-        exit(1);
-    }
-
-    ctx.flash_rom = common::load_file(flash_path);
-
-    if (ctx.flash_rom.size() != FLASH_ROM_SIZE) {
-        std::printf("Invalid FLASH ROM size %zu\n", ctx.flash_rom.size());
         exit(1);
     }
 }
@@ -146,6 +144,49 @@ void reset() {
 
 void shutdown() {
     gdrom::shutdown();
+}
+
+static void finish_gdrom_dma(const int) {
+    constexpr int GDROM_DMA_INTERRUPT = 14;
+
+    SB_GDST = false;
+
+    hw::holly::intc::assert_normal_interrupt(GDROM_DMA_INTERRUPT);
+}
+
+void try_gdrom_dma() {
+    ctx.gdrom_dma.dma_ready = true;
+
+    execute_gdrom_dma();
+}
+
+void execute_gdrom_dma() {
+    if (!SB_GDST) {
+        return;
+    }
+
+    if (!ctx.gdrom_dma.dma_ready) {
+        std::puts("GD-ROM DMA not ready");
+        return;
+    }
+
+    std::printf("GD-ROM DMA @ %08X\n", SB_GDSTAR);
+
+    ctx.gdrom_dma.dma_ready = false;
+
+    holly::bus::copy_from_bytes(
+        SB_GDSTAR,
+        SB_GDLEN,
+        SB_GDLEN,
+        gdrom::get_dma_bytes(SB_GDLEN)
+    );
+
+    scheduler::schedule_event(
+        "GDROM_DMA_END",
+        finish_gdrom_dma,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(8 * 8196)
+    );
 }
 
 template<typename T>
@@ -161,8 +202,12 @@ enum {
 template<>
 u32 read(const u32 addr) {
     switch (addr) {
+        case IO_GDEN:
+            std::puts("SB_GDEN read32");
+
+            return SB_GDEN;
         case IO_GDST:
-            std::puts("SB_GDST read32");
+            // std::puts("SB_GDST read32");
 
             return SB_GDST;
         case IO_GDRPROS:
@@ -171,7 +216,7 @@ u32 read(const u32 addr) {
             return ROM_PROTECTION_STATUS_PASSED;
         default:
             std::printf("Unmapped G1 read32 @ %08X\n", addr);
-            exit(1);
+            return 0;
     }
 }
 
@@ -225,7 +270,11 @@ void write(const u32 addr, const u32 data) {
         case IO_GDST:
             std::printf("SB_GDST write32 = %08X\n", data);
 
-            assert((data & 1) == 0);
+            SB_GDST = (data & 1) != 0;
+
+            if (SB_GDST) {
+                execute_gdrom_dma();
+            }
             break;
         case IO_G1RWC:
             std::printf("SB_G1RWC write32 = %08X\n", data);
@@ -291,11 +340,6 @@ template void write(u32, u64);
 // For HOLLY access
 u8* get_boot_rom_ptr() {
     return ctx.boot_rom.data();
-}
-
-// For HOLLY access
-u8* get_flash_rom_ptr() {
-    return ctx.flash_rom.data();
 }
 
 }

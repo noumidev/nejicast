@@ -21,6 +21,8 @@ template<typename T>
 void write(const u32 addr, const T data);
 
 u8* get_boot_rom_ptr();
-u8* get_flash_rom_ptr();
+
+void try_gdrom_dma();
+void execute_gdrom_dma();
 
 }
