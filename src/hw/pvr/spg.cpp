@@ -212,6 +212,10 @@ u32 get_status() {
     return SPG_STATUS.raw;
 }
 
+u32 get_control() {
+    return SPG_CONTROL.raw;
+}
+
 u32 get_vblank_control() {
     return SPG_VBLANK.raw;
 }
