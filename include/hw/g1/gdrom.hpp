@@ -20,4 +20,6 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
+const u8* get_dma_bytes(const u32 size);
+
 }

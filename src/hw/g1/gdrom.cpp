@@ -3,16 +3,18 @@
  * Copyright (C) 2025  noumidev
  */
 
+#include "common/types.hpp"
 #include <hw/g1/gdrom.hpp>
 
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <vector>
 
 #include <scheduler.hpp>
+#include <common/cdi.hpp>
 #include <hw/holly/intc.hpp>
+#include <hw/g1/g1.hpp>
 
 namespace hw::g1::gdrom {
 
@@ -36,6 +38,8 @@ enum : u32 {
 #define GD_BYTE_COUNT    ctx.byte_count
 
 constexpr usize NUM_DATA_IN_BYTES = 12;
+
+constexpr usize SIZE_MODE = 0x20;
 
 struct {
     std::vector<u8> data_in_bytes, data_out_bytes;
@@ -93,7 +97,26 @@ struct {
             u8 hi;
         };
     } byte_count;
+
+    u8 mode[SIZE_MODE];
+
+    void (*write_data)(u16);
+    int data_size;
+
+    int dma_size;
 } ctx;
+
+static void write_data_default(u16);
+
+static void set_data_handler(void (*handler)(u16), const int data_size) {
+    ctx.write_data = handler;
+
+    ctx.data_size = data_size;
+}
+
+static void set_data_handler_default() {
+    set_data_handler(write_data_default, NUM_DATA_IN_BYTES);
+}
 
 static void reset_data_in_buffer() {
     std::vector<u8> temp;
@@ -140,13 +163,23 @@ static void ata_set_features() {
     finish_non_data_command();
 }
 
+static void ata_soft_reset() {
+    std::puts("ATA SOFT_RESET");
+
+    GD_STATUS.busy = false;
+}
+
 enum {
+    ATA_COMMAND_SOFT_RESET   = 0x08,
     ATA_COMMAND_PACKET       = 0xA0,
     ATA_COMMAND_SET_FEATURES = 0xEF,
 };
 
 static void execute_ata_command(const int command) {
     switch (command) {
+        case ATA_COMMAND_SOFT_RESET:
+            ata_soft_reset();
+            break;
         case ATA_COMMAND_PACKET:
             ata_packet();
             break;
@@ -193,44 +226,164 @@ static void finish_host_pio_transfer() {
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
+static void finish_device_pio_command(const u16 size) {
+    GD_REASON.is_command = 0;
+    GD_REASON.from_device = 0;
+
+    GD_STATUS.busy = 0;
+    GD_STATUS.data_request = 1;
+
+    GD_BYTE_COUNT.raw = size;
+
+    hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
+}
+
+static void finish_device_pio_transfer() {
+    GD_REASON.is_command = 1;
+    GD_REASON.from_device = 1;
+    
+    GD_STATUS.busy = 0;
+    GD_STATUS.data_request = 0;
+    GD_STATUS.data_ready = 1;
+
+    hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
+
+    set_data_handler_default();
+}
+
+static void prepare_dma_transfer(const int size) {
+    if (ctx.dma_size > 0) {
+        std::printf("GD-ROM DMA in progress (%d)\n", ctx.dma_size);
+        exit(1);
+    }
+
+    ctx.dma_size = size;
+
+    g1::try_gdrom_dma();
+}
+
+static void finish_dma_transfer(const int) {
+    GD_REASON.is_command = 1;
+    GD_REASON.from_device = 1;
+    
+    GD_STATUS.busy = 0;
+    GD_STATUS.data_request = 0;
+    GD_STATUS.data_ready = 1;
+
+    hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
+}
+
 enum {
     SENSE_KEY_NO_SENSE,
 };
 
 enum {
-    DISC_FORMAT_GDROM = 8,
+    DISC_FORMAT_CDROM_XA = 2,
 };
 
 static void spi_test_unit() {
     std::puts("SPI TEST_UNIT");
 
     GD_SECTOR_NUMBER.sense_key = SENSE_KEY_NO_SENSE;
-    GD_SECTOR_NUMBER.disc_format = DISC_FORMAT_GDROM;
+    GD_SECTOR_NUMBER.disc_format = DISC_FORMAT_CDROM_XA;
 
     finish_spi_non_data_command();
 }
 
 #define SPI_STARTING_ADDRESS     ctx.data_in_bytes[2]
+#define SPI_SESSION_NUMBER       ctx.data_in_bytes[2]
 #define SPI_ALLOCATION_LENGTH_HI ctx.data_in_bytes[3]
 #define SPI_ALLOCATION_LENGTH_LO ctx.data_in_bytes[4]
 
-static void spi_req_mode() {
-    // Taken from washingtonDC
-    constexpr u8 DATA[0x20] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0xb4, 0x19, 0x00,
-    0x00, 0x08,  'S',  'E',  ' ',  ' ',  ' ',  ' ',
-    ' ',  ' ',  'R',  'e',  'v',  ' ',  '6',  '.',
-    '4',  '2',  '9',  '9',  '0',  '3',  '1',  '6'
-    };
+static void spi_cd_read() {
+    const u8 select_data =  ctx.data_in_bytes[1] >> 4;
+    const u8 sector_type = (ctx.data_in_bytes[1] >> 1) & 7; 
+    const bool is_msf = (ctx.data_in_bytes[1] & 1) != 0;
 
+    const u32 fad = bswap24_from_buf(&ctx.data_in_bytes[2]);
+    const u32 num_sectors = bswap24_from_buf(&ctx.data_in_bytes[8]);
+
+    std::printf("SPI CD_READ (data select: %u, sector type: %u, MSF: %d, FAD: %u, num sectors: %u)\n",
+        select_data,
+        sector_type,
+        is_msf,
+        fad,
+        num_sectors
+    );
+
+    std::vector<u8> sector_bytes = common::cdi::read_sectors(fad, num_sectors);
+
+    reset_data_out_buffer();
+
+    for (u8 data : sector_bytes) {
+        ctx.data_out_bytes.push_back(data);
+    }
+
+    prepare_dma_transfer(sector_bytes.size());
+}
+
+static void spi_req_mode() {
     std::printf("SPI REQ_MODE (address: %u, length: %u)\n", SPI_STARTING_ADDRESS, SPI_ALLOCATION_LENGTH_LO);
 
-    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH_LO) < sizeof(DATA));
+    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH_LO) <= SIZE_MODE);
 
     reset_data_out_buffer();
 
     for (u8 i = 0; i < SPI_ALLOCATION_LENGTH_LO; i++) {
-        ctx.data_out_bytes.push_back(DATA[SPI_STARTING_ADDRESS + i]);
+        ctx.data_out_bytes.push_back(ctx.mode[SPI_STARTING_ADDRESS + i]);
+    }
+
+    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
+}
+
+static void spi_req_ses() {
+    std::printf("SPI REQ_SES (session: %u, length: %u)\n", SPI_SESSION_NUMBER, SPI_ALLOCATION_LENGTH_LO);
+
+    assert(SPI_ALLOCATION_LENGTH_LO == 6);
+
+    reset_data_out_buffer();
+
+    common::cdi::SessionInfo session_info = common::cdi::request_session(SPI_SESSION_NUMBER);
+
+    ctx.data_out_bytes.push_back(1);
+    ctx.data_out_bytes.push_back(0);
+
+    for (u8 i = 0; i < sizeof(session_info); i++) {
+        ctx.data_out_bytes.push_back(((u8*)&session_info)[i]);
+    }
+
+    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
+}
+
+static void write_data_set_mode(const u16 data) {
+    // TODO: set mode
+    ctx.data_size -= sizeof(data);
+
+    if (ctx.data_size <= 0) {
+        finish_device_pio_transfer();
+    }
+}
+
+static void spi_set_mode() {
+    std::printf("SPI SET_MODE (address: %u, length: %u)\n", SPI_STARTING_ADDRESS, SPI_ALLOCATION_LENGTH_LO);
+
+    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH_LO) <= SIZE_MODE);
+
+    set_data_handler(write_data_set_mode, SPI_ALLOCATION_LENGTH_LO);
+
+    finish_device_pio_command(SPI_ALLOCATION_LENGTH_LO);
+
+    reset_data_in_buffer();
+}
+
+static void spi_get_scd() {
+    std::printf("SPI GET_SCD (length: %u)\n", SPI_ALLOCATION_LENGTH_LO);
+
+    reset_data_out_buffer();
+
+    for (u8 i = 0; i < SPI_ALLOCATION_LENGTH_LO; i++) {
+        // No clue how this works
+        ctx.data_out_bytes.push_back(0);
     }
 
     finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
@@ -243,8 +396,10 @@ static void spi_get_toc() {
 
     reset_data_out_buffer();
 
+    const common::cdi::Toc toc = common::cdi::read_toc((ctx.data_in_bytes[1] & 1) != 0);
+
     for (u16 i = 0; i < length; i++) {
-        ctx.data_out_bytes.push_back(0);
+        ctx.data_out_bytes.push_back(((u8*)&toc)[i]);
     }
 
     finish_spi_host_pio_command(length);
@@ -373,7 +528,11 @@ static void spi_71() {
 enum {
     SPI_COMMAND_TEST_UNIT = 0x00,
     SPI_COMMAND_REQ_MODE  = 0x11,
+    SPI_COMMAND_SET_MODE  = 0x12,
     SPI_COMMAND_GET_TOC   = 0x14,
+    SPI_COMMAND_REQ_SES   = 0x15,
+    SPI_COMMAND_CD_READ   = 0x30,
+    SPI_COMMAND_GET_SCD   = 0x40,
     SPI_COMMAND_INIT      = 0x70, // ??
     SPI_COMMAND_71        = 0x71, // ????
 };
@@ -388,8 +547,20 @@ static void execute_spi_command(const int command) {
         case SPI_COMMAND_REQ_MODE:
             spi_req_mode();
             break;
+        case SPI_COMMAND_SET_MODE:
+            spi_set_mode();
+            break;
         case SPI_COMMAND_GET_TOC:
             spi_get_toc();
+            break;
+        case SPI_COMMAND_REQ_SES:
+            spi_req_ses();
+            break;
+        case SPI_COMMAND_CD_READ:
+            spi_cd_read();
+            break;
+        case SPI_COMMAND_GET_SCD:
+            spi_get_scd();
             break;
         case SPI_COMMAND_INIT:
             spi_init();
@@ -403,7 +574,40 @@ static void execute_spi_command(const int command) {
     }
 }
 
-void initialize() {}
+constexpr i64 GDROM_DELAY = 8192;
+
+static void write_data_default(const u16 data) {
+    assert(ctx.data_in_bytes.size() < NUM_DATA_IN_BYTES);
+
+    ctx.data_in_bytes.push_back(data);
+    ctx.data_in_bytes.push_back(data >> 8);
+
+    if (ctx.data_in_bytes.size() >= NUM_DATA_IN_BYTES) {
+        scheduler::schedule_event(
+            "SPI",
+            execute_spi_command,
+            SPI_COMMAND,
+            scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(GDROM_DELAY)
+        );
+
+        GD_STATUS.busy = 1;
+        GD_STATUS.data_request = 0;
+    }
+}
+
+void initialize() {
+    // Taken from washingtonDC
+    constexpr u8 INITIAL_MODE[SIZE_MODE] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0xb4, 0x19, 0x00,
+    0x00, 0x08,  'S',  'E',  ' ',  ' ',  ' ',  ' ',
+     ' ',  ' ',  'R',  'e',  'v',  ' ',  '6',  '.',
+     '4',  '2',  '9',  '9',  '0',  '3',  '1',  '6'
+    };
+
+    std::memcpy(ctx.mode, INITIAL_MODE, SIZE_MODE);
+
+    set_data_handler_default();
+}
 
 void reset() {
     std::memset(&ctx, 0, sizeof(ctx));
@@ -482,8 +686,6 @@ void write(const u32 addr, const T data) {
     exit(1);
 }
 
-constexpr i64 GDROM_DELAY = 8192;
-
 template<>
 void write(const u32 addr, const u8 data) {
     switch (addr) {
@@ -533,22 +735,7 @@ void write(const u32 addr, const u16 data) {
         case IO_GD_DATA:
             std::printf("GD_DATA write16 = %04X\n", data);
 
-            assert(ctx.data_in_bytes.size() < NUM_DATA_IN_BYTES);
-
-            ctx.data_in_bytes.push_back(data);
-            ctx.data_in_bytes.push_back(data >> 8);
-
-            if (ctx.data_in_bytes.size() >= NUM_DATA_IN_BYTES) {
-                scheduler::schedule_event(
-                    "SPI",
-                    execute_spi_command,
-                    SPI_COMMAND,
-                    scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(GDROM_DELAY)
-                );
-
-                GD_STATUS.busy = 1;
-                GD_STATUS.data_request = 0;
-            }
+            ctx.write_data(data);
             break;
         default:
             std::printf("Unmapped GD-ROM write16 @ %08X = %04X\n", addr, data);
@@ -558,5 +745,30 @@ void write(const u32 addr, const u16 data) {
 
 template void write(u32, u32);
 template void write(u32, u64);
+
+const u8* get_dma_bytes(const u32 size) {
+    std::printf("GD-ROM Get DMA bytes (buffer size: %d, DMA size: %u)\n", ctx.dma_size, size);
+
+    if ((ctx.dma_size - size) < 0) {
+        std::puts("GD-ROM DMA buffer overflow");
+        exit(1);
+    }
+
+    const u8* dma_bytes = &ctx.data_out_bytes[ctx.data_out_ptr];
+
+    ctx.data_out_ptr += size;
+    ctx.dma_size -= size;
+
+    if (ctx.dma_size <= 0) {
+        scheduler::schedule_event(
+            "SPI_DMA",
+            finish_dma_transfer,
+            0,
+            scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(16 * GDROM_DELAY)
+        );
+    }
+
+    return dma_bytes;
+}
 
 }
