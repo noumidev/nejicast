@@ -22,6 +22,7 @@ enum : u32 {
     IO_GD_ALT_STATUS    = 0x005F7018,
     IO_GD_DEV_CONTROL   = 0x005F7018,
     IO_GD_DATA          = 0x005F7080,
+    IO_GD_ERROR         = 0x005F7084,
     IO_GD_FEATURES      = 0x005F7084,
     IO_GD_SECTOR_COUNT  = 0x005F7088,
     IO_GD_SECTOR_NUMBER = 0x005F708C,
@@ -32,6 +33,7 @@ enum : u32 {
 };
 
 #define GD_DEV_CONTROL   ctx.device_control
+#define GD_ERROR         ctx.error
 #define GD_STATUS        ctx.status
 #define GD_REASON        ctx.interrupt_reason
 #define GD_SECTOR_NUMBER ctx.sector_number
@@ -69,6 +71,18 @@ struct {
             u8                   : 6;
         };
     } device_control;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 invalid_length : 1;
+            u8 media_end      : 1;
+            u8 abort          : 1;
+            u8 media_change   : 1;
+            u8 sense_key      : 4;
+        };
+    } error;
 
     union {
         u8 raw;
@@ -118,6 +132,12 @@ static void set_data_handler_default() {
     set_data_handler(write_data_default, NUM_DATA_IN_BYTES);
 }
 
+static void cancel_dma() {
+    ctx.dma_size = 0;
+
+    g1::set_gdrom_dma_ready(false);
+}
+
 static void reset_data_in_buffer() {
     std::vector<u8> temp;
 
@@ -151,6 +171,17 @@ static void prepare_packet_transfer() {
     GD_REASON.from_device = 0;
 }
 
+static void ata_nop() {
+    std::puts("ATA NOP");
+
+    cancel_dma();
+
+    GD_STATUS.check = true;
+    GD_ERROR.abort = true;
+
+    finish_non_data_command();
+}
+
 static void ata_packet() {
     std::puts("ATA PACKET");
 
@@ -170,6 +201,7 @@ static void ata_soft_reset() {
 }
 
 enum {
+    ATA_COMMAND_NOP          = 0x00,
     ATA_COMMAND_SOFT_RESET   = 0x08,
     ATA_COMMAND_PACKET       = 0xA0,
     ATA_COMMAND_SET_FEATURES = 0xEF,
@@ -177,6 +209,9 @@ enum {
 
 static void execute_ata_command(const int command) {
     switch (command) {
+        case ATA_COMMAND_NOP:
+            ata_nop();
+            break;
         case ATA_COMMAND_SOFT_RESET:
             ata_soft_reset();
             break;
@@ -200,6 +235,9 @@ static void finish_spi_non_data_command() {
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
 
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
+
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
@@ -212,6 +250,9 @@ static void finish_spi_host_pio_command(const u16 size) {
 
     GD_BYTE_COUNT.raw = size;
 
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
+
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
@@ -222,6 +263,9 @@ static void finish_host_pio_transfer() {
     GD_STATUS.busy = 0;
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
+
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -235,6 +279,9 @@ static void finish_device_pio_command(const u16 size) {
 
     GD_BYTE_COUNT.raw = size;
 
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
+
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
@@ -245,6 +292,9 @@ static void finish_device_pio_transfer() {
     GD_STATUS.busy = 0;
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
+
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 
@@ -259,6 +309,7 @@ static void prepare_dma_transfer(const int size) {
 
     ctx.dma_size = size;
 
+    g1::set_gdrom_dma_ready(true);
     g1::try_gdrom_dma();
 }
 
@@ -275,6 +326,10 @@ static void finish_dma_transfer(const int) {
 
 enum {
     SENSE_KEY_NO_SENSE,
+};
+
+enum {
+    ADDITIONAL_SENSE_KEY_NO_SENSE,
 };
 
 enum {
@@ -320,6 +375,21 @@ static void spi_cd_read() {
     }
 
     prepare_dma_transfer(sector_bytes.size());
+}
+
+static void spi_req_error() {
+    std::printf("SPI REQ_ERROR (length: %u)\n", SPI_ALLOCATION_LENGTH_LO);
+
+    assert(SPI_ALLOCATION_LENGTH_LO == 10);
+
+    reset_data_out_buffer();
+    
+    ctx.data_out_bytes.resize(10);
+    ctx.data_out_bytes[0] = 0xF0;
+    ctx.data_out_bytes[2] = SENSE_KEY_NO_SENSE;
+    ctx.data_out_bytes[8] = ADDITIONAL_SENSE_KEY_NO_SENSE;
+
+    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
 }
 
 static void spi_req_mode() {
@@ -529,6 +599,7 @@ enum {
     SPI_COMMAND_TEST_UNIT = 0x00,
     SPI_COMMAND_REQ_MODE  = 0x11,
     SPI_COMMAND_SET_MODE  = 0x12,
+    SPI_COMMAND_REQ_ERROR = 0x13,
     SPI_COMMAND_GET_TOC   = 0x14,
     SPI_COMMAND_REQ_SES   = 0x15,
     SPI_COMMAND_CD_READ   = 0x30,
@@ -549,6 +620,9 @@ static void execute_spi_command(const int command) {
             break;
         case SPI_COMMAND_SET_MODE:
             spi_set_mode();
+            break;
+        case SPI_COMMAND_REQ_ERROR:
+            spi_req_error();
             break;
         case SPI_COMMAND_GET_TOC:
             spi_get_toc();
@@ -628,6 +702,10 @@ u8 read(const u32 addr) {
             std::puts("GD_ALT_STATUS read8");
 
             return GD_STATUS.raw;
+        case IO_GD_ERROR:
+            std::puts("GD_ERROR read8");
+
+            return GD_ERROR.raw;
         case IO_GD_SECTOR_NUMBER:
             std::puts("GD_SECTOR_NUMBER read8");
 
@@ -760,6 +838,8 @@ const u8* get_dma_bytes(const u32 size) {
     ctx.dma_size -= size;
 
     if (ctx.dma_size <= 0) {
+        g1::set_gdrom_dma_ready(false);
+
         scheduler::schedule_event(
             "SPI_DMA",
             finish_dma_transfer,
