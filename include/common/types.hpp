@@ -24,6 +24,16 @@ using i64 = std::int64_t;
 using f32 = float;
 using f64 = double;
 
+inline u32 bswap24_from_buf(const u8* buf) {
+    return (buf[0] << 16) | (buf[1] << 8) | buf[2];
+}
+
+inline void bswap24_to_buf(const u32 data, u8* buf) {
+    buf[0] = data >> 16;
+    buf[1] = data >> 8;
+    buf[2] = data;
+}
+
 inline u32 from_f32(const f32 data) {
     u32 n;
 
