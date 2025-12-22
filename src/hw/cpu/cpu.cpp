@@ -332,6 +332,7 @@ enum class ControlRegister {
     Rbank,
     Spc,
     Sr,
+    Sgr,
     Ssr,
     Vbr,
 };
@@ -351,6 +352,8 @@ u32 get_control_register(const usize idx = 0) {
             return SPC;
         case ControlRegister::Sr:
             return SR.raw;
+        case ControlRegister::Sgr:
+            return SGR;
         case ControlRegister::Ssr:
             return SSR.raw;
         case ControlRegister::Vbr:
@@ -377,6 +380,9 @@ void set_control_register(const u32 data, const usize idx = 0) {
             break;
         case ControlRegister::Sr:
             set_sr(data);
+            break;
+        case ControlRegister::Sgr:
+            SGR = data;
             break;
         case ControlRegister::Ssr:
             SSR.raw = data;
@@ -435,6 +441,7 @@ void set_system_register(const u32 data) {
 namespace ExceptionEvent {
     enum : u32 {
         Reset = 0,
+        ManualReset = 0x020,
         ExternalInterrupt = 0x200,
     };
 }
@@ -471,7 +478,7 @@ static void raise_exception(const u32 event, const u32 offset) {
 
     ocio::ccn::set_exception_event(event);
 
-    if (event == ExceptionEvent::Reset) {
+    if (event <= ExceptionEvent::ManualReset) {
         jump(RESET_VECTOR);
     } else {
         jump(VBR + offset);
@@ -496,10 +503,12 @@ static T read(const u32 addr) {
     u32 masked_addr = addr & PRIV_MASK;
 
     if (addr < REGION_P1) {
-        masked_addr = addr & P0_MASK;
+        // P0, cacheable, MMU
+        // TODO: caches, MMU?
+        // The physical address range is mirrored four times
+        masked_addr = addr & (P0_MASK >> 2);
 
-        std::printf("Unimplemented P0 read%zu @ %08X\n", 8 * sizeof(T), masked_addr);
-        exit(1);
+        return hw::holly::bus::read<T>(masked_addr);
     } else if (addr < REGION_P2) {
         // P1, cacheable
         // TODO: implement caches?
@@ -534,10 +543,12 @@ static void write(const u32 addr, const T data) {
     u32 masked_addr = addr & PRIV_MASK;
 
     if (addr < REGION_P1) {
-        masked_addr = addr & P0_MASK;
+        // P0, cacheable, MMU
+        // TODO: caches, MMU?
+        // The physical address range is mirrored four times
+        masked_addr = addr & (P0_MASK >> 2);
 
-        std::printf("Unimplemented P0 write%zu @ %08X = %0*llX\n", 8 * sizeof(T), masked_addr, (int)(2 * sizeof(T)), (u64)data);
-        exit(1);
+        return hw::holly::bus::write<T>(masked_addr, data);
     } else if (addr < REGION_P2) {
         // P1, cacheable
         // TODO: implement caches?
@@ -1820,6 +1831,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00101010", i_sts<SystemRegister::Pr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000000101011", i_rte);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00110010", i_stc<ControlRegister::Ssr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00111010", i_stc<ControlRegister::Sgr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01000010", i_stc<ControlRegister::Spc, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000000001001000", i_clrs);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx01011010", i_sts<SystemRegister::Fpul, AddressingMode::RegisterDirect>);
