@@ -48,6 +48,9 @@ union ParameterControlWord {
 };
 
 struct {
+    u32 fifo_bytes[16];
+
+    ParameterControlWord current_parameter;
     ParameterControlWord current_global_parameter;
 
     IspInstruction current_isp_instr;
@@ -56,7 +59,10 @@ struct {
 
     u32 intensity_colors[4];
 
+    Color prev_color;
+
     bool has_list_type;
+    bool has_parameter_control;
     bool is_first_vertex;
 
     union {
@@ -141,6 +147,7 @@ void set_object_list_limit(const u32 data) {
 void initialize_lists() {
     // TODO: initialize TA lists
     ctx.has_list_type = false;
+    ctx.has_parameter_control = false;
     ctx.is_first_vertex = true;
 }
 
@@ -195,6 +202,7 @@ static Color from_floats(const u32* float_bytes) {
 
 enum {
     PARAM_TYPE_END_OF_LIST    = 0,
+    PARAM_TYPE_USER_TILE_CLIP = 1,
     PARAM_TYPE_GLOBAL_POLYGON = 4,
     PARAM_TYPE_VERTEX         = 7,
 };
@@ -203,139 +211,400 @@ enum {
     COLOR_TYPE_PACKED,
     COLOR_TYPE_FLOAT,
     COLOR_TYPE_INTENSITY_1,
+    COLOR_TYPE_INTENSITY_2,
 };
 
-void fifo_block_write(const u8 *bytes) {
-    u32 fifo_bytes[8];
+enum {
+    GLOBAL_TYPE_PC_FC,
+    GLOBAL_TYPE_PC_2V,
+    GLOBAL_TYPE_I,
+    GLOBAL_TYPE_I_OC,
+    GLOBAL_TYPE_I_2V,
+};
 
-    std::memcpy(fifo_bytes, bytes, sizeof(fifo_bytes));
+static int get_global_type() {
+    if (ctx.current_global_parameter.use_bump_mapping) {
+        // OC
+        assert((ctx.current_global_parameter.volume_type & 1) == 0);
+
+        switch (ctx.current_global_parameter.color_type) {
+            case COLOR_TYPE_PACKED:
+            case COLOR_TYPE_FLOAT:
+                return GLOBAL_TYPE_PC_FC; // ??
+            case COLOR_TYPE_INTENSITY_1:
+            case COLOR_TYPE_INTENSITY_2:
+                return GLOBAL_TYPE_I_OC;
+            default:
+                std::puts("TA Invalid color type for polygon with offset color");
+                exit(1);
+        }
+    } else if ((ctx.current_global_parameter.volume_type & 1) != 0) {
+        // 2V
+        assert(!ctx.current_global_parameter.use_bump_mapping);
+
+        switch (ctx.current_global_parameter.color_type) {
+            case COLOR_TYPE_PACKED:
+                return GLOBAL_TYPE_PC_2V;
+            case COLOR_TYPE_INTENSITY_1:
+            case COLOR_TYPE_INTENSITY_2:
+                return GLOBAL_TYPE_I_2V;
+            default:
+                std::puts("TA Invalid color type for polygon with two volumes");
+                exit(1);
+        }
+    } else {
+        switch (ctx.current_global_parameter.color_type) {
+            case COLOR_TYPE_PACKED:
+            case COLOR_TYPE_FLOAT:
+                return GLOBAL_TYPE_PC_FC;
+            case COLOR_TYPE_INTENSITY_1:
+            case COLOR_TYPE_INTENSITY_2:
+                return GLOBAL_TYPE_I;
+            default:
+                std::puts("TA Invalid color type for polygon");
+                exit(1);
+        }
+    }
+}
+
+static bool can_parse_global_polygon() {
+    const int global_type = get_global_type();
+
+    switch (global_type) {
+        case GLOBAL_TYPE_I_2V:
+        case GLOBAL_TYPE_I_OC:
+            return false;
+        default:
+            return true;
+    }
+}
+
+enum {
+    POLYGON_TYPE_NT_PC,
+    POLYGON_TYPE_NT_FC,
+    POLYGON_TYPE_NT_I,
+    POLYGON_TYPE_NT_PC_2V,
+    POLYGON_TYPE_NT_I_2V,
+    POLYGON_TYPE_PC,
+    POLYGON_TYPE_FC,
+    POLYGON_TYPE_I,
+    POLYGON_TYPE_PC_2V,
+    POLYGON_TYPE_I_2V,
+    POLYGON_TYPE_PC_16UV,
+    POLYGON_TYPE_FC_16UV,
+    POLYGON_TYPE_I_16UV,
+    POLYGON_TYPE_PC_16UV_2V,
+    POLYGON_TYPE_I_16UV_2V,
+};
+
+// A little ugly, but gets the job done
+static int get_polygon_type() {
+    if (ctx.current_isp_instr.regular.use_texture_mapping) {
+        if ((ctx.current_global_parameter.volume_type & 1) != 0) {
+            // 2V
+            if (ctx.current_global_parameter.use_short_texture_coordinates) {
+                // 16UV
+                switch (ctx.current_global_parameter.color_type) {
+                    case COLOR_TYPE_PACKED:
+                        return POLYGON_TYPE_PC_16UV_2V;
+                    case COLOR_TYPE_INTENSITY_1:
+                    case COLOR_TYPE_INTENSITY_2:
+                        return POLYGON_TYPE_I_16UV_2V;
+                    default:
+                        std::puts("TA Invalid color type for 16-bit UV textured polygons with two volumes");
+                        exit(1);
+                }
+            } else {
+                switch (ctx.current_global_parameter.color_type) {
+                    case COLOR_TYPE_PACKED:
+                        return POLYGON_TYPE_PC_2V;
+                    case COLOR_TYPE_INTENSITY_1:
+                    case COLOR_TYPE_INTENSITY_2:
+                        return POLYGON_TYPE_I_2V;
+                    default:
+                        std::puts("TA Invalid color type for textured polygons with two volumes");
+                        exit(1);
+                }
+            }
+        } else {
+            if (ctx.current_global_parameter.use_short_texture_coordinates) {
+                // 16UV
+                switch (ctx.current_global_parameter.color_type) {
+                    case COLOR_TYPE_PACKED:
+                        return POLYGON_TYPE_PC_16UV;
+                    case COLOR_TYPE_FLOAT:
+                        return POLYGON_TYPE_FC_16UV;
+                    case COLOR_TYPE_INTENSITY_1:
+                    case COLOR_TYPE_INTENSITY_2:
+                        return POLYGON_TYPE_I_16UV;
+                    default:
+                        std::puts("TA Invalid color type for 16-bit UV textured polygons");
+                        exit(1);
+                }
+            } else {
+                switch (ctx.current_global_parameter.color_type) {
+                    case COLOR_TYPE_PACKED:
+                        return POLYGON_TYPE_PC;
+                    case COLOR_TYPE_FLOAT:
+                        return POLYGON_TYPE_FC;
+                    case COLOR_TYPE_INTENSITY_1:
+                    case COLOR_TYPE_INTENSITY_2:
+                        return POLYGON_TYPE_I;
+                    default:
+                        std::puts("TA Invalid color type for textured polygons");
+                        exit(1);
+                }
+            }
+        }
+    } else {
+        // NT
+        if ((ctx.current_global_parameter.volume_type & 1) != 0) {
+            // 2V
+            switch (ctx.current_global_parameter.color_type) {
+                case COLOR_TYPE_PACKED:
+                    return POLYGON_TYPE_NT_PC_2V;
+                case COLOR_TYPE_INTENSITY_1:
+                case COLOR_TYPE_INTENSITY_2:
+                    return POLYGON_TYPE_NT_I_2V;
+                default:
+                    std::puts("TA Invalid color type for non-textured polygons with two volumes");
+                    exit(1);
+            }
+        } else {
+            switch (ctx.current_global_parameter.color_type) {
+                case COLOR_TYPE_PACKED:
+                    return POLYGON_TYPE_NT_PC;
+                case COLOR_TYPE_FLOAT:
+                    return POLYGON_TYPE_NT_FC;
+                case COLOR_TYPE_INTENSITY_1:
+                case COLOR_TYPE_INTENSITY_2:
+                    return POLYGON_TYPE_NT_I;
+                default:
+                    std::puts("TA Invalid color type for non-textured polygons");
+                    exit(1);
+            }
+        }
+    }
+}
+
+static bool can_parse_vertex() {
+    const int polygon_type = get_polygon_type();
+
+    switch (polygon_type) {
+        case POLYGON_TYPE_FC:
+        case POLYGON_TYPE_FC_16UV:
+        case POLYGON_TYPE_PC_2V:
+        case POLYGON_TYPE_PC_16UV_2V:
+        case POLYGON_TYPE_I_2V:
+        case POLYGON_TYPE_I_16UV_2V:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static void ta_end_of_list() {
+    if constexpr (!SILENT_TA) std::puts("TA End of list");
+    
+    finish_list(ctx.current_global_parameter.list_type);
+}
+
+static void ta_user_tile_clip() {
+    if constexpr (!SILENT_TA) std::puts("TA User tile clip");
+}
+
+static void ta_global_polygon() {
+    constexpr const char* GLOBAL_TYPES[] = {
+        "GLOBAL_TYPE_PC_FC", "GLOBAL_TYPE_PC_2V", "GLOBAL_TYPE_I",
+        "GLOBAL_TYPE_I_OC", "GLOBAL_TYPE_I_2V",
+    };
+
+    if constexpr (!SILENT_TA) std::puts("TA Global parameter (polygon)");
+
+    ctx.current_isp_instr = IspInstruction{.raw = ctx.fifo_bytes[1]};
+    ctx.current_tsp_instr = TspInstruction{.raw = ctx.fifo_bytes[2]};
+    ctx.current_texture_control = TextureControlWord{.raw = ctx.fifo_bytes[3]};
+    
+    if constexpr (!SILENT_TA) {
+        std::printf("ISP instruction = %08X\n", ctx.current_isp_instr.raw);
+        std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr.raw);
+        std::printf("Texture control = %08X\n", ctx.current_texture_control.raw);   
+    }
+
+    ctx.current_isp_instr.regular.short_uv = ctx.current_global_parameter.use_short_texture_coordinates;
+    ctx.current_isp_instr.regular.use_gouraud_shading = ctx.current_global_parameter.use_gouraud_shading;
+    ctx.current_isp_instr.regular.use_texture_mapping = ctx.current_global_parameter.use_texture_mapping;
+    ctx.current_isp_instr.regular.use_offset_color = ctx.current_global_parameter.use_bump_mapping;
+
+    const int global_type = get_global_type();
+
+    switch (global_type) {
+        case GLOBAL_TYPE_PC_FC:
+            break;
+        case GLOBAL_TYPE_I:
+            std::memcpy(ctx.intensity_colors, &ctx.fifo_bytes[4], sizeof(ctx.intensity_colors));
+            break;
+        default:
+            std::printf("TA Unimplemented global type %s\n", GLOBAL_TYPES[global_type]);
+            exit(1);
+    }
+
+    if (!ctx.has_list_type) {
+        if (ctx.current_global_parameter.list_type == LIST_TYPE_OPAQUE) {
+            core::begin_display_list();
+        }
+
+        ctx.has_list_type = true;
+    }
+
+    ctx.has_parameter_control = false;
+}
+
+static void ta_vertex() {
+    constexpr const char* POLYGON_TYPES[] = {
+        "POLYGON_TYPE_NT_PC", "POLYGON_TYPE_NT_FC", "POLYGON_TYPE_NT_I", "POLYGON_TYPE_NT_PC_2V",
+        "POLYGON_TYPE_NT_I_2V", "POLYGON_TYPE_PC", "POLYGON_TYPE_FC", "POLYGON_TYPE_I",
+        "POLYGON_TYPE_PC_2V", "POLYGON_TYPE_I_2V", "POLYGON_TYPE_PC_16UV", "POLYGON_TYPE_FC_16UV",
+        "POLYGON_TYPE_I_16UV", "POLYGON_TYPE_PC_16UV_2V", "POLYGON_TYPE_I_16UV_2V",
+    };
+
+    if constexpr (!SILENT_TA) std::puts("TA Vertex");
+
+    if (ctx.is_first_vertex) {
+        core::begin_vertex_strip(
+            ctx.current_isp_instr,
+            ctx.current_tsp_instr,
+            ctx.current_texture_control
+        );
+
+        ctx.is_first_vertex = false;
+    }
+
+    const f32 x = to_f32(ctx.fifo_bytes[1]);
+    const f32 y = to_f32(ctx.fifo_bytes[2]);
+    const f32 z = to_f32(ctx.fifo_bytes[3]);
+
+    f32 u = 0.0;
+    f32 v = 0.0;
+
+    Color color, offset_color = {.raw = 0};
+
+    const int polygon_type = get_polygon_type();
+
+    // Oh boy
+    switch (polygon_type) {
+        case POLYGON_TYPE_NT_PC:
+            color.raw = ctx.fifo_bytes[6];
+            break;
+        case POLYGON_TYPE_NT_FC:
+            color = from_floats(&ctx.fifo_bytes[4]);
+            break;
+        case POLYGON_TYPE_PC:
+            color.raw = ctx.fifo_bytes[6];
+            offset_color.raw = ctx.fifo_bytes[7];
+
+            u = to_f32(ctx.fifo_bytes[4]);
+            v = to_f32(ctx.fifo_bytes[5]);
+            break;
+        case POLYGON_TYPE_FC:
+            color = from_floats(&ctx.fifo_bytes[8]);
+            offset_color = from_floats(&ctx.fifo_bytes[12]);
+
+            u = to_f32(ctx.fifo_bytes[4]);
+            v = to_f32(ctx.fifo_bytes[5]);
+            break;
+        case POLYGON_TYPE_I:
+            if (ctx.current_global_parameter.color_type == COLOR_TYPE_INTENSITY_1) {
+                ctx.prev_color = from_floats(ctx.intensity_colors);
+            }
+
+            color = ctx.prev_color;
+            offset_color.raw = ctx.fifo_bytes[7];
+
+            u = to_f32(ctx.fifo_bytes[4]);
+            v = to_f32(ctx.fifo_bytes[5]);
+            break;
+        default:
+            std::printf("TA Unimplemented polygon type %s\n", POLYGON_TYPES[polygon_type]);
+            exit(1);
+    }
+
+    core::push_vertex(
+        pvr::Vertex {
+            x,
+            y,
+            z,
+            u,
+            v,
+            color,
+            offset_color
+        }
+    );
+
+    if (ctx.current_parameter.end_of_strip) {
+        core::end_vertex_strip(
+            ctx.current_global_parameter.list_type >= LIST_TYPE_TRANSLUCENT
+        );
+
+        ctx.is_first_vertex = true;
+    }
+
+    ctx.has_parameter_control = false;
+}
+
+void fifo_block_write(const u8 *bytes) {
+    std::memcpy(&ctx.fifo_bytes[8 * ctx.has_parameter_control], bytes, 32);
 
     if constexpr (!SILENT_TA) {
         for (int i = 0; i < 8; i++) {
-            std::printf("TA FIFO write = %08X\n", fifo_bytes[i]);
+            std::printf("TA FIFO write = %08X\n", ctx.fifo_bytes[8 * ctx.has_parameter_control + i]);
         }
     }
 
-    const ParameterControlWord parameter_control{.raw = fifo_bytes[0]};
+    if (!ctx.has_parameter_control) {
+        // Fetch new control word
+        ctx.current_parameter = {.raw = ctx.fifo_bytes[0]};
 
-    switch (parameter_control.parameter_type) {
-        case PARAM_TYPE_END_OF_LIST:
-            if constexpr (!SILENT_TA) std::puts("TA End of list");
-            
-            finish_list(ctx.current_global_parameter.list_type);
-            break;
-        case PARAM_TYPE_GLOBAL_POLYGON:
-            if constexpr (!SILENT_TA) std::puts("TA Global parameter (polygon)");
+        switch (ctx.current_parameter.parameter_type) {
+            case PARAM_TYPE_END_OF_LIST:
+                ta_end_of_list();
+                break;
+            case PARAM_TYPE_USER_TILE_CLIP:
+                ta_user_tile_clip();
+                break;
+            case PARAM_TYPE_GLOBAL_POLYGON:
+                // 8 or 16 words
+                ctx.current_global_parameter = ctx.current_parameter;
 
-            ctx.current_global_parameter = parameter_control;
-
-            ctx.current_isp_instr = IspInstruction{.raw = fifo_bytes[1]};
-            ctx.current_tsp_instr = TspInstruction{.raw = fifo_bytes[2]};
-            ctx.current_texture_control = TextureControlWord{.raw = fifo_bytes[3]};
-
-            ctx.current_isp_instr.regular.short_uv = ctx.current_global_parameter.use_short_texture_coordinates;
-            ctx.current_isp_instr.regular.use_gouraud_shading = ctx.current_global_parameter.use_gouraud_shading;
-            ctx.current_isp_instr.regular.use_texture_mapping = ctx.current_global_parameter.use_texture_mapping;
-            ctx.current_isp_instr.regular.use_offset_color = ctx.current_global_parameter.use_bump_mapping;
-
-            std::memcpy(ctx.intensity_colors, &fifo_bytes[4], sizeof(ctx.intensity_colors));
-            
-            if constexpr (!SILENT_TA) {
-                std::printf("ISP instruction = %08X\n", ctx.current_isp_instr.raw);
-                std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr.raw);
-                std::printf("Texture control = %08X\n", ctx.current_texture_control.raw);   
-            }
-
-            if (ctx.current_global_parameter.use_bump_mapping) {
-                // std::puts("TA Unimplemented bump mapping");
-                // exit(1);
-            }
-
-            if (ctx.current_global_parameter.volume_type != 0) {
-                std::printf("TA Unimplemented volume type %u\n", ctx.current_global_parameter.volume_type);
+                if (can_parse_global_polygon()) {
+                    ta_global_polygon();
+                } else {
+                    ctx.has_parameter_control = true;
+                }
+                break;
+            case PARAM_TYPE_VERTEX:
+                if (can_parse_vertex()) {
+                    ta_vertex();
+                } else {
+                    ctx.has_parameter_control = true;
+                }
+                break;
+            default:
+                printf("Unimplemented TA parameter type %u\n", ctx.current_parameter.parameter_type);
                 exit(1);
-            }
-
-            if (!ctx.has_list_type) {
-                switch (ctx.current_global_parameter.list_type) {
-                    case LIST_TYPE_OPAQUE:
-                        if constexpr (!SILENT_TA) std::puts("TA Opaque list");
-
-                        core::begin_display_list();
-                        break;
-                    case LIST_TYPE_OPAQUE_MODIFIER:
-                        if constexpr (!SILENT_TA) std::puts("TA Opaque Modifier list");
-                        break;
-                    case LIST_TYPE_TRANSLUCENT:
-                        if constexpr (!SILENT_TA) std::puts("TA Translucent list");
-                        break;
-                    case LIST_TYPE_TRANSLUCENT_MODIFIER:
-                        if constexpr (!SILENT_TA) std::puts("TA Translucent Modifier list");
-                        break;
-                    case LIST_TYPE_PUNCHTHROUGH:
-                        if constexpr (!SILENT_TA) std::puts("TA Punchthrough list");
-                        break;
-                    default:
-                        printf("Unimplemented TA list type %u\n", ctx.current_global_parameter.list_type);
-                        exit(1);
-                }
-
-                ctx.has_list_type = true;
-            }
-            break;
-        case PARAM_TYPE_VERTEX:
-            if (ctx.is_first_vertex) {
-                core::begin_vertex_strip(
-                    ctx.current_isp_instr,
-                    ctx.current_tsp_instr,
-                    ctx.current_texture_control
-                );
-
-                ctx.is_first_vertex = false;
-            }
-
-            {
-                Color color;
-
-                switch (ctx.current_global_parameter.color_type) {
-                    case COLOR_TYPE_PACKED:
-                        color.raw = fifo_bytes[6];
-                        break;
-                    case COLOR_TYPE_FLOAT:
-                        color = from_floats(&fifo_bytes[4]);
-                        break;
-                    case COLOR_TYPE_INTENSITY_1:
-                        color = from_floats(ctx.intensity_colors);
-                        break;
-                    default:
-                        std::printf("PVR Unimplemented color type %u\n", ctx.current_global_parameter.color_type);
-                        exit(1);
-                }
-
-                // FIXME: this only works for a small number of vertex configs
-                core::push_vertex(
-                    pvr::Vertex {
-                        to_f32(fifo_bytes[1]),
-                        to_f32(fifo_bytes[2]),
-                        to_f32(fifo_bytes[3]),
-                        to_f32(fifo_bytes[4]),
-                        to_f32(fifo_bytes[5]),
-                        color
-                    }
-                );
-            }
-
-            if (parameter_control.end_of_strip) {
-                core::end_vertex_strip(
-                    ctx.current_global_parameter.list_type >= LIST_TYPE_TRANSLUCENT
-                );
-
-                ctx.is_first_vertex = true;
-            }
-            break;
-        default:
-            printf("Unimplemented TA parameter type %u\n", parameter_control.parameter_type);
-            exit(1);
+        }
+    } else {
+        switch (ctx.current_parameter.parameter_type) {
+            case PARAM_TYPE_GLOBAL_POLYGON:
+                ta_global_polygon();
+                break;
+            case PARAM_TYPE_VERTEX:
+                ta_vertex();
+                break;
+            default:
+                printf("Unimplemented TA parameter type %u\n", ctx.current_parameter.parameter_type);
+                exit(1);
+        }
     }
 }
 
