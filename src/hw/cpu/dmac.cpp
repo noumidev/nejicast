@@ -96,6 +96,10 @@ u32 get_control(const int channel) {
     return ctx.dma_channels[channel].control.raw;
 }
 
+u32 get_dma_operation() {
+    return ctx.dma_operation.raw;
+}
+
 void set_source_address(const int channel, const u32 data) {
     assert(channel < NUM_CHANNELS);
 

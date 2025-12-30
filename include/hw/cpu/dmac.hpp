@@ -23,6 +23,7 @@ void reset();
 void shutdown();
 
 u32 get_control(const int channel);
+u32 get_dma_operation();
 
 void set_source_address(const int channel, const u32 data);
 void set_destination_address(const int channel, const u32 data);

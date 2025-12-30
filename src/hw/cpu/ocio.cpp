@@ -30,6 +30,8 @@ constexpr bool SILENT_SCIF = true;
 enum : u32 {
     BASE_INSTRUCTION_CACHE_ADDRESS = 0x10000000,
     BASE_OPERAND_CACHE_TAG         = 0x14000000,
+    BASE_UNIFIED_TLB_ADDRESS       = 0x16000000,
+    BASE_UNIFIED_TLB_DATA          = 0x17000000,
 };
 
 enum : u32 {
@@ -258,6 +260,12 @@ u32 read(const u32 addr) {
         case BASE_OPERAND_CACHE_TAG:
             std::printf("SH-4 operand cache tag read32 @ %08X\n", addr);
             return 0;
+        case BASE_UNIFIED_TLB_ADDRESS:
+            std::printf("SH-4 unified TLB address read32 @ %08X\n", addr);
+            return 0;
+        case BASE_UNIFIED_TLB_DATA:
+            std::printf("SH-4 unified TLB data read32 @ %08X\n", addr);
+            return 0;
     }
 
     switch (addr) {
@@ -289,6 +297,10 @@ u32 read(const u32 addr) {
             std::puts("CHCR2 read32");
             
             return dmac::get_control(dmac::CHANNEL_2);
+        case IO_DMAOR:
+            std::puts("DMAOR read32");
+            
+            return dmac::get_dma_operation();
         case IO_TCNT0:
             if constexpr (!SILENT_TMU) std::puts("TCNT0 read32");
 
@@ -551,6 +563,12 @@ void write(const u32 addr, const u32 data) {
             return;
         case BASE_OPERAND_CACHE_TAG:
             std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
+            return;
+        case BASE_UNIFIED_TLB_ADDRESS:
+            std::printf("SH-4 unified TLB address write32 @ %08X = %08X\n", addr, data);
+            return;
+        case BASE_UNIFIED_TLB_DATA:
+            std::printf("SH-4 unified TLB data write32 @ %08X = %08X\n", addr, data);
             return;
     }
 
