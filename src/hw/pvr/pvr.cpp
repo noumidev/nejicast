@@ -191,11 +191,30 @@ static u32 interpolate_colors(
     const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.color.b, b.color.b, c.color.b, area));
     const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.color.g, b.color.g, c.color.g, area));
     const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.color.r, b.color.r, c.color.r, area));
+    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.color.a, b.color.a, c.color.a, area));
 
-    return Color{.b = blue, .g = green, .r = red, .a = a.color.a}.raw;
+    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
+}
+
+static u32 interpolate_offset_colors(
+    const f32 w0,
+    const f32 w1,
+    const f32 w2,
+    const Vertex& a,
+    const Vertex& b,
+    const Vertex& c,
+    const f32 area
+) {
+    const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.b, b.offset_color.b, c.offset_color.b, area));
+    const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.g, b.offset_color.g, c.offset_color.g, area));
+    const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.r, b.offset_color.r, c.offset_color.r, area));
+    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.a, b.offset_color.a, c.offset_color.a, area));
+
+    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
 }
 
 enum : u32 {
+    TEXTURE_FORMAT_ARGB1555 = 0,
     TEXTURE_FORMAT_RGB565   = 1,
     TEXTURE_FORMAT_ARGB4444 = 2,
 };
@@ -204,6 +223,16 @@ static Color unpack_texel(const u16 texel) {
     Color color;
 
     switch (ctx.texture_control.regular.pixel_format) {
+        case TEXTURE_FORMAT_ARGB1555:
+            color.a = (texel >> 15);
+            color.r = (texel >> 10) << 3;
+            color.g = (texel >>  5) << 3;
+            color.b = (texel >>  0) << 3;
+            color.a *= 0xFF;
+            color.r |= color.r >> 5;
+            color.g |= color.g >> 5;
+            color.b |= color.b >> 5;
+            break;
         case TEXTURE_FORMAT_RGB565:
             color.a = 0xFF;
             color.r = (texel >> 11) << 3;
@@ -293,21 +322,27 @@ static u8 color_multiply(const u8 color, const u8 other_color) {
     return (color * other_color) / 255;
 }
 
-static Color combine_colors(const Color vertex_color, const Color texel_color) {
+static Color combine_colors(const Color vertex_color, const Color texel_color, const Color offset_color) {
     Color color{};
 
     switch (ctx.tsp_instr.shading_instr) {
         case COMBINE_MODE_MODULATE:
-            color.a = texel_color.a;
             color.r = color_multiply(vertex_color.r, texel_color.r);
             color.g = color_multiply(vertex_color.g, texel_color.g);
             color.b = color_multiply(vertex_color.b, texel_color.b);
+
+            add_and_clamp(color, offset_color);
+
+            color.a = texel_color.a;
             break;
         case COMBINE_MODE_MODULATE_ALPHA:
-            color.a = color_multiply(vertex_color.a, texel_color.a);
             color.r = color_multiply(vertex_color.r, texel_color.r);
             color.g = color_multiply(vertex_color.g, texel_color.g);
             color.b = color_multiply(vertex_color.b, texel_color.b);
+
+            add_and_clamp(color, offset_color);
+
+            color.a = color_multiply(vertex_color.a, texel_color.a);
             break;
         default:
             std::printf("Unimplemented shading instruction %u\n", ctx.tsp_instr.shading_instr);
@@ -333,45 +368,52 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
 
     Color dst;
 
-    if (ctx.tsp_instr.destination_select) {
-        dst = Color{.raw = ctx.secondary_buffer[SCREEN_WIDTH * y + x]};
+    if (ctx.is_translucent) {
+        if (ctx.tsp_instr.destination_select) {
+            dst = Color{.raw = ctx.secondary_buffer[SCREEN_WIDTH * y + x]};
+        } else {
+            dst = Color{.raw = ctx.color_buffer[SCREEN_WIDTH * y + x]};
+        }
+
+        const Color src_saved = src;
+
+        switch (ctx.tsp_instr.source_instr) {
+            case BLEND_FUNCTION_ONE:
+                // Nothing to do here
+                break;
+            case BLEND_FUNCTION_SOURCE_ALPHA:
+                src.r = color_multiply(src.r, src_saved.a);
+                src.g = color_multiply(src.g, src_saved.a);
+                src.b = color_multiply(src.b, src_saved.a);
+                src.a = color_multiply(src.a, src_saved.a);
+                break;
+            default:
+                std::printf("Unimplemented source blend function %u\n", ctx.tsp_instr.source_instr);
+                exit(1);
+        }
+
+        switch (ctx.tsp_instr.destination_instr) {
+            case BLEND_FUNCTION_ZERO:
+                dst.raw = 0;
+                break;
+            case BLEND_FUNCTION_ONE:
+                // Nothing to do here
+                break;
+            case BLEND_FUNCTION_INVERSE_SOURCE_ALPHA:
+                dst.a = color_multiply(dst.a, 255 - src_saved.a);
+                dst.r = color_multiply(dst.r, 255 - src_saved.a);
+                dst.g = color_multiply(dst.g, 255 - src_saved.a);
+                dst.b = color_multiply(dst.b, 255 - src_saved.a);
+                break;
+            default:
+                std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
+                exit(1);
+        }
+
+        dst = add_and_clamp(src, dst);
     } else {
-        dst = Color{.raw = ctx.color_buffer[SCREEN_WIDTH * y + x]};
+        dst = src;
     }
-
-    const Color src_saved = src;
-
-    switch (ctx.tsp_instr.source_instr) {
-        case BLEND_FUNCTION_ONE:
-            // Nothing to do here
-            break;
-        case BLEND_FUNCTION_SOURCE_ALPHA:
-            src.r = color_multiply(src.r, src_saved.a);
-            src.g = color_multiply(src.g, src_saved.a);
-            src.b = color_multiply(src.b, src_saved.a);
-            src.a = color_multiply(src.a, src_saved.a);
-            break;
-        default:
-            std::printf("Unimplemented source blend function %u\n", ctx.tsp_instr.source_instr);
-            exit(1);
-    }
-
-    switch (ctx.tsp_instr.destination_instr) {
-        case BLEND_FUNCTION_ZERO:
-            dst.raw = 0;
-            break;
-        case BLEND_FUNCTION_INVERSE_SOURCE_ALPHA:
-            dst.a = color_multiply(dst.a, 255 - src_saved.a);
-            dst.r = color_multiply(dst.r, 255 - src_saved.a);
-            dst.g = color_multiply(dst.g, 255 - src_saved.a);
-            dst.b = color_multiply(dst.b, 255 - src_saved.a);
-            break;
-        default:
-            std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
-            exit(1);
-    }
-
-    dst = add_and_clamp(src, dst);
     
     if (ctx.tsp_instr.destination_select) {
         ctx.secondary_buffer[SCREEN_WIDTH * y + x] = dst.raw;
@@ -423,9 +465,11 @@ static void draw_triangle(const Vertex* vertices) {
                 }
 
                 Color color = c.color;
+                Color offset_color = c.offset_color;
 
                 if (ctx.isp_instr.regular.use_gouraud_shading) {
                     color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
+                    offset_color.raw = interpolate_offset_colors(w0, w1, w2, a, b, c, area);
                 }
 
                 if (!ctx.tsp_instr.use_alpha) {
@@ -464,7 +508,8 @@ static void draw_triangle(const Vertex* vertices) {
 
                     color = combine_colors(
                         color,
-                        unpack_texel(read_texel<u16>(tex_x, tex_y))
+                        unpack_texel(read_texel<u16>(tex_x, tex_y)),
+                        offset_color
                     );
                 }
 

@@ -24,7 +24,7 @@ union Color {
 struct Vertex {
     f32 x, y, z;
     f32 u, v;
-    Color color;
+    Color color, offset_color;
 };
 
 union IspInstruction {
