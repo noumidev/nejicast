@@ -40,6 +40,8 @@ enum : u32 {
     IO_GDAPRO  = 0x005F74B8,
     IO_GDRPRO  = 0x005F74E4,
     IO_GDRPROS = 0x005F74EC,
+    IO_GDSTARD = 0x005F74F4,
+    IO_GDLEND  = 0x005F74F8,
 };
 
 #define SB_GDSTAR  ctx.gdrom_dma.start_address
@@ -58,13 +60,17 @@ enum : u32 {
 #define SB_G1CRDYC ctx.enable_io_ready
 #define SB_GDAPRO  ctx.address_protection
 #define SB_GDRPRO  ctx.boot_rom_protection
+#define SB_GDSTARD ctx.gdrom_dma.debug_address
+#define SB_GDLEND  ctx.gdrom_dma.debug_length
 
 struct {
     std::vector<u8> boot_rom;
 
     struct {
         u32 start_address;
+        u32 debug_address;
         u32 length;
+        u32 debug_length;
         bool from_gdrom;
         bool enable;
         bool is_running;
@@ -152,6 +158,9 @@ static void finish_gdrom_dma(const int) {
     SB_GDST = false;
 
     hw::holly::intc::assert_normal_interrupt(GDROM_DMA_INTERRUPT);
+
+    SB_GDSTARD = SB_GDSTAR + SB_GDLEN;
+    SB_GDLEND = SB_GDLEN;
 }
 
 void try_gdrom_dma() {
@@ -181,8 +190,11 @@ void execute_gdrom_dma() {
         "GDROM_DMA_END",
         finish_gdrom_dma,
         0,
-        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(16 * SB_GDLEN)
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(32 * SB_GDLEN)
     );
+
+    SB_GDSTARD = SB_GDSTAR;
+    SB_GDLEND = 0;
 }
 
 void set_gdrom_dma_ready(const bool ready) {
@@ -214,6 +226,14 @@ u32 read(const u32 addr) {
             std::puts("SB_GDRPROS read32");
 
             return ROM_PROTECTION_STATUS_PASSED;
+        case IO_GDSTARD:
+            std::puts("SB_GDSTARD read32");
+
+            return SB_GDSTARD;
+        case IO_GDLEND:
+            std::puts("SB_GDLEND read32");
+
+            return SB_GDLEND;
         default:
             // std::printf("Unmapped G1 read32 @ %08X\n", addr);
             return 0;
