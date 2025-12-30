@@ -26,21 +26,11 @@
 namespace hw::cpu {
 
 // Instruction bit macros
-#define IMM  get_bits(instr, 0,  7)
-#define DISP get_bits(instr, 0, 11)
-#define D    get_bits(instr, 0,  3)
-#define M    get_bits(instr, 4,  7)
-#define N    get_bits(instr, 8, 11)
-
-static inline u32 get_mask(const u32 start, const u32 end) {
-    assert(start <= end);
-
-    return (UINT32_MAX << start) & (UINT32_MAX >> ((8 * sizeof(u32) - 1) - end));
-}
-
-static inline u32 get_bits(const u32 n, const u32 start, const u32 end) {
-    return (n & get_mask(start, end)) >> start;
-}
+#define IMM  ((instr >> 0) & 0x0FF)
+#define DISP ((instr >> 0) & 0xFFF)
+#define D    ((instr >> 0) & 0x00F)
+#define M    ((instr >> 4) & 0x00F)
+#define N    ((instr >> 8) & 0x00F)
 
 // Register file macros
 #define PC          ctx.pc
@@ -2124,7 +2114,7 @@ void clear_interrupt(const int interrupt_level) {
 }
 
 void step() {
-    ocio::tmu::step(ctx.cycles);
+    // ocio::tmu::step(ctx.cycles);
 
     if (ctx.state == STATE_SLEEPING) {
         // Zzz...
