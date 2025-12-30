@@ -155,8 +155,15 @@ static void reset_data_out_buffer() {
 
 constexpr int GDROM_INTERRUPT = 0;
 
+static void clear_error() {
+    GD_STATUS.check = false;
+    GD_ERROR.raw = 0;
+}
+
 static void finish_non_data_command() {
     GD_STATUS.busy = 0;
+
+    clear_error();
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -169,6 +176,8 @@ static void prepare_packet_transfer() {
 
     GD_REASON.is_command = 1;
     GD_REASON.from_device = 0;
+
+    clear_error();
 }
 
 static void ata_nop() {
@@ -176,10 +185,10 @@ static void ata_nop() {
 
     cancel_dma();
 
+    finish_non_data_command();
+
     GD_STATUS.check = true;
     GD_ERROR.abort = true;
-
-    finish_non_data_command();
 }
 
 static void ata_packet() {
@@ -235,9 +244,6 @@ static void finish_spi_non_data_command() {
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
 
-    GD_STATUS.check = false;
-    GD_ERROR.raw = 0;
-
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
@@ -250,8 +256,7 @@ static void finish_spi_host_pio_command(const u16 size) {
 
     GD_BYTE_COUNT.raw = size;
 
-    GD_STATUS.check = false;
-    GD_ERROR.raw = 0;
+    clear_error();
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -264,8 +269,7 @@ static void finish_host_pio_transfer() {
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
 
-    GD_STATUS.check = false;
-    GD_ERROR.raw = 0;
+    clear_error();
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -279,8 +283,7 @@ static void finish_device_pio_command(const u16 size) {
 
     GD_BYTE_COUNT.raw = size;
 
-    GD_STATUS.check = false;
-    GD_ERROR.raw = 0;
+    clear_error();
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -293,8 +296,7 @@ static void finish_device_pio_transfer() {
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
 
-    GD_STATUS.check = false;
-    GD_ERROR.raw = 0;
+    clear_error();
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 
@@ -320,6 +322,8 @@ static void finish_dma_transfer(const int) {
     GD_STATUS.busy = 0;
     GD_STATUS.data_request = 0;
     GD_STATUS.data_ready = 1;
+
+    clear_error(); // ?
 
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
@@ -648,7 +652,7 @@ static void execute_spi_command(const int command) {
     }
 }
 
-constexpr i64 GDROM_DELAY = 8192;
+constexpr i64 GDROM_DELAY = 100000;
 
 static void write_data_default(const u16 data) {
     assert(ctx.data_in_bytes.size() < NUM_DATA_IN_BYTES);
@@ -844,7 +848,7 @@ const u8* get_dma_bytes(const u32 size) {
             "SPI_DMA",
             finish_dma_transfer,
             0,
-            scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(16 * GDROM_DELAY)
+            scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(GDROM_DELAY)
         );
     }
 
