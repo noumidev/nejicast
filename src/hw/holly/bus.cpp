@@ -171,13 +171,15 @@ void initialize() {
         true
     );
 
-    map_memory(
-        ctx.dram.data(),
-        BASE_DRAM,
-        SIZE_DRAM,
-        true,
-        true
-    );
+    for (int i = 0; i < 4; i++) {
+        map_memory(
+            ctx.dram.data(),
+            BASE_DRAM + i * SIZE_DRAM,
+            SIZE_DRAM,
+            true,
+            true
+        );
+    }
 }
 
 void reset() {
@@ -247,7 +249,7 @@ T read(const u32 addr) {
         return data;
     }
 
-    if ((addr & ~(SIZE_EXTDEV - 1)) == SIZE_EXTDEV) {
+    if ((addr & ~(SIZE_EXTDEV - 1)) == BASE_EXTDEV) {
         return 0xFF;
     }
 
@@ -330,6 +332,14 @@ void write_texture_memory(const u32 addr, const u32 data) {
         // First VRAM module
         write<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1), data);
     }
+}
+
+template<>
+void write_texture_memory(const u32 addr, const u64 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    write<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1), data);
+    write<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1), data >> 32);
 }
 
 template<typename T>
