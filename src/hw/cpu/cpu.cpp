@@ -1797,6 +1797,7 @@ static i64 i_xtrct(const u16 instr) {
 static void initialize_instr_table() {
     ctx.instr_table.fill(i_undefined);
 
+    fill_table_with_pattern(ctx.instr_table.data(), "0000000000000000", i_nop);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00000010", i_stc<ControlRegister::Sr, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxx00000011", i_bra<true, false>);
     fill_table_with_pattern(ctx.instr_table.data(), "0000xxxxxxxx0100", i_movs0<OperandSize::Byte>);
