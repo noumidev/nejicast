@@ -98,7 +98,7 @@ struct {
         u8 raw;
 
         struct {
-            u8 sense_key   : 4;
+            u8 status      : 4;
             u8 disc_format : 4;
         };
     } sector_number;
@@ -151,6 +151,23 @@ static void reset_data_out_buffer() {
     ctx.data_out_bytes.swap(temp);
 
     ctx.data_out_ptr = 0;
+}
+
+enum {
+    DRIVE_STATE_BUSY,
+    DRIVE_STATE_PAUSE,
+    DRIVE_STATE_STANDBY,
+    DRIVE_STATE_PLAY,
+    DRIVE_STATE_SEEK,
+    DRIVE_STATE_SCAN,
+    DRIVE_STATE_OPEN,
+    DRIVE_STATE_NODISC,
+    DRIVE_STATE_RETRY,
+    DRIVE_STATE_ERROR,
+};
+
+static void set_drive_state(const int state) {
+    GD_SECTOR_NUMBER.status = state;
 }
 
 constexpr int GDROM_INTERRUPT = 0;
@@ -329,22 +346,13 @@ static void finish_dma_transfer(const int) {
 }
 
 enum {
-    SENSE_KEY_NO_SENSE,
-};
-
-enum {
-    ADDITIONAL_SENSE_KEY_NO_SENSE,
-};
-
-enum {
     DISC_FORMAT_CDROM_XA = 2,
 };
 
 static void spi_test_unit() {
     std::puts("SPI TEST_UNIT");
 
-    GD_SECTOR_NUMBER.sense_key = SENSE_KEY_NO_SENSE;
-    GD_SECTOR_NUMBER.disc_format = DISC_FORMAT_CDROM_XA;
+    // Do nothing here, drive state is updated in other places
 
     finish_spi_non_data_command();
 }
@@ -353,6 +361,25 @@ static void spi_test_unit() {
 #define SPI_SESSION_NUMBER       ctx.data_in_bytes[2]
 #define SPI_ALLOCATION_LENGTH_HI ctx.data_in_bytes[3]
 #define SPI_ALLOCATION_LENGTH_LO ctx.data_in_bytes[4]
+
+static void spi_cd_play() {
+    const u32 start_fad = bswap24_from_buf(&ctx.data_in_bytes[2]);
+    const u32 end_fad = bswap24_from_buf(&ctx.data_in_bytes[8]);
+
+    std::printf("SPI CD_PLAY (start FAD: %u, end FAD: %u)\n", start_fad, end_fad);
+
+    // Dump CD-DA sectors
+    /* FILE* file = std::fopen("cdda.bin", "w+b");
+
+    std::vector<u8> sector_bytes = common::cdi::read_sectors(start_fad, end_fad - start_fad - 150, true);
+
+    std::fwrite(sector_bytes.data(), 1, sector_bytes.size(), file);
+    std::fclose(file); */
+
+    set_drive_state(DRIVE_STATE_PLAY);
+
+    finish_spi_non_data_command();
+}
 
 static void spi_cd_read() {
     const u8 select_data =  ctx.data_in_bytes[1] >> 4;
@@ -380,6 +407,45 @@ static void spi_cd_read() {
 
     prepare_dma_transfer(sector_bytes.size());
 }
+
+enum {
+    SEEK_TYPE_FAD   = 1,
+    SEEK_TYPE_MSF   = 2,
+    SEEK_TYPE_STOP  = 3,
+    SEEK_TYPE_PAUSE = 4,
+};
+
+static void spi_cd_seek() {
+    constexpr const char* SEEK_TYPES[] = {
+        "N/A", "FAD", "MSF", "STOP",
+        "PAUSE", "N/A", "N/A", "N/A" 
+    };
+
+    const u8 seek_type = ctx.data_in_bytes[1] & 7;
+
+    std::printf("SPI CD_SEEK (type: %s)\n", SEEK_TYPES[seek_type]);
+
+    // const u32 fad = bswap24_from_buf(&ctx.data_in_bytes[2]);
+
+    switch (seek_type) {
+        case SEEK_TYPE_PAUSE:
+            set_drive_state(DRIVE_STATE_PAUSE);
+            break;
+        default:
+            std::puts("GD-ROM Unimplemented seek type");
+            exit(1);
+    }
+
+    finish_spi_non_data_command();
+}
+
+enum {
+    SENSE_KEY_NO_SENSE,
+};
+
+enum {
+    ADDITIONAL_SENSE_KEY_NO_SENSE,
+};
 
 static void spi_req_error() {
     std::printf("SPI REQ_ERROR (length: %u)\n", SPI_ALLOCATION_LENGTH_LO);
@@ -425,6 +491,21 @@ static void spi_req_ses() {
     for (u8 i = 0; i < sizeof(session_info); i++) {
         ctx.data_out_bytes.push_back(((u8*)&session_info)[i]);
     }
+
+    finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
+}
+
+static void spi_req_stat() {
+    std::printf("SPI REQ_STAT (address: %u, length: %u)\n", SPI_STARTING_ADDRESS, SPI_ALLOCATION_LENGTH_LO);
+
+    assert((SPI_STARTING_ADDRESS + SPI_ALLOCATION_LENGTH_LO) <= SIZE_MODE);
+
+    reset_data_out_buffer();
+
+    ctx.data_out_bytes.resize(SPI_ALLOCATION_LENGTH_LO);
+
+    ctx.data_in_bytes[0] = DRIVE_STATE_PAUSE;
+    ctx.data_in_bytes[1] = GD_SECTOR_NUMBER.disc_format << 4;
 
     finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
 }
@@ -601,11 +682,14 @@ static void spi_71() {
 
 enum {
     SPI_COMMAND_TEST_UNIT = 0x00,
+    SPI_COMMAND_REQ_STAT  = 0x10,
     SPI_COMMAND_REQ_MODE  = 0x11,
     SPI_COMMAND_SET_MODE  = 0x12,
     SPI_COMMAND_REQ_ERROR = 0x13,
     SPI_COMMAND_GET_TOC   = 0x14,
     SPI_COMMAND_REQ_SES   = 0x15,
+    SPI_COMMAND_CD_PLAY   = 0x20,
+    SPI_COMMAND_CD_SEEK   = 0x21,
     SPI_COMMAND_CD_READ   = 0x30,
     SPI_COMMAND_GET_SCD   = 0x40,
     SPI_COMMAND_INIT      = 0x70, // ??
@@ -618,6 +702,9 @@ static void execute_spi_command(const int command) {
     switch (command) {
         case SPI_COMMAND_TEST_UNIT:
             spi_test_unit();
+            break;
+        case SPI_COMMAND_REQ_STAT:
+            spi_req_stat();
             break;
         case SPI_COMMAND_REQ_MODE:
             spi_req_mode();
@@ -633,6 +720,12 @@ static void execute_spi_command(const int command) {
             break;
         case SPI_COMMAND_REQ_SES:
             spi_req_ses();
+            break;
+        case SPI_COMMAND_CD_PLAY:
+            spi_cd_play();
+            break;
+        case SPI_COMMAND_CD_SEEK:
+            spi_cd_seek();
             break;
         case SPI_COMMAND_CD_READ:
             spi_cd_read();
@@ -689,6 +782,12 @@ void initialize() {
 
 void reset() {
     std::memset(&ctx, 0, sizeof(ctx));
+
+    set_drive_state(DRIVE_STATE_PAUSE);
+
+    GD_SECTOR_NUMBER.disc_format = DISC_FORMAT_CDROM_XA;
+
+    // TODO: set sense key "UNIT ATTENTION"?
 }
 
 void shutdown() {}
