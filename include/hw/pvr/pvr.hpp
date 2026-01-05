@@ -105,11 +105,13 @@ T read_vram_linear(const u32 addr);
 template<typename T>
 T read_vram_interleaved(const u32 addr);
 
+void set_alpha_reference(const u8 alpha_reference);
+
 void set_isp_instruction(const IspInstruction isp_instr);
 void set_tsp_instruction(const TspInstruction tsp_instr);
 void set_texture_control(const TextureControlWord texture_control);
 
-void set_translucent(const bool is_translucent);
+void set_polygon_type(const int list_type);
 
 void clear_buffers();
 void submit_triangle(const Vertex* vertices);

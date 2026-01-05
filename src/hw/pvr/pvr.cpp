@@ -38,13 +38,15 @@ struct {
     TspInstruction tsp_instr;
     TextureControlWord texture_control;
 
+    u8 alpha_reference;
+
     // TSP
     u32 u_size, v_size;
 
     // Texture control
     u32 texture_addr;
 
-    bool is_translucent;
+    int polygon_type;
 } ctx;
 
 template<typename T>
@@ -331,7 +333,7 @@ static Color combine_colors(const Color vertex_color, const Color texel_color, c
             color.g = color_multiply(vertex_color.g, texel_color.g);
             color.b = color_multiply(vertex_color.b, texel_color.b);
 
-            add_and_clamp(color, offset_color);
+            color = add_and_clamp(color, offset_color);
 
             color.a = texel_color.a;
             break;
@@ -340,7 +342,7 @@ static Color combine_colors(const Color vertex_color, const Color texel_color, c
             color.g = color_multiply(vertex_color.g, texel_color.g);
             color.b = color_multiply(vertex_color.b, texel_color.b);
 
-            add_and_clamp(color, offset_color);
+            color = add_and_clamp(color, offset_color);
 
             color.a = color_multiply(vertex_color.a, texel_color.a);
             break;
@@ -368,7 +370,8 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
 
     Color dst;
 
-    if (ctx.is_translucent) {
+    if (ctx.polygon_type == ta::LIST_TYPE_TRANSLUCENT) {
+        // TODO: handle translucent modifier volumes
         if (ctx.tsp_instr.destination_select) {
             dst = Color{.raw = ctx.secondary_buffer[SCREEN_WIDTH * y + x]};
         } else {
@@ -423,6 +426,14 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
 }
 
 static void draw_triangle(const Vertex* vertices) {
+    if (
+        (ctx.polygon_type == ta::LIST_TYPE_OPAQUE_MODIFIER) ||
+        (ctx.polygon_type == ta::LIST_TYPE_TRANSLUCENT_MODIFIER)
+    ) {
+        // TODO: handle modifier volumes
+        return;
+    }
+
     const Vertex& a = vertices[0];
     Vertex b = vertices[1];
     Vertex c = vertices[2];
@@ -513,6 +524,15 @@ static void draw_triangle(const Vertex* vertices) {
                     );
                 }
 
+                if (ctx.polygon_type == ta::LIST_TYPE_PUNCHTHROUGH) {
+                    if (color.a < ctx.alpha_reference) {
+                        continue;
+                    }
+
+                    // PT polygons are drawn with an alpha of 1.0 according to my sources
+                    color.a = 0xFF;
+                }
+
                 blend_and_flush(color, x, y);
             }
         }
@@ -556,6 +576,10 @@ void shutdown() {
     ta::shutdown();
 }
 
+void set_alpha_reference(const u8 alpha_reference) {
+    ctx.alpha_reference = alpha_reference;
+}
+
 void set_isp_instruction(const IspInstruction isp_instr) {
     ctx.isp_instr = isp_instr;
 }
@@ -575,8 +599,8 @@ void set_texture_control(const TextureControlWord texture_control) {
     ctx.texture_addr = texture_control.regular.texture_addr * sizeof(u64);
 }
 
-void set_translucent(const bool is_translucent) {
-    ctx.is_translucent = is_translucent;
+void set_polygon_type(const int list_type) {
+    ctx.polygon_type = list_type;
 }
 
 void clear_buffers() {
