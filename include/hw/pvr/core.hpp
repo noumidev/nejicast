@@ -31,6 +31,6 @@ void begin_vertex_strip(
 
 void push_vertex(const pvr::Vertex vertex);
 
-void end_vertex_strip(const bool is_translucent);
+void end_vertex_strip(const int list_type);
 
 }

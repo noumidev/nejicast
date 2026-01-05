@@ -71,6 +71,7 @@ enum : u32 {
     IO_SPG_STATUS        = 0x005F810C,
     IO_FB_BURSTCTRL      = 0x005F8110,
     IO_Y_COEFF           = 0x005F8118,
+    IO_PT_ALPHA_REF      = 0x005F811C,
     IO_TA_OL_BASE        = 0x005F8124,
     IO_TA_ISP_BASE       = 0x005F8128,
     IO_TA_OL_LIMIT       = 0x005F812C,
@@ -130,7 +131,7 @@ struct VertexStrip {
     TspInstruction tsp_instr;
     TextureControlWord texture_control;
     
-    bool is_translucent;
+    int list_type;
 
     std::vector<Vertex> vertices;
 };
@@ -475,7 +476,7 @@ static void draw_background() {
     pvr::set_isp_instruction(background_strip.isp_instr);
     pvr::set_tsp_instruction(background_strip.tsp_instr);
     pvr::set_texture_control(background_strip.texture_control);
-    pvr::set_translucent(false);
+    pvr::set_polygon_type(ta::LIST_TYPE_OPAQUE);
     
     for (usize i = 0; i < (background_strip.vertices.size() - 2); i++) {
         pvr::submit_triangle(&background_strip.vertices[i]);
@@ -500,7 +501,7 @@ static void start_render() {
         pvr::set_isp_instruction(strip.isp_instr);
         pvr::set_tsp_instruction(strip.tsp_instr);
         pvr::set_texture_control(strip.texture_control);
-        pvr::set_translucent(strip.is_translucent);
+        pvr::set_polygon_type(strip.list_type);
         
         for (usize i = 0; i < (strip.vertices.size() - 2); i++) {
             pvr::submit_triangle(&strip.vertices[i]);
@@ -559,6 +560,10 @@ u32 read(const u32 addr) {
             std::puts("FB_R_CTRL read32");
 
             return FB_R_CTRL.raw;
+        case IO_SPG_CONTROL:
+            std::puts("SPG_CONTROL read32");
+
+            return spg::get_control();
         case IO_SPG_VBLANK:
             std::puts("SPG_VBLANK read32");
 
@@ -582,7 +587,7 @@ u32 read(const u32 addr) {
             return 0;
         default:
             std::printf("Unmapped PVR CORE read32 @ %08X\n", addr);
-            exit(1);
+            return 0;
     }
 }
 
@@ -839,6 +844,11 @@ void write(const u32 addr, const u32 data) {
         
             Y_COEFF.raw = data;
             break;
+        case IO_PT_ALPHA_REF:
+            std::printf("PT_ALPHA_REF write32 = %08X\n", data);
+        
+            pvr::set_alpha_reference(data);
+            break;
         case IO_TA_OL_BASE:
             std::printf("TA_OL_BASE write32 = %08X\n", data);
         
@@ -883,7 +893,7 @@ void write(const u32 addr, const u32 data) {
             break;
         default:
             std::printf("Unmapped PVR CORE write32 @ %08X = %08X\n", addr, data);
-            exit(1);
+            return;
     }
 }
 
@@ -924,10 +934,10 @@ void push_vertex(const Vertex vertex) {
     strips.back().vertices.push_back(vertex);
 }
 
-void end_vertex_strip(const bool is_translucent) {
+void end_vertex_strip(const int list_type) {
     auto& strips = ctx.display_lists.back().strips;
 
-    strips.back().is_translucent = is_translucent;
+    strips.back().list_type = list_type;
 }
 
 }
