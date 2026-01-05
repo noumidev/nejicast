@@ -38,6 +38,6 @@ void load(const char* path);
 SessionInfo request_session(const u8 num_session);
 Toc read_toc(const bool second_layer);
 
-std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors);
+std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors, const bool is_cdda = false);
 
 }

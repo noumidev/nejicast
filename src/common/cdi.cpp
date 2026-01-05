@@ -181,6 +181,7 @@ void load(const char* path) {
     // Seek to header
     switch (version) {
         case 0x80000004:
+        case 0x80000005:
             seek_stream(header_offset, SEEK_SET);
             break;
         case 0x80000006:
@@ -204,7 +205,13 @@ void load(const char* path) {
 
     long pos = 0;
 
-    for (Session& session : ctx.cdi.sessions) {
+    for (u16 i = 0; i < num_sessions; i++) {
+        Session& session = ctx.cdi.sessions[i];
+
+        if ((i != 0) && (version == 0x80000004)) {
+            seek_stream(2);
+        }
+
         pos = read_session(session, pos, version);
 
         seek_stream(3);
@@ -301,8 +308,8 @@ Toc read_toc(const bool second_layer) {
     return toc;
 }
 
-std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors) {
-    constexpr u32 SECTOR_SIZE = 2048;
+std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors, const bool is_cdda) {
+    const u32 sector_size = is_cdda ? 2352 : 2048;
 
     if (ctx.cdi.file == nullptr) {
         std::puts("CDI Failed to read sectors (CDI not loaded)");
@@ -312,7 +319,7 @@ std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors) {
     // Prepare buffer for sector data
     std::vector<u8> sector_bytes;
 
-    sector_bytes.resize(SECTOR_SIZE * num_sectors);
+    sector_bytes.resize(sector_size * num_sectors);
 
     const u32 lba = fad_to_lba(fad);
 
@@ -323,16 +330,16 @@ std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors) {
             const u32 track_length = track.track_length;
 
             if ((lba >= first_lba) && (lba < (first_lba + track_length))) {
-                if ((lba + num_sectors) > (first_lba + track_length)) {
+                /* if ((lba + num_sectors) > (first_lba + track_length)) {
                     std::puts("CDI LBA out of bounds");
                     exit(1);
-                }
+                } */
 
                 for (u32 sector = 0; sector < num_sectors; sector++) {
                     read_stream(
-                        &sector_bytes[SECTOR_SIZE * sector],
-                        SECTOR_SIZE,
-                        track.start + track.sector_size * (track.pregap_length + lba - track.first_lba + sector) + 8,
+                        &sector_bytes[sector_size * sector],
+                        sector_size,
+                        track.start + track.sector_size * (track.pregap_length + lba - track.first_lba + sector) + !is_cdda * 8,
                         SEEK_SET
                     );
                 }
