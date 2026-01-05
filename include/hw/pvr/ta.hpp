@@ -10,6 +10,14 @@
 // PVR Tile Accelerator functions
 namespace hw::pvr::ta {
 
+enum {
+    LIST_TYPE_OPAQUE               = 0,
+    LIST_TYPE_OPAQUE_MODIFIER      = 1,
+    LIST_TYPE_TRANSLUCENT          = 2,
+    LIST_TYPE_TRANSLUCENT_MODIFIER = 3,
+    LIST_TYPE_PUNCHTHROUGH         = 4,
+};
+
 void initialize();
 void reset();
 void shutdown();
