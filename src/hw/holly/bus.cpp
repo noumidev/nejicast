@@ -12,10 +12,10 @@
 #include <cstring>
 #include <vector>
 
+#include <hw/aica/aica.hpp>
 #include <hw/g1/g1.hpp>
 #include <hw/g1/flash.hpp>
 #include <hw/g1/gdrom.hpp>
-#include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/g2/modem.hpp>
 #include <hw/g2/rtc.hpp>
@@ -156,7 +156,7 @@ void initialize() {
     );
 
     map_memory(
-        g2::aica::get_wave_ram_ptr(),
+        aica::get_wave_ram_ptr(),
         BASE_WAVE_RAM,
         SIZE_WAVE_RAM,
         true,
@@ -279,7 +279,7 @@ T read(const u32 addr) {
     }
 
     if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
-        return hw::g2::aica::read<T>(addr);
+        return hw::aica::read<T>(addr);
     }
     
     if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
@@ -392,7 +392,7 @@ void write(const u32 addr, const T data) {
     }
 
     if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
-        return hw::g2::aica::write<T>(addr, data);
+        return hw::aica::write<T>(addr, data);
     }
 
     if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {

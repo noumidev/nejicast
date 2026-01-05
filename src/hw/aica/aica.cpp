@@ -3,7 +3,7 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include <hw/g2/aica.hpp>
+#include <hw/aica/aica.hpp>
 
 #include <array>
 #include <cassert>
@@ -11,7 +11,10 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace hw::g2::aica {
+#include <hw/aica/arm.hpp>
+#include <hw/aica/bus.hpp>
+
+namespace hw::aica {
 
 enum : u32 {
     IO_ARMRST = 0x00702C00,
@@ -36,13 +39,26 @@ struct {
     } arm_reset;
 } ctx;
 
-void initialize() {}
+void initialize() {
+    arm::initialize();
+    bus::initialize();
+}
 
 void reset() {
     std::memset(&ctx, 0, sizeof(ctx));
+
+    // ARM held in reset on power-up
+    ARMRST.reset_arm = 1;
+
+    arm::assert_reset(true);
+
+    bus::reset();
 }
 
-void shutdown() {}
+void shutdown() {
+    arm::shutdown();
+    bus::shutdown();
+}
 
 template<typename T>
 T read(const u32 addr) {
@@ -81,6 +97,8 @@ void write(const u32 addr, const u32 data) {
             std::printf("ARMRST write32 = %08X\n", data);
 
             ARMRST.raw = data;
+            
+            arm::assert_reset(ARMRST.reset_arm);
             break;
         default:
             // For now, ignore all registers

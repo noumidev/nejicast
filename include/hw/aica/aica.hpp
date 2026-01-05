@@ -8,7 +8,7 @@
 #include <common/types.hpp>
 
 // AICA functions
-namespace hw::g2::aica {
+namespace hw::aica {
 
 void initialize();
 void reset();

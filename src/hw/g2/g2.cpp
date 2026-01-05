@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <hw/g2/aica.hpp>
 #include <hw/g2/modem.hpp>
 #include <hw/g2/rtc.hpp>
 
@@ -142,13 +141,11 @@ struct {
 } ctx;
 
 void initialize() {
-    aica::initialize();
     modem::initialize();
     rtc::initialize();
 }
 
 void reset() {
-    aica::reset();
     modem::reset();
     rtc::reset();
 
@@ -156,7 +153,6 @@ void reset() {
 }
 
 void shutdown() {
-    aica::shutdown();
     modem::shutdown();
     rtc::shutdown();
 }
