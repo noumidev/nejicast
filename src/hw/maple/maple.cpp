@@ -263,6 +263,8 @@ void write(const u32 addr, const u32 data) {
             std::printf("SB_MDTSEL write32 = %08X\n", data);
 
             SB_MDTSEL = (data & 1) != 0;
+
+            assert(!SB_MDTSEL);
             break;
         case IO_MDEN:
             std::printf("SB_MDEN write32 = %08X\n", data);
