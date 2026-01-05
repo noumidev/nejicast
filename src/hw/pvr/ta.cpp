@@ -47,6 +47,13 @@ union ParameterControlWord {
     };
 };
 
+enum {
+    GEOMETRY_TYPE_NONE,
+    GEOMETRY_TYPE_POLYGON,
+    GEOMETRY_TYPE_SPRITE,
+    GEOMETRY_TYPE_MODIFIER_VOLUME,
+};
+
 struct {
     u32 fifo_bytes[16];
 
@@ -57,13 +64,14 @@ struct {
     TspInstruction current_tsp_instr;
     TextureControlWord current_texture_control;
 
-    u32 intensity_colors[4];
-
+    Color global_color, global_offset_color;
     Color prev_color;
 
     bool has_list_type;
     bool has_parameter_control;
     bool is_first_vertex;
+
+    int geometry_type;
 
     union {
         u32 raw;
@@ -152,14 +160,6 @@ void initialize_lists() {
 }
 
 enum {
-    LIST_TYPE_OPAQUE               = 0,
-    LIST_TYPE_OPAQUE_MODIFIER      = 1,
-    LIST_TYPE_TRANSLUCENT          = 2,
-    LIST_TYPE_TRANSLUCENT_MODIFIER = 3,
-    LIST_TYPE_PUNCHTHROUGH         = 4,
-};
-
-enum {
     INTERRUPT_OPAQUE_LIST               =  7,
     INTERRUPT_OPAQUE_MODIFIER_LIST      =  8,
     INTERRUPT_TRANSLUCENT_LIST          =  9,
@@ -201,10 +201,13 @@ static Color from_floats(const u32* float_bytes) {
 }
 
 enum {
-    PARAM_TYPE_END_OF_LIST    = 0,
-    PARAM_TYPE_USER_TILE_CLIP = 1,
-    PARAM_TYPE_GLOBAL_POLYGON = 4,
-    PARAM_TYPE_VERTEX         = 7,
+    PARAM_TYPE_END_OF_LIST     = 0,
+    PARAM_TYPE_USER_TILE_CLIP  = 1,
+    PARAM_TYPE_OBJECT_LIST_SET = 2,
+    PARAM_TYPE_GLOBAL_POLYGON  = 4,
+    PARAM_TYPE_GLOBAL_SPRITE   = 5,
+    PARAM_TYPE_GLOBAL_MODIFIER = 6,
+    PARAM_TYPE_VERTEX          = 7,
 };
 
 enum {
@@ -388,6 +391,10 @@ static int get_polygon_type() {
 }
 
 static bool can_parse_vertex() {
+    if (ctx.geometry_type != GEOMETRY_TYPE_POLYGON) {
+        return false;
+    }
+
     const int polygon_type = get_polygon_type();
 
     switch (polygon_type) {
@@ -411,6 +418,10 @@ static void ta_end_of_list() {
 
 static void ta_user_tile_clip() {
     if constexpr (!SILENT_TA) std::puts("TA User tile clip");
+}
+
+static void ta_object_list_set() {
+    if constexpr (!SILENT_TA) std::puts("TA Object list set");
 }
 
 static void ta_global_polygon() {
@@ -441,8 +452,15 @@ static void ta_global_polygon() {
     switch (global_type) {
         case GLOBAL_TYPE_PC_FC:
             break;
+        case GLOBAL_TYPE_PC_2V:
+            break;
         case GLOBAL_TYPE_I:
-            std::memcpy(ctx.intensity_colors, &ctx.fifo_bytes[4], sizeof(ctx.intensity_colors));
+            ctx.global_color = from_floats(&ctx.fifo_bytes[4]);
+            ctx.global_offset_color = Color{.raw = 0};
+            break;
+        case GLOBAL_TYPE_I_OC:
+            ctx.global_color = from_floats(&ctx.fifo_bytes[8]);
+            ctx.global_offset_color = from_floats(&ctx.fifo_bytes[12]);
             break;
         default:
             std::printf("TA Unimplemented global type %s\n", GLOBAL_TYPES[global_type]);
@@ -456,7 +474,42 @@ static void ta_global_polygon() {
 
         ctx.has_list_type = true;
     }
+    
+    ctx.geometry_type = GEOMETRY_TYPE_POLYGON;
+    ctx.has_parameter_control = false;
+}
 
+static void ta_global_sprite() {
+    if constexpr (!SILENT_TA) std::puts("TA Global parameter (sprite)");
+
+    ctx.current_isp_instr = IspInstruction{.raw = ctx.fifo_bytes[1]};
+    ctx.current_tsp_instr = TspInstruction{.raw = ctx.fifo_bytes[2]};
+    ctx.current_texture_control = TextureControlWord{.raw = ctx.fifo_bytes[3]};
+    
+    if constexpr (!SILENT_TA) {
+        std::printf("ISP instruction = %08X\n", ctx.current_isp_instr.raw);
+        std::printf("TSP instruction = %08X\n", ctx.current_tsp_instr.raw);
+        std::printf("Texture control = %08X\n", ctx.current_texture_control.raw);   
+    }
+
+    ctx.current_isp_instr.regular.short_uv = ctx.current_global_parameter.use_short_texture_coordinates;
+    ctx.current_isp_instr.regular.use_gouraud_shading = ctx.current_global_parameter.use_gouraud_shading;
+    ctx.current_isp_instr.regular.use_texture_mapping = ctx.current_global_parameter.use_texture_mapping;
+    ctx.current_isp_instr.regular.use_offset_color = ctx.current_global_parameter.use_bump_mapping;
+
+    ctx.global_color.raw = ctx.fifo_bytes[4];
+    ctx.global_offset_color.raw = ctx.fifo_bytes[5];
+
+    ctx.geometry_type = GEOMETRY_TYPE_SPRITE;
+    ctx.has_parameter_control = false;
+}
+
+static void ta_global_modifier_volume() {
+    if constexpr (!SILENT_TA) std::puts("TA Global parameter (modifier volume)");
+
+    ctx.current_isp_instr = IspInstruction{.raw = ctx.fifo_bytes[1]};
+
+    ctx.geometry_type = GEOMETRY_TYPE_MODIFIER_VOLUME;
     ctx.has_parameter_control = false;
 }
 
@@ -496,8 +549,21 @@ static void ta_vertex() {
         case POLYGON_TYPE_NT_PC:
             color.raw = ctx.fifo_bytes[6];
             break;
+        case POLYGON_TYPE_NT_PC_2V:
+            // Not handling this correctly for now
+            color.raw = ctx.fifo_bytes[4];
+            break;
         case POLYGON_TYPE_NT_FC:
             color = from_floats(&ctx.fifo_bytes[4]);
+            break;
+        case POLYGON_TYPE_NT_I:
+            // Missing intensity calculation
+            if (ctx.current_global_parameter.color_type == COLOR_TYPE_INTENSITY_1) {
+                ctx.prev_color = ctx.global_color;
+            }
+
+            color.raw = ctx.prev_color.raw * to_f32(ctx.fifo_bytes[4]);
+            offset_color = Color{.raw = 0};
             break;
         case POLYGON_TYPE_PC:
             color.raw = ctx.fifo_bytes[6];
@@ -505,6 +571,13 @@ static void ta_vertex() {
 
             u = to_f32(ctx.fifo_bytes[4]);
             v = to_f32(ctx.fifo_bytes[5]);
+            break;
+        case POLYGON_TYPE_PC_16UV:
+            color.raw = ctx.fifo_bytes[6];
+            offset_color.raw = ctx.fifo_bytes[7];
+
+            u = to_f32(ctx.fifo_bytes[4] & 0xFFFF0000);
+            v = to_f32((ctx.fifo_bytes[4] & 0xFFFF) << 16);
             break;
         case POLYGON_TYPE_FC:
             color = from_floats(&ctx.fifo_bytes[8]);
@@ -515,18 +588,33 @@ static void ta_vertex() {
             break;
         case POLYGON_TYPE_I:
             if (ctx.current_global_parameter.color_type == COLOR_TYPE_INTENSITY_1) {
-                ctx.prev_color = from_floats(ctx.intensity_colors);
+                ctx.prev_color = ctx.global_color;
             }
 
-            color = ctx.prev_color;
-            offset_color.raw = ctx.fifo_bytes[7];
+            color.raw = ctx.prev_color.raw * to_f32(ctx.fifo_bytes[6]);
+            offset_color.raw = ctx.global_offset_color.raw * to_f32(ctx.fifo_bytes[7]);
 
             u = to_f32(ctx.fifo_bytes[4]);
             v = to_f32(ctx.fifo_bytes[5]);
             break;
+        case POLYGON_TYPE_I_16UV:
+            if (ctx.current_global_parameter.color_type == COLOR_TYPE_INTENSITY_1) {
+                ctx.prev_color = ctx.global_color;
+            }
+
+            color.raw = ctx.prev_color.raw * to_f32(ctx.fifo_bytes[6]);
+            offset_color.raw = ctx.global_offset_color.raw * to_f32(ctx.fifo_bytes[7]);
+
+            u = to_f32(ctx.fifo_bytes[4] & 0xFFFF0000);
+            v = to_f32((ctx.fifo_bytes[4] & 0xFFFF) << 16);
+            break;
         default:
             std::printf("TA Unimplemented polygon type %s\n", POLYGON_TYPES[polygon_type]);
             exit(1);
+    }
+
+    if (!ctx.current_global_parameter.use_bump_mapping) {
+        offset_color = Color{.raw = 0};
     }
 
     core::push_vertex(
@@ -543,11 +631,92 @@ static void ta_vertex() {
 
     if (ctx.current_parameter.end_of_strip) {
         core::end_vertex_strip(
-            ctx.current_global_parameter.list_type >= LIST_TYPE_TRANSLUCENT
+            ctx.current_global_parameter.list_type
         );
 
         ctx.is_first_vertex = true;
     }
+
+    ctx.has_parameter_control = false;
+}
+
+static inline float interpolate_plane(
+    const pvr::Vertex* vertices,
+    const f32 aq,
+    const f32 bq,
+    const f32 cq
+) {
+    const f32 dx1 = vertices[1].x - vertices[0].x;
+    const f32 dy1 = vertices[1].y - vertices[0].y;
+    const f32 dq1 = bq - aq;
+    const f32 dx2 = vertices[2].x - vertices[0].x;
+    const f32 dy2 = vertices[2].y - vertices[0].y;
+    const f32 dq2 = cq - aq;
+
+    const f32 det = dx1 * dy2 - dx2 * dy1;
+
+    assert(det != 0.0);
+
+    const f32 a = (dq1 * dy2 - dq2 * dy1) / det;
+    const f32 b = (dx1 * dq2 - dx2 * dq1) / det;
+    const f32 c = aq - a * vertices[0].x - b * vertices[0].y;
+
+    return a * vertices[3].x + b * vertices[3].y + c;
+}
+
+static void ta_sprite() {
+    if constexpr (!SILENT_TA) std::puts("TA Sprite");
+
+    core::begin_vertex_strip(
+        ctx.current_isp_instr,
+        ctx.current_tsp_instr,
+        ctx.current_texture_control
+    );
+
+    pvr::Vertex vertices[4];
+
+    for (int i = 0; i < 3; i++) {
+        vertices[i].x = to_f32(ctx.fifo_bytes[3 * i + 1]);
+        vertices[i].y = to_f32(ctx.fifo_bytes[3 * i + 2]);
+        vertices[i].z = to_f32(ctx.fifo_bytes[3 * i + 3]);
+
+        vertices[i].u = 0.0;
+        vertices[i].v = 0.0;
+
+        if (ctx.current_global_parameter.use_texture_mapping) {
+            vertices[i].u = to_f32(ctx.fifo_bytes[13 + i] & 0xFFFF0000);
+            vertices[i].v = to_f32((ctx.fifo_bytes[13 + i] & 0xFFFF) << 16);
+        }
+
+        vertices[i].color = ctx.global_color;
+        vertices[i].offset_color = ctx.global_offset_color;
+
+        core::push_vertex(vertices[i]);
+    }
+
+    vertices[3].x = to_f32(ctx.fifo_bytes[10]);
+    vertices[3].y = to_f32(ctx.fifo_bytes[11]);
+    vertices[3].color = ctx.global_color;
+    vertices[3].offset_color = ctx.global_offset_color;
+
+    // Infer Z, U and V for the last vertex
+    vertices[3].z = interpolate_plane(vertices, vertices[0].z, vertices[1].z, vertices[2].z);
+    vertices[3].u = interpolate_plane(vertices, vertices[0].u, vertices[1].u, vertices[2].u);
+    vertices[3].v = interpolate_plane(vertices, vertices[0].v, vertices[1].v, vertices[2].v);
+
+    core::push_vertex(vertices[3]);
+
+    core::end_vertex_strip(
+        ctx.current_global_parameter.list_type
+    );
+
+    ctx.has_parameter_control = false;
+}
+
+static void ta_modifier_volume() {
+    if constexpr (!SILENT_TA) std::puts("TA Modifier volume");
+
+    // TODO...
 
     ctx.has_parameter_control = false;
 }
@@ -572,6 +741,9 @@ void fifo_block_write(const u8 *bytes) {
             case PARAM_TYPE_USER_TILE_CLIP:
                 ta_user_tile_clip();
                 break;
+            case PARAM_TYPE_OBJECT_LIST_SET:
+                ta_object_list_set();
+                break;
             case PARAM_TYPE_GLOBAL_POLYGON:
                 // 8 or 16 words
                 ctx.current_global_parameter = ctx.current_parameter;
@@ -582,7 +754,18 @@ void fifo_block_write(const u8 *bytes) {
                     ctx.has_parameter_control = true;
                 }
                 break;
+            case PARAM_TYPE_GLOBAL_SPRITE:
+                ctx.current_global_parameter = ctx.current_parameter;
+
+                ta_global_sprite();
+                break;
+            case PARAM_TYPE_GLOBAL_MODIFIER:
+                ctx.current_global_parameter = ctx.current_parameter;
+
+                ta_global_modifier_volume();
+                break;
             case PARAM_TYPE_VERTEX:
+                // 8 or 16 words
                 if (can_parse_vertex()) {
                     ta_vertex();
                 } else {
@@ -599,7 +782,20 @@ void fifo_block_write(const u8 *bytes) {
                 ta_global_polygon();
                 break;
             case PARAM_TYPE_VERTEX:
-                ta_vertex();
+                switch (ctx.geometry_type) {
+                    case GEOMETRY_TYPE_POLYGON:
+                        ta_vertex();
+                        break;
+                    case GEOMETRY_TYPE_SPRITE:
+                        ta_sprite();
+                        break;
+                    case GEOMETRY_TYPE_MODIFIER_VOLUME:
+                        ta_modifier_volume();
+                        break;
+                    default:
+                        std::puts("TA Invalid geometry type");
+                        exit(1);
+                }
                 break;
             default:
                 printf("Unimplemented TA parameter type %u\n", ctx.current_parameter.parameter_type);
