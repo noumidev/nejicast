@@ -305,6 +305,10 @@ u32 read(const u32 addr) {
             if constexpr (!SILENT_TMU) std::puts("TCNT0 read32");
 
             return tmu::get_counter(tmu::CHANNEL_0);
+        case IO_TCNT1:
+            if constexpr (!SILENT_TMU) std::puts("TCNT1 read32");
+
+            return tmu::get_counter(tmu::CHANNEL_1);
         case IO_TCNT2:
             if constexpr (!SILENT_TMU) std::puts("TCNT2 read32");
 
@@ -775,7 +779,7 @@ void write(const u32 addr, const u32 data) {
             break;
         default:
             std::printf("Unmapped SH-4 P4 write32 @ %08X = %08X\n", addr, data);
-            exit(1);
+            break;
     }
 }
 
