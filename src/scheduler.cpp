@@ -12,6 +12,7 @@
 #include <queue>
 #include <vector>
 
+#include <hw/aica/arm.hpp>
 #include <hw/cpu/cpu.hpp>
 
 namespace scheduler {
@@ -38,10 +39,16 @@ static EventQueue scheduled_events;
 static i64 global_timestamp;
 static i64 elapsed_cycles;
 
+static i64 to_arm_cycles(const i64 cycles) {
+    return (ARM_CLOCKRATE * cycles) / SCHEDULER_CLOCKRATE;
+}
+
 static void set_cpu_cycles_and_step(const i64 cycles) {
+    *hw::aica::arm::get_cycles() = to_arm_cycles(cycles);
     *hw::cpu::get_cycles() = cycles;
 
     hw::cpu::step();
+    hw::aica::arm::step();
 }
 
 void initialize() {}

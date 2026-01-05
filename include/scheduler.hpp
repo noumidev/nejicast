@@ -11,6 +11,7 @@ namespace scheduler {
 
 typedef void (*Callback)(const int);
 
+constexpr i64 ARM_CLOCKRATE = 45000000;
 constexpr i64 HOLLY_CLOCKRATE = 100000000;
 constexpr i64 PIXEL_CLOCKRATE = 13500000;
 
