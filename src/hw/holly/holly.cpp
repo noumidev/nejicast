@@ -128,6 +128,10 @@ u32 read(const u32 addr) {
             std::puts("SB_REV read32");
 
             return SB_REV;
+        case IO_RBSPLT:
+            std::puts("SB_RBSPLT read32");
+
+            return SB_RBSPLT;
         default:
             std::printf("Unmapped read32 @ %08X\n", addr);
             exit(1);
