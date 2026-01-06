@@ -511,6 +511,16 @@ void remap_scratchpad(const bool enable_scratchpad, const bool indexed_mode) {
     }
 }
 
+void copy(
+    const u32 start_addr,
+    const u32 end_addr,
+    const u32 copy_size
+) {
+    for (u32 i = 0; i < copy_size; i++) {
+        write<u8>(end_addr + i, read<u8>(start_addr + i));
+    }
+}
+
 void copy_from_bytes(
     const u32 addr,
     const u32 copy_size,

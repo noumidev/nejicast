@@ -28,6 +28,12 @@ void block_write(const u32 addr, const u8* bytes);
 
 void remap_scratchpad(const bool enable_scratchpad, const bool indexed_mode);
 
+void copy(
+    const u32 start_addr,
+    const u32 end_addr,
+    const u32 copy_size
+);
+
 void copy_from_bytes(
     const u32 addr,
     const u32 copy_size,
