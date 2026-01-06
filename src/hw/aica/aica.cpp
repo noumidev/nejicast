@@ -20,13 +20,33 @@ namespace hw::aica {
 
 enum : u32 {
     IO_SLOTCTL_L  = 0x00700000,
-    IO_ADSR_HL    = 0x00700014,
+    IO_SA         = 0x00700004,
+    IO_LSA        = 0x00700008,
+    IO_LEA        = 0x0070000C,
+    IO_ADSR_L     = 0x00700010,
+    IO_ADSR_H     = 0x00700014,
+    IO_PITCH      = 0x00700018,
+    IO_LFOCTL     = 0x0070001C,
     IO_INCTL      = 0x00700020,
-    IO_LPFADSR_LL = 0x00700040,
+    IO_DIPAN      = 0x00700024,
+    IO_DISDL      = 0x00700025,
+    IO_FCTL       = 0x00700028,
+    IO_TL         = 0x00700029,
+    IO_FLV0       = 0x0070002C,
+    IO_FLV1       = 0x00700030,
+    IO_FLV2       = 0x00700034,
+    IO_FLV3       = 0x00700038,
+    IO_FLV4       = 0x0070003C,
+    IO_FADSR_L    = 0x00700040,
+    IO_FADSR_H    = 0x00700044,
     IO_OUTCTL_0   = 0x00702000,
     IO_OUTCTL_17  = 0x00702044,
     IO_MVOL       = 0x00702800,
+    IO_RBCTL      = 0x00702804,
     IO_MIDIIN     = 0x00702808,
+    IO_EGSTAT_L   = 0x0070280D,
+    IO_EGSTAT_M   = 0x00702810,
+    IO_CA         = 0x00702814,
     IO_TIMA       = 0x00702890,
     IO_TACTL      = 0x00702891,
     IO_TIMB       = 0x00702894,
@@ -48,10 +68,23 @@ enum : u32 {
 #define TIMER(x) ctx.timers[x]
 
 #define SLOTCTL(x) SLOT(x).control
+#define      SA(x) SLOT(x).start_address
+#define     LSA(x) SLOT(x).loop_start
+#define     LEA(x) SLOT(x).loop_end
 #define    ADSR(x) SLOT(x).adsr
+#define   PITCH(x) SLOT(x).pitch
+#define  LFOCNT(x) SLOT(x).lfo_control
 #define   INCTL(x) SLOT(x).dsp_send
+#define   DICTL(x) SLOT(x).direct_control
+#define    FCTL(x) SLOT(x).filter_control
+#define      TL(x) SLOT(x).total_level
+#define     FLV(x) SLOT(x).filter_cutoff
+#define   FADSR(x) SLOT(x).filter_adsr
 #define LPFADSR(x) SLOT(x).lpf_adsr
+#define RBCTL      ctx.ring_buffer_control
 #define MIDIIN     ctx.midi_in
+#define EGSTAT     ctx.attenuation_monitor
+#define CA         ctx.current_address
 #define     TIM(x) TIMER(x).counter
 #define    TCTL(x) TIMER(x).prescaler
 #define SCIEB      ctx.arm_interrupt_mask
@@ -69,6 +102,8 @@ constexpr u32 SLOT_OFFSET = 0x1FFF;
 
 constexpr int NUM_TIMERS = 3;
 
+constexpr int MAX_ATTENUATION = 0x3C0;
+
 struct Slot {
     union {
         u16 raw;
@@ -83,6 +118,11 @@ struct Slot {
             u16 kyonex : 1;
         };
     } control;
+
+    u32 start_address;
+    u32 current_address;
+    u16 loop_start;
+    u16 loop_end;
 
     union {
         u32 raw;
@@ -101,6 +141,30 @@ struct Slot {
     } adsr;
 
     union {
+        u16 raw;
+
+        struct {
+            u16 fns : 10;
+            u16 : 1;
+            u16 oct : 4;
+            u16 : 1;
+        };
+    } pitch;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 alfos  : 3;
+            u16 alfows : 2;
+            u16 plfos  : 3;
+            u16 plfows : 2;
+            u16 lfof   : 5;
+            u16 re     : 1;
+        };
+    } lfo_control;
+
+    union {
         u8 raw;
 
         struct {
@@ -110,8 +174,45 @@ struct Slot {
     } dsp_send;
 
     union {
+        u8 raw;
 
-    } lpf_adsr;
+        struct {
+            u8 pan : 5;
+            u8 sdl : 3;
+        };
+    } direct_control;
+
+    union {
+        u8 raw;
+
+        struct {
+            u8 q     : 5;
+            u8 lpoff : 1;
+            u8 voff  : 1;
+            u8       : 1;
+        };
+    } filter_control;
+
+    u8 total_level;
+
+    u16 filter_cutoff[5];
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 fd1r : 5;
+            u32      : 3;
+            u32 far  : 5;
+            u32      : 3;
+            u32 frr  : 5;
+            u32      : 3;
+            u32 fd2r : 5;
+            u32      : 3;
+        };
+    } filter_adsr;
+
+    int attenuation;
 };
 
 struct Timer {
@@ -122,6 +223,17 @@ struct Timer {
 
 struct {
     std::array<u8, WAVE_RAM_SIZE> wave_ram;
+
+    union {
+        u16 raw;
+
+        struct {
+            u16 rbp : 12;
+            u16     :  1;
+            u16 rbl :  2;
+            u16     :  1;
+        };
+    } ring_buffer_control;
 
     union {
         u8 raw;
@@ -135,6 +247,20 @@ struct {
             u8       : 3;
         };
     } midi_in;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32 mslc :  6;
+            u32 af   :  1;
+            u32      :  1;
+            u32 eg   : 13;
+            u32 sgc  :  2;
+            u32 lp   :  1;
+            u32      :  8;
+        };
+    } attenuation_monitor;
 
     u16 arm_interrupt_mask;
     u16 arm_interrupt_flags;
@@ -242,6 +368,10 @@ void reset() {
 
     MIDIIN.miemp = 1;
     MIDIIN.moemp = 1;
+
+    for (Slot& slot : ctx.slots) {
+        slot.attenuation = MAX_ATTENUATION;
+    }
 }
 
 void shutdown() {
@@ -255,7 +385,6 @@ static void kyonex() {
     for (int slot = 0; slot < NUM_SLOTS; slot++) {
         if (SLOTCTL(slot).kyonb) {
             std::printf("Slot %d key-on\n", slot);
-            exit(1);
         } else {
             std::printf("Slot %d key-off\n", slot);
         }
@@ -269,6 +398,36 @@ T read(const u32 addr) {
 }
 
 template<>
+u8 read(const u32 addr) {
+    u32 g2_addr = addr;
+
+    if (g2_addr >= ARM_BASE) {
+        g2_addr -= ARM_OFFSET;
+    }
+
+    if ((g2_addr & ~SLOT_OFFSET) == IO_SLOTCTL_L) {
+        // Slot registers
+        const int slot = (addr & 0x1FFF) / 0x80;
+
+        switch (g2_addr & ~0x1F80) {
+            case IO_INCTL:
+                std::printf("Slot %d INCTL read8\n", slot);
+
+                return INCTL(slot).raw;
+            default:
+                std::printf("AICA Unimplemented slot %d read8 @ %08X\n", slot, addr);
+                exit(1);
+        }
+    }
+
+    switch (g2_addr) {
+        default:
+            std::printf("Unhandled AICA read32 @ %08X\n", addr);
+            exit(1);
+    }
+}
+
+template<>
 u32 read(const u32 addr) {
     u32 g2_addr = addr;
 
@@ -276,11 +435,46 @@ u32 read(const u32 addr) {
         g2_addr -= ARM_OFFSET;
     }
 
+    if ((g2_addr & ~SLOT_OFFSET) == IO_SLOTCTL_L) {
+        // Slot registers
+        const int slot = (addr & 0x1FFF) / 0x80;
+
+        switch (g2_addr & ~0x1F80) {
+            case IO_SLOTCTL_L:
+                std::printf("Slot %d SLOTCTL read32\n", slot);
+
+                return SLOTCTL(slot).raw;
+            case IO_LSA:
+                std::printf("Slot %d LSA read32\n", slot);
+
+                return LSA(slot);
+            case IO_LEA:
+                std::printf("Slot %d LEA read32\n", slot);
+
+                return LEA(slot);
+            default:
+                std::printf("AICA Unimplemented slot32 %d read @ %08X\n", slot, addr);
+                exit(1);
+        }
+    }
+
     switch (g2_addr) {
         case IO_MIDIIN:
             std::puts("MIDIIN read32");
 
             return MIDIIN.raw << 8;
+        case IO_EGSTAT_M:
+            std::puts("EGSTAT_M read32");
+
+            // Update monitor
+            EGSTAT.eg = (SLOT(EGSTAT.mslc).attenuation >= MAX_ATTENUATION) ? 0x1FFF : SLOT(EGSTAT.mslc).attenuation;
+            EGSTAT.sgc = 3;
+
+            return EGSTAT.raw >> 8;
+        case IO_CA:
+            std::puts("CA read32");
+
+            return SLOT(EGSTAT.mslc).current_address;
         case IO_ARMRST:
             std::puts("ARMRST read32");
 
@@ -291,16 +485,10 @@ u32 read(const u32 addr) {
             return INTREQ;
         default:
             std::printf("Unhandled AICA read32 @ %08X\n", addr);
-            
-            if (addr < ARM_BASE) {
-                return 0;
-            }
-
             exit(1);
     }
 }
 
-template u8 read(u32);
 template u16 read(u32);
 template u64 read(u32);
 
@@ -318,7 +506,61 @@ void write(const u32 addr, const u8 data) {
         g2_addr -= ARM_OFFSET;
     }
 
+    if ((g2_addr & ~SLOT_OFFSET) == IO_SLOTCTL_L) {
+        // Slot registers
+        const int slot = (addr & 0x1FFF) / 0x80;
+
+        assert(slot < NUM_SLOTS);
+
+        switch (g2_addr & ~0x1F80) {
+            case IO_INCTL:
+                std::printf("Slot %d INCTL write8 = %02X\n", slot, data);
+
+                INCTL(slot).raw = data;
+                break;
+            case IO_DIPAN:
+                std::printf("Slot %d DIPAN write8 = %02X\n", slot, data);
+
+                DICTL(slot).pan = data;
+                break;
+            case IO_DISDL:
+                std::printf("Slot %d DISDL write8 = %02X\n", slot, data);
+
+                DICTL(slot).sdl = data;
+                break;
+            case IO_FCTL:
+                std::printf("Slot %d FCTL write8 = %02X\n", slot, data);
+
+                FCTL(slot).raw = data;
+                break;
+            case IO_TL:
+                std::printf("Slot %d TL write8 = %02X\n", slot, data);
+
+                TL(slot) = data;
+                break;
+            default:
+                std::printf("AICA Unimplemented slot %d write8 @ %08X = %02X\n", slot, addr, data);
+            
+                if (addr < ARM_BASE) {
+                    break;
+                }
+
+                exit(1);
+        }
+
+        return;
+    }
+
     switch (g2_addr) {
+        case IO_MVOL:
+            std::printf("MVOL write8 = %02X\n", data);
+            break;
+        case IO_EGSTAT_L:
+            std::printf("EGSTAT_L write8 = %02X\n", data);
+
+            EGSTAT.raw &= ~0xFF;
+            EGSTAT.raw |= data;
+            break;
         case IO_SCILV0:
             std::printf("SCILV0 write8 = %02X\n", data);
 
@@ -379,17 +621,89 @@ void write(const u32 addr, const u32 data) {
 
                     SLOTCTL(slot).kyonex = 0;
                 }
+
+                SA(slot) &= 0xFFFF;
+                SA(slot) |= (data & 0x7F) << 16;
                 break;
-            case IO_ADSR_HL:
-                std::printf("Slot %d ADSR_HL write32 = %08X\n", slot, data);
+            case IO_SA:
+                std::printf("Slot %d SA write32 = %08X\n", slot, data);
+
+                SA(slot) &= ~0xFFFF;
+                SA(slot) |= data & 0xFFFF;
+                break;
+            case IO_LSA:
+                std::printf("Slot %d LSA write32 = %08X\n", slot, data);
+
+                LSA(slot) = data;
+                break;
+            case IO_LEA:
+                std::printf("Slot %d LEA write32 = %08X\n", slot, data);
+
+                LEA(slot) = data;
+                break;
+            case IO_ADSR_L:
+                std::printf("Slot %d ADSR_L write32 = %08X\n", slot, data);
+
+                ADSR(slot).raw &= ~0xFFFF;
+                ADSR(slot).raw |= data & 0xFFFF;
+                break;
+            case IO_ADSR_H:
+                std::printf("Slot %d ADSR_H write32 = %08X\n", slot, data);
 
                 ADSR(slot).raw &= 0xFFFF;
                 ADSR(slot).raw |= data << 16;
+                break;
+            case IO_PITCH:
+                std::printf("Slot %d PITCH write32 = %08X\n", slot, data);
+
+                PITCH(slot).raw = data;
+                break;
+            case IO_LFOCTL:
+                std::printf("Slot %d LFOCTL write32 = %08X\n", slot, data);
+
+                LFOCNT(slot).raw = data;
                 break;
             case IO_INCTL:
                 std::printf("Slot %d INCTL write32 = %08X\n", slot, data);
 
                 INCTL(slot).raw = data;
+                break;
+            case IO_FLV0:
+                std::printf("Slot %d FLV0 write32 = %08X\n", slot, data);
+
+                FLV(slot)[0] = data;
+                break;
+            case IO_FLV1:
+                std::printf("Slot %d FLV1 write32 = %08X\n", slot, data);
+
+                FLV(slot)[1] = data;
+                break;
+            case IO_FLV2:
+                std::printf("Slot %d FLV2 write32 = %08X\n", slot, data);
+
+                FLV(slot)[2] = data;
+                break;
+            case IO_FLV3:
+                std::printf("Slot %d FLV3 write32 = %08X\n", slot, data);
+
+                FLV(slot)[3] = data;
+                break;
+            case IO_FLV4:
+                std::printf("Slot %d FLV4 write32 = %08X\n", slot, data);
+
+                FLV(slot)[4] = data;
+                break;
+            case IO_FADSR_L:
+                std::printf("Slot %d FADSR_L write32 = %08X\n", slot, data);
+
+                FADSR(slot).raw &= ~0xFFFF;
+                FADSR(slot).raw |= data & 0xFFFF;
+                break;
+            case IO_FADSR_H:
+                std::printf("Slot %d FADSR_H write32 = %08X\n", slot, data);
+
+                FADSR(slot).raw &= 0xFFFF;
+                FADSR(slot).raw |= data << 16;
                 break;
             default:
                 std::printf("AICA Unimplemented slot %d write32 @ %08X = %08X\n", slot, addr, data);
@@ -430,6 +744,11 @@ void write(const u32 addr, const u32 data) {
     switch (g2_addr) {
         case IO_MVOL:
             std::printf("MVOL/MEMCTL write32 = %08X\n", data);
+            break;
+        case IO_RBCTL:
+            std::printf("RBCTL write32 = %08X\n", data);
+
+            RBCTL.raw = data;
             break;
         case IO_TIMA:
             std::printf("TIMA/TACTL write32 = %08X\n", data);
@@ -476,13 +795,6 @@ void write(const u32 addr, const u32 data) {
             std::printf("ARMRST write32 = %08X\n", data);
 
             ARMRST.raw = data;
-
-            if (!ARMRST.reset_arm) {
-                FILE* file = std::fopen("waveram.bin", "w+b");
-
-                std::fwrite(ctx.wave_ram.data(), 1, WAVE_RAM_SIZE, file);
-                std::fclose(file);
-            }
             
             arm::assert_reset(ARMRST.reset_arm);
             break;
