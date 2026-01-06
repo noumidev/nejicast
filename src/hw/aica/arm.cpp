@@ -319,7 +319,7 @@ struct {
     int state;
     i64 cycles;
 
-    bool isInterruptPending;
+    bool pending_interrupt;
 } ctx;
 
 std::array<void (*)(Instruction), SIZE_ARM_TABLE> instructionTable;
@@ -464,72 +464,32 @@ void reloadCPSR() {
     changeMode(mode);
 }
 
-void raiseInterruptException() {
+void raise_fast_interrupt() {
     PSR &cpsr = ctx.cpsr;
 
     const u32 lr = ctx.r[Register::PC] + 4;
 
-    std::printf("[  ARM  ] IRQ exception (address = %08X)\n", ctx.cpc);
+    std::printf("ARM fast interrupt @ %08X\n", ctx.cpc);
 
     // Save CPSR
-    ctx.spsrIRQ.raw = cpsr.raw;
+    ctx.spsrFIQ.raw = cpsr.raw;
 
-    cpsr.i = 1;
+    cpsr.f = 1;
 
-    changeMode(Mode::Interrupt);
-
-    ctx.r[Register::LR] = lr;
-    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE | 0x18;
-
-    ctx.isInterruptPending = false;
-}
-
-void raiseSupervisorException() {
-    PSR &cpsr = ctx.cpsr;
-
-    const u32 lr = ctx.r[Register::PC];
-
-    std::printf("[  ARM  ] SVC exception (address = %08X)\n", ctx.cpc);
-
-    exit(1);
-
-    // Save CPSR
-    ctx.spsrSVC.raw = cpsr.raw;
-
-    cpsr.i = 1;
-
-    changeMode(Mode::Supervisor);
+    changeMode(Mode::FastInterrupt);
 
     ctx.r[Register::LR] = lr;
-    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE | 8;
+    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE | 0x1C;
 }
 
-void raiseUndefinedException() {
-    PSR &cpsr = ctx.cpsr;
-
-    const u32 lr = ctx.r[Register::PC];
-
-    std::printf("[  ARM  ] UND exception (address = %08X)\n", ctx.cpc);
-
-    // Save CPSR
-    ctx.spsrUND.raw = cpsr.raw;
-
-    cpsr.i = 1;
-
-    changeMode(Mode::Undefined);
-
-    ctx.r[Register::LR] = lr;
-    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE | 4;
-}
-
-void checkForInterrupts() {
-    if (ctx.isInterruptPending && (ctx.cpsr.i == 0)) {
-        raiseInterruptException();
+void check_pending_interrupts() {
+    if (ctx.pending_interrupt && (ctx.cpsr.f == 0)) {
+        raise_fast_interrupt();
     }
 }
 
 void setInterruptPending(const bool isInterruptPending) {
-    ctx.isInterruptPending = isInterruptPending;
+    ctx.pending_interrupt = isInterruptPending;
 
     if (isInterruptPending) {
         set_state(STATE_RUNNING);
@@ -832,18 +792,6 @@ void MRS(const Instruction instr) {
     } else {
         ctx.r[rd] = ctx.cpsr.raw;
     }
-}
-
-void SVC(const Instruction instr) {
-    (void)instr;
-
-    raiseSupervisorException();
-}
-
-void UDF(const Instruction instr) {
-    (void)instr;
-
-    raiseUndefinedException();
 }
 
 template<AddExtendOpcode op>
@@ -1598,13 +1546,11 @@ static void initTables() {
     fillTableEntries(instructionTable.data(), "010xxxx1xxxx", doSingleDataTransfer<1, 1>);
     fillTableEntries(instructionTable.data(), "011xxxx0xxx0", doSingleDataTransfer<0, 0>);
     fillTableEntries(instructionTable.data(), "011xxxx1xxx0", doSingleDataTransfer<0, 1>);
-    fillTableEntries(instructionTable.data(), "011xxxxxxxx1", UDF);
     fillTableEntries(instructionTable.data(), "011010100111", doAddExtend<AddExtendOpcode::SXTB>);
     fillTableEntries(instructionTable.data(), "100xxxx0xxxx", doBlockDataTransfer<0>);
     fillTableEntries(instructionTable.data(), "100xxxx1xxxx", doBlockDataTransfer<1>);
     fillTableEntries(instructionTable.data(), "1010xxxxxxxx", doBranch<0>);
     fillTableEntries(instructionTable.data(), "1011xxxxxxxx", doBranch<1>);
-    fillTableEntries(instructionTable.data(), "1111xxxxxxxx", SVC);
 }
 
 void initialize() {
@@ -1629,6 +1575,14 @@ void reset() {
 
 void shutdown() {}
 
+void assert_fast_interrupt() {
+    ctx.pending_interrupt = true;
+}
+
+void clear_fast_interrupt() {
+    ctx.pending_interrupt = false;
+}
+
 void assert_reset(const bool is_reset) {
     if (is_reset) {
         reset();
@@ -1648,12 +1602,12 @@ void step() {
         return;
     }
 
-    for (; ctx.cycles > 0; ctx.cycles--) {
+    for (; ctx.cycles > 0; ctx.cycles -= 2) {
         ctx.carryOut = ctx.cpsr.c;
 
         decodeARM();
 
-        checkForInterrupts();
+        check_pending_interrupts();
     }
 }
 

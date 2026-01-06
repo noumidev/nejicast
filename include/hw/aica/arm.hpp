@@ -13,6 +13,9 @@ void initialize();
 void reset();
 void shutdown();
 
+void assert_fast_interrupt();
+void clear_fast_interrupt();
+
 void assert_reset(const bool is_reset);
 void step();
 
