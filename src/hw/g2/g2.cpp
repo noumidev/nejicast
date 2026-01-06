@@ -10,8 +10,11 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
 #include <hw/g2/modem.hpp>
 #include <hw/g2/rtc.hpp>
+#include <hw/holly/bus.hpp>
+#include <hw/holly/intc.hpp>
 
 namespace hw::g2 {
 
@@ -150,11 +153,50 @@ void reset() {
     rtc::reset();
 
     std::memset(&ctx, 0, sizeof(ctx));
+
+    SB_ADSUSP.suspend_flag = 1;
+    SB_E1SUSP.suspend_flag = 1;
+    SB_E2SUSP.suspend_flag = 1;
+    SB_DDSUSP.suspend_flag = 1;
 }
 
 void shutdown() {
     modem::shutdown();
     rtc::shutdown();
+}
+
+static void finish_aica_dma(const int) {
+    constexpr int AICA_DMA_INTERRUPT = 15;
+
+    SB_ADST = false;
+    SB_ADSUSP.suspend_flag = 1;
+    SB_ADSUSP.request_flag = 0;
+
+    hw::holly::intc::assert_normal_interrupt(AICA_DMA_INTERRUPT);
+}
+
+static void execute_aica_dma() {
+    std::printf("AICA DMA @ %08X to %08X\n", SB_ADSTAR, SB_ADSTAG);
+
+    assert(!SB_ADDIR);
+
+    const u32 size = SB_ADLEN & 0x1FFFFFF;
+
+    holly::bus::copy(
+        SB_ADSTAR,
+        SB_ADSTAG,
+        size
+    );
+
+    SB_ADSUSP.suspend_flag = 0;
+    SB_ADSUSP.request_flag = 1;
+
+    scheduler::schedule_event(
+        "AICA_DMA_END",
+        finish_aica_dma,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::HOLLY_CLOCKRATE>(4 * size)
+    );
 }
 
 template<typename T>
@@ -250,7 +292,11 @@ void write(const u32 addr, const u32 data) {
         case IO_ADST:
             std::printf("SB_ADST write32 = %08X\n", data);
 
-            assert((data & 1) == 0);
+            SB_ADST = (data & 1) != 0;
+
+            if (SB_ADST) {
+                execute_aica_dma();
+            }
             break;
         case IO_ADSUSP:
             std::printf("SB_ADSUSP write32 = %08X\n", data);
