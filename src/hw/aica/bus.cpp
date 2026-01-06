@@ -96,8 +96,7 @@ T read(const u32 addr) {
         return data;
     }
 
-    std::printf("Unmapped ARM read%zu @ %08X\n", 8 * sizeof(T), addr);
-    exit(1);
+    return aica::read<T>(addr);
 }
 
 template u8 read(u32);
@@ -114,8 +113,8 @@ void write(const u32 addr, const T data) {
         return;
     }
 
-    std::printf("Unhandled ARM write32 @ %08X = %08X\n", addr, data);
-    exit(1);
+    // Redirect write
+    aica::write<T>(addr, data);
 }
 
 template void write(u32, u8);
