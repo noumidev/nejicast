@@ -6,11 +6,13 @@
 #include <hw/aica/aica.hpp>
 
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
 #include <hw/aica/arm.hpp>
 #include <hw/aica/bus.hpp>
 
@@ -37,6 +39,7 @@ enum : u32 {
     IO_SCILV1     = 0x007028AC,
     IO_SCILV2     = 0x007028B0,
     IO_ARMRST     = 0x00702C00,
+    IO_INTREQ     = 0x00702D00,
     IO_INTCLR     = 0x00702D04,
     IO_DSPCOEF    = 0x00703000,
 };
@@ -49,9 +52,12 @@ enum : u32 {
 #define   INCTL(x) SLOT(x).dsp_send
 #define LPFADSR(x) SLOT(x).lpf_adsr
 #define MIDIIN     ctx.midi_in
-#define   SCILV(x) ctx.arm_interrupt_level[x]
-#define SCIEB      ctx.arm_interrupt_enable
+#define     TIM(x) TIMER(x).counter
+#define    TCTL(x) TIMER(x).prescaler
+#define SCIEB      ctx.arm_interrupt_mask
+#define SCIPD      ctx.arm_interrupt_flags
 #define ARMRST     ctx.arm_reset
+#define INTREQ     ctx.active_interrupt
 
 constexpr usize WAVE_RAM_SIZE = 0x200000;
 
@@ -130,9 +136,10 @@ struct {
         };
     } midi_in;
 
-    u16 arm_interrupt_enable;
+    u16 arm_interrupt_mask;
+    u16 arm_interrupt_flags;
 
-    u8 arm_interrupt_level[3];
+    u8 arm_interrupt_levels[8];
 
     union {
         u32 raw;
@@ -145,14 +152,82 @@ struct {
         };
     } arm_reset;
 
+    u8 active_interrupt;
+
     Slot slots[NUM_SLOTS];
 
     Timer timers[NUM_TIMERS];
 } ctx;
 
+static void sample_event(const int);
+
+enum {
+    TIMER_A_INTERRUPT = 6,
+    TIMER_B_INTERRUPT = 7,
+};
+
+static void check_pending_interrupts() {
+    if ((INTREQ == 0) && (SCIEB & SCIPD) != 0) {
+        // Pick one of the pending interrupt requests
+        // TODO: priority?
+        int level = std::countr_zero(SCIPD);
+
+        if (level > TIMER_B_INTERRUPT) {
+            // INTREQ doesn't support individual priorities for levels 7-10
+            level = TIMER_B_INTERRUPT;
+        }
+
+        INTREQ = ctx.arm_interrupt_levels[level];
+
+        arm::assert_fast_interrupt();
+    } else {
+        arm::clear_fast_interrupt();
+    }
+}
+
+static void assert_interrupt(const int interrupt_number) {
+    if ((SCIPD & (1 << interrupt_number)) == 0) {
+        std::printf("Asserting AICA interrupt %d\n", interrupt_number);
+
+        SCIPD |= 1 << interrupt_number;
+
+        check_pending_interrupts();
+    }
+}
+
+static void schedule_sample_event() {
+    scheduler::schedule_event(
+        "AICA_SAMPLE",
+        sample_event,
+        0,
+        scheduler::to_scheduler_cycles<scheduler::SAMPLE_CLOCKRATE>(1)
+    );
+}
+
+static void sample_event(const int) {
+    // Update timers
+    for (int timer = 0; timer < NUM_TIMERS; timer++) {
+        TIMER(timer).subcounter++;
+
+        if (TIMER(timer).subcounter == TCTL(timer)) {
+            TIM(timer)++;
+
+            if (TIM(timer) == 0) {
+                std::printf("AICA Timer %d overflow\n", timer);
+                
+                assert_interrupt(TIMER_A_INTERRUPT + timer);
+            }
+        }
+    }
+
+    schedule_sample_event();
+}
+
 void initialize() {
     arm::initialize();
     bus::initialize();
+
+    schedule_sample_event();
 }
 
 void reset() {
@@ -210,6 +285,10 @@ u32 read(const u32 addr) {
             std::puts("ARMRST read32");
 
             return ARMRST.raw;
+        case IO_INTREQ:
+            std::puts("INTREQ read32");
+
+            return INTREQ;
         default:
             std::printf("Unhandled AICA read32 @ %08X\n", addr);
             
@@ -243,17 +322,26 @@ void write(const u32 addr, const u8 data) {
         case IO_SCILV0:
             std::printf("SCILV0 write8 = %02X\n", data);
 
-            SCILV(0) = data;
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~1;
+                ctx.arm_interrupt_levels[level] |= (data >> level) & 1;
+            }
             break;
         case IO_SCILV1:
             std::printf("SCILV1 write8 = %02X\n", data);
 
-            SCILV(1) = data;
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~2;
+                ctx.arm_interrupt_levels[level] |= ((data >> level) & 1) << 1;
+            }
             break;
         case IO_SCILV2:
             std::printf("SCILV2 write8 = %02X\n", data);
 
-            SCILV(2) = data;
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~4;
+                ctx.arm_interrupt_levels[level] |= ((data >> level) & 1) << 2;
+            }
             break;
         default:
             std::printf("Unmapped AICA write8 @ %08X = %02X\n", addr, data);
@@ -346,30 +434,43 @@ void write(const u32 addr, const u32 data) {
         case IO_TIMA:
             std::printf("TIMA/TACTL write32 = %08X\n", data);
 
-            TIMER(0).counter = data;
-            TIMER(0).prescaler = 1 << (u8)(data >> 8);
+            TIM(0) = data;
+            TCTL(0) = 1 << (u8)(data >> 8);
+
+            // Reset subcounter
+            TIMER(0).subcounter = 0;
             break;
         case IO_TIMB:
             std::printf("TIMB/TBCTL write32 = %08X\n", data);
 
-            TIMER(1).counter = data;
-            TIMER(1).prescaler = 1 << (u8)(data >> 8);
+            TIM(1) = data;
+            TCTL(1) = 1 << (u8)(data >> 8);
+
+            // Reset subcounter
+            TIMER(1).subcounter = 0;
             break;
         case IO_TIMC:
             std::printf("TIMC/TCCTL write32 = %08X\n", data);
 
-            TIMER(2).counter = data;
-            TIMER(2).prescaler = 1 << (u8)(data >> 8);
+            TIM(2) = data;
+            TCTL(2) = 1 << (u8)(data >> 8);
+
+            // Reset subcounter
+            TIMER(2).subcounter = 0;
             break;
         case IO_SCIEB_L:
             std::printf("SCIEB write32 = %08X\n", data);
             
             SCIEB = data;
+
+            check_pending_interrupts();
             break;
         case IO_SCIRE_L:
             std::printf("SCIRE write32 = %08X\n", data);
             
-            // SCIPD &= ~data;
+            SCIPD &= ~data;
+
+            check_pending_interrupts();
             break;
         case IO_ARMRST:
             std::printf("ARMRST write32 = %08X\n", data);
@@ -387,6 +488,10 @@ void write(const u32 addr, const u32 data) {
             break;
         case IO_INTCLR:
             std::printf("INTCLR write32 = %08X\n", data);
+
+            INTREQ = 0;
+
+            check_pending_interrupts();
             break;
         default:
             std::printf("Unmapped AICA write32 @ %08X = %08X\n", addr, data);
