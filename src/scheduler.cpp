@@ -17,6 +17,8 @@
 
 namespace scheduler {
 
+constexpr bool SILENT_SCHEDULER = true;
+
 constexpr i64 FRAME_CYCLES = SCHEDULER_CLOCKRATE / 60;
 
 constexpr i64 MAX_CYCLES = 512;
@@ -65,12 +67,7 @@ void reset() {
 void shutdown() {}
 
 void schedule_event(const char *name, Callback callback, const int arg, const i64 cycles) {
-    if (
-        (std::strcmp(name, "HBLANK") != 0) &&
-        (std::strcmp(name, "SCIF_TX") != 0)
-    ) {
-        std::printf("Scheduling event %s with arg = %d, cycles = %lld\n", name, arg, cycles);
-    }
+    if constexpr (!SILENT_SCHEDULER) std::printf("Scheduling event %s with arg = %d, cycles = %lld\n", name, arg, cycles);
 
     scheduled_events.emplace(Event{callback, arg, global_timestamp + cycles - *hw::cpu::get_cycles()});
 }
