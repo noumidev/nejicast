@@ -13,7 +13,8 @@ typedef void (*Callback)(const int);
 
 constexpr i64 ARM_CLOCKRATE = 45000000;
 constexpr i64 HOLLY_CLOCKRATE = 100000000;
-constexpr i64 PIXEL_CLOCKRATE = 13500000;
+constexpr i64 PIXEL_CLOCKRATE = 2 * 13500000; // ??
+constexpr i64 SAMPLE_CLOCKRATE = 44100;
 
 // SH-4 clock
 constexpr i64 SCHEDULER_CLOCKRATE = 2 * HOLLY_CLOCKRATE;
