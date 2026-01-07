@@ -322,6 +322,32 @@ static void write_texture_memory(const u32 addr, const T data) {
 }
 
 template<>
+void write_texture_memory(const u32 addr, const u8 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        write<u8>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 3), data);
+    } else {
+        // First VRAM module
+        write<u8>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 3), data);
+    }
+}
+
+template<>
+void write_texture_memory(const u32 addr, const u16 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        write<u16>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 2), data);
+    } else {
+        // First VRAM module
+        write<u16>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 2), data);
+    }
+}
+
+template<>
 void write_texture_memory(const u32 addr, const u32 data) {
     const u32 offset = (addr - BASE_VRAM_64) >> 2;
 
