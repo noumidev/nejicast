@@ -359,6 +359,7 @@ enum {
     BLEND_FUNCTION_ONE                  = 1,
     BLEND_FUNCTION_SOURCE_ALPHA         = 4,
     BLEND_FUNCTION_INVERSE_SOURCE_ALPHA = 5,
+    BLEND_FUNCTION_DESTINATION_ALPHA    = 6,
 };
 
 static void blend_and_flush(const Color source_color, const u32 x, const u32 y) {
@@ -407,6 +408,12 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
                 dst.r = color_multiply(dst.r, 255 - src_saved.a);
                 dst.g = color_multiply(dst.g, 255 - src_saved.a);
                 dst.b = color_multiply(dst.b, 255 - src_saved.a);
+                break;
+            case BLEND_FUNCTION_DESTINATION_ALPHA:
+                dst.r = color_multiply(dst.r, dst.a);
+                dst.g = color_multiply(dst.g, dst.a);
+                dst.b = color_multiply(dst.b, dst.a);
+                dst.a = color_multiply(dst.a, dst.a);
                 break;
             default:
                 std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
