@@ -8,6 +8,7 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -102,6 +103,7 @@ constexpr u32 SLOT_OFFSET = 0x1FFF;
 
 constexpr int NUM_TIMERS = 3;
 
+constexpr int INITIAL_ATTENUATION = 0x280;
 constexpr int MAX_ATTENUATION = 0x3C0;
 
 struct Slot {
@@ -213,6 +215,18 @@ struct Slot {
     } filter_adsr;
 
     int attenuation;
+    int adsr_state;
+    int adsr_steps;
+    int sample_count;
+
+    f32 phase;
+};
+
+enum {
+    ADSR_STATE_ATTACK,
+    ADSR_STATE_DECAY,
+    ADSR_STATE_SUSTAIN,
+    ADSR_STATE_RELEASE,
 };
 
 struct Timer {
@@ -286,10 +300,12 @@ struct {
 } ctx;
 
 static void sample_event(const int);
+static void slot_step_all();
 
 enum {
-    TIMER_A_INTERRUPT = 6,
-    TIMER_B_INTERRUPT = 7,
+    TIMER_A_INTERRUPT =  6,
+    TIMER_B_INTERRUPT =  7,
+    SAMPLE_INTERRUPT  = 10,
 };
 
 static void check_pending_interrupts() {
@@ -346,6 +362,9 @@ static void sample_event(const int) {
         }
     }
 
+    slot_step_all();
+
+    assert_interrupt(SAMPLE_INTERRUPT);
     schedule_sample_event();
 }
 
@@ -371,6 +390,7 @@ void reset() {
 
     for (Slot& slot : ctx.slots) {
         slot.attenuation = MAX_ATTENUATION;
+        slot.adsr_state = ADSR_STATE_RELEASE;
     }
 }
 
@@ -379,14 +399,237 @@ void shutdown() {
     bus::shutdown();
 }
 
+static void slot_set_attenuation(const int slot, const int attenuation) {
+    SLOT(slot).attenuation = attenuation;
+
+    if (SLOT(slot).attenuation < 0) {
+        SLOT(slot).attenuation = 0;
+    } else if (SLOT(slot).attenuation > MAX_ATTENUATION) {
+        SLOT(slot).attenuation = MAX_ATTENUATION;
+    }
+}
+
+static void slot_set_adsr_state(const int slot, const int state) {
+    SLOT(slot).adsr_state = state;
+    SLOT(slot).adsr_steps = 1;
+    SLOT(slot).sample_count = 0;
+}
+
+static void slot_adsr_step(const int slot) {
+    SLOT(slot).adsr_steps++;
+    SLOT(slot).sample_count = 0;
+}
+
+static int slot_get_adsr_step(const int slot) {
+    return SLOT(slot).adsr_steps - 1;
+}
+
+static bool slot_is_active(const int slot) {
+    return (SLOT(slot).adsr_state != ADSR_STATE_RELEASE) || (SLOT(slot).attenuation != MAX_ATTENUATION);
+}
+
+static void slot_key_on(const int slot) {
+    if (slot_is_active(slot)) {
+        // Ignore key-on when slot is still active
+        return;
+    }
+
+    slot_set_attenuation(slot, INITIAL_ATTENUATION);
+    slot_set_adsr_state(slot, ADSR_STATE_ATTACK);
+}
+
+static void slot_key_off(const int slot) {
+    slot_set_adsr_state(slot, ADSR_STATE_RELEASE);
+}
+
+static void slot_generate_phase(const int slot) {
+    const int oct = ((i8)(PITCH(slot).oct << 4)) >> 4;
+    const u32 fns = PITCH(slot).fns;
+
+    // Reset integer part, add new phase
+    SLOT(slot).phase -= std::truncf(SLOT(slot).phase);
+    SLOT(slot).phase += std::powf(2.0, (oct + std::log2f(1 + (float)fns / 1024.0)));
+}
+
+static void slot_generate_sample_pointer(const int slot) {
+
+}
+
+static int slot_get_transition_rate(const int slot, const u8 rate) {
+    const int krs = ADSR(slot).krs;
+
+    int transition_rate = 2 * rate;
+
+    if (krs < 15) {
+        transition_rate += 2 * krs + (PITCH(slot).fns >> 9);
+        transition_rate = (8 ^ PITCH(slot).oct) + (transition_rate - 8);
+    }
+
+    if (transition_rate < 0) {
+        transition_rate = 0;
+    } else if (transition_rate > 0x3C) {
+        transition_rate = 0x3C;
+    }
+
+    return transition_rate;
+}
+
+static bool slot_take_adsr_step(const int slot, const int transition_rate) {
+    constexpr int SAMPLES_PER_STEP[4][8] = {
+        {8192, 4096, 4096,    0,    0,    0,    0,    0},
+        {8192, 4096, 4096, 4096, 4096, 4096, 4096,    0},
+        {4096,    0,    0,    0,    0,    0,    0,    0},
+        {4096, 4096, 4096, 2048, 2048,    0,    0,    0},
+    };
+
+    constexpr int STEP_LENGTH[4] = {3, 7, 1, 5};
+
+    assert(transition_rate > 1);
+
+    const int row_step = (transition_rate - 2) & 3;
+
+    int samples_per_step = 2;
+
+    if (transition_rate < 0x30) {
+        samples_per_step = SAMPLES_PER_STEP[row_step][slot_get_adsr_step(slot) % STEP_LENGTH[row_step]] >> ((transition_rate - 2) / 4);
+    }
+
+    if (SLOT(slot).sample_count < samples_per_step) {
+        SLOT(slot).sample_count++;
+
+        return false;
+    }
+
+    slot_adsr_step(slot);
+
+    return true;
+}
+
+static int slot_get_attack_delta(const int slot, const int transition_rate) {
+    constexpr i32 ATTACK_DELTAS[11][4] = {
+        {3, 4, 4, 4},
+        {3, 4, 3, 4},
+        {3, 3, 3, 4},
+        {3, 3, 3, 3},
+        {2, 3, 3, 3},
+        {2, 3, 2, 3},
+        {2, 2, 2, 3},
+        {2, 2, 2, 2},
+        {1, 2, 2, 2},
+        {1, 2, 1, 2},
+        {1, 1, 1, 2},
+    };
+
+    if (transition_rate <= 0x30) {
+        return 4;
+    } else if (transition_rate >= 0x3C) {
+        return 1;
+    }
+
+    return ATTACK_DELTAS[transition_rate - 0x31][slot_get_adsr_step(slot) & 3];
+}
+
+static void slot_attack(const int slot) {
+    const int transition_rate = slot_get_transition_rate(slot, ADSR(slot).ar);
+
+    if (transition_rate < 2) {
+        // Don't step ADSR
+        return;
+    }
+
+    if (slot_take_adsr_step(slot, transition_rate)) {
+        const int attenuation = SLOT(slot).attenuation;
+
+        slot_set_attenuation(slot, attenuation - ((attenuation >> slot_get_attack_delta(slot, transition_rate)) + 1));
+
+        if (SLOT(slot).attenuation <= 0) {
+            // Lowest attenuation reached, move to Decay
+            slot_set_adsr_state(slot, ADSR_STATE_DECAY);
+        }
+    }
+}
+
+int slot_get_decay_delta(const int slot, const int transition_rate) {
+    constexpr i32 DECAY_DELTAS[11][4] = {
+        {2, 1, 1, 1},
+        {2, 1, 2, 1},
+        {2, 2, 2, 1},
+        {2, 2, 2, 2},
+        {4, 2, 2, 2},
+        {4, 2, 4, 2},
+        {4, 4, 4, 2},
+        {4, 4, 4, 4},
+        {8, 4, 4, 4},
+        {8, 4, 8, 4},
+        {8, 8, 8, 4},
+    };
+
+    if (transition_rate <= 0x30) {
+        return 1;
+    } else if (transition_rate >= 0x3C) {
+        return 8;
+    }
+
+    return DECAY_DELTAS[transition_rate - 0x31][slot_get_adsr_step(slot) & 3];
+}
+
+static void slot_decay(const int slot, const u8 rate) {
+    const int transition_rate = slot_get_transition_rate(slot, rate);
+
+    if (transition_rate < 2) {
+        // Don't step ADSR
+        return;
+    }
+
+    if (slot_take_adsr_step(slot, transition_rate)) {
+        slot_set_attenuation(slot, SLOT(slot).attenuation + slot_get_decay_delta(slot, transition_rate));
+    }
+}
+
+static void slot_step_adsr(const int slot) {
+    switch (SLOT(slot).adsr_state) {
+        case ADSR_STATE_ATTACK:
+            slot_attack(slot);
+            break;
+        case ADSR_STATE_DECAY:
+            slot_decay(slot, ADSR(slot).d1r);
+
+            if ((SLOT(slot).attenuation >> 5) == ADSR(slot).dl) {
+                slot_set_adsr_state(slot, ADSR_STATE_SUSTAIN);
+            }
+            break;
+        case ADSR_STATE_SUSTAIN:
+            slot_decay(slot, ADSR(slot).d2r);
+            
+            // Only transition to Release upon key-off
+            break;
+        case ADSR_STATE_RELEASE:
+            slot_decay(slot, ADSR(slot).rr);
+            break;
+    }
+}
+
+static void slot_step_all() {
+    for (int slot = 0; slot < NUM_SLOTS; slot++) {
+        if (slot_is_active(slot)) {
+            // slot_generate_phase(slot);
+            slot_step_adsr(slot);
+        }
+    }
+}
+
 static void kyonex() {
     std::puts("AICA KYONEX event");
 
     for (int slot = 0; slot < NUM_SLOTS; slot++) {
         if (SLOTCTL(slot).kyonb) {
             std::printf("Slot %d key-on\n", slot);
+
+            slot_key_on(slot);
         } else {
             std::printf("Slot %d key-off\n", slot);
+
+            slot_key_off(slot);
         }
     }
 }
@@ -420,9 +663,27 @@ u8 read(const u32 addr) {
         }
     }
 
+    if ((g2_addr >= IO_OUTCTL_0) && (g2_addr <= IO_OUTCTL_17)) {
+        const int slot = (g2_addr - IO_OUTCTL_0) >> 2;
+
+        switch (slot) {
+            case 16:
+                std::puts("OUTCTL_CDDA_L read8");
+                break;
+            case 17:
+                std::puts("OUTCTL_CDDA_R read8");
+                break;
+            default:
+                std::printf("OUTCTL%d read8\n", slot);
+                break;
+        }
+
+        return 0;
+    }
+
     switch (g2_addr) {
         default:
-            std::printf("Unhandled AICA read32 @ %08X\n", addr);
+            std::printf("Unhandled AICA read8 @ %08X\n", addr);
             exit(1);
     }
 }
@@ -458,6 +719,24 @@ u32 read(const u32 addr) {
         }
     }
 
+    if ((g2_addr >= IO_OUTCTL_0) && (g2_addr <= IO_OUTCTL_17)) {
+        const int slot = (g2_addr - IO_OUTCTL_0) >> 2;
+
+        switch (slot) {
+            case 16:
+                std::puts("OUTCTL_CDDA_L read32");
+                break;
+            case 17:
+                std::puts("OUTCTL_CDDA_R read32");
+                break;
+            default:
+                std::printf("OUTCTL%d read32\n", slot);
+                break;
+        }
+
+        return 0;
+    }
+
     switch (g2_addr) {
         case IO_MIDIIN:
             std::puts("MIDIIN read32");
@@ -468,7 +747,7 @@ u32 read(const u32 addr) {
 
             // Update monitor
             EGSTAT.eg = (SLOT(EGSTAT.mslc).attenuation >= MAX_ATTENUATION) ? 0x1FFF : SLOT(EGSTAT.mslc).attenuation;
-            EGSTAT.sgc = 3;
+            EGSTAT.sgc = SLOT(EGSTAT.mslc).adsr_state;
 
             return EGSTAT.raw >> 8;
         case IO_CA:
@@ -546,6 +825,24 @@ void write(const u32 addr, const u8 data) {
                 }
 
                 exit(1);
+        }
+
+        return;
+    }
+
+    if ((g2_addr >= IO_OUTCTL_0) && (g2_addr <= IO_OUTCTL_17)) {
+        const int slot = (g2_addr - IO_OUTCTL_0) >> 2;
+
+        switch (slot) {
+            case 16:
+                std::printf("OUTCTL_CDDA_L write8 = %02X\n", data);
+                break;
+            case 17:
+                std::printf("OUTCTL_CDDA_R write8 = %02X\n", data);
+                break;
+            default:
+                std::printf("OUTCTL%d write8 = %02X\n", slot, data);
+                break;
         }
 
         return;
