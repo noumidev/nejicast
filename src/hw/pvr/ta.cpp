@@ -500,6 +500,14 @@ static void ta_global_sprite() {
     ctx.global_color.raw = ctx.fifo_bytes[4];
     ctx.global_offset_color.raw = ctx.fifo_bytes[5];
 
+    if (!ctx.has_list_type) {
+        if (ctx.current_global_parameter.list_type == LIST_TYPE_OPAQUE) {
+            core::begin_display_list();
+        }
+
+        ctx.has_list_type = true;
+    }
+
     ctx.geometry_type = GEOMETRY_TYPE_SPRITE;
     ctx.has_parameter_control = false;
 }
@@ -508,6 +516,14 @@ static void ta_global_modifier_volume() {
     if constexpr (!SILENT_TA) std::puts("TA Global parameter (modifier volume)");
 
     ctx.current_isp_instr = IspInstruction{.raw = ctx.fifo_bytes[1]};
+
+    if (!ctx.has_list_type) {
+        if (ctx.current_global_parameter.list_type == LIST_TYPE_OPAQUE) {
+            core::begin_display_list();
+        }
+
+        ctx.has_list_type = true;
+    }
 
     ctx.geometry_type = GEOMETRY_TYPE_MODIFIER_VOLUME;
     ctx.has_parameter_control = false;
