@@ -440,8 +440,8 @@ static void draw_background() {
         Vertex vertex{
             .x = to_f32(read_vram_linear<u32>(vertex_addr)),
             .y = to_f32(read_vram_linear<u32>(vertex_addr + 1 * sizeof(u32))),
-            // .z = to_f32(read_texture_memory<u32>(vertex_addr + 2 * sizeof(u32))),
-            .z = ISP_BACKGND_D,
+            .z = to_f32(read_vram_linear<u32>(vertex_addr + 2 * sizeof(u32))),
+            // .z = ISP_BACKGND_D,
             .color.raw = read_vram_linear<u32>(vertex_addr + 3 * sizeof(u32))
         };
 
@@ -450,9 +450,9 @@ static void draw_background() {
         if (i == 2) {
             background_strip.vertices.emplace_back(
                 Vertex{
-                    .x = background_strip.vertices[1].x,
-                    .y = background_strip.vertices[2].y,
-                    .z = background_strip.vertices[0].z,
+                    .x = to_f32(from_f32(background_strip.vertices[0].x) ^ from_f32(background_strip.vertices[1].x) ^ from_f32(background_strip.vertices[2].x)),
+                    .y = to_f32(from_f32(background_strip.vertices[0].y) ^ from_f32(background_strip.vertices[1].y) ^ from_f32(background_strip.vertices[2].y)),
+                    .z = to_f32(from_f32(background_strip.vertices[0].z) ^ from_f32(background_strip.vertices[1].z) ^ from_f32(background_strip.vertices[2].z)),
                     .color = background_strip.vertices[0].color
                 }
             );
@@ -496,7 +496,9 @@ static void start_render() {
     const auto& display_list = ctx.display_lists.front();
 
     for (const auto& strip : display_list.strips) {
-        assert(strip.vertices.size() > 2);
+        if (strip.vertices.size() < 3) {
+            continue;
+        }
 
         pvr::set_isp_instruction(strip.isp_instr);
         pvr::set_tsp_instruction(strip.tsp_instr);
