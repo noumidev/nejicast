@@ -111,7 +111,8 @@ static void finish_maple_dma(const int) {
 }
 
 enum {
-    MAPLE_COMMAND_TRANSMIT_DATA,
+    MAPLE_COMMAND_TRANSMIT_DATA = 0,
+    MAPLE_COMMAND_ACKNOWLEDGE   = 7,
 };
 
 enum {
@@ -122,23 +123,25 @@ enum {
 static Frame decode_frame(const Instruction instr, u32& addr) {
     Frame frame{};
 
-    frame.port = instr.select_port;
-    frame.receive_addr = read_word(addr);
+    if (instr.command == MAPLE_COMMAND_TRANSMIT_DATA) {
+        frame.port = instr.select_port;
+        frame.receive_addr = read_word(addr);
 
-    const u32 maple_frame = read_word(addr);
+        const u32 maple_frame = read_word(addr);
 
-    frame.maple_addr = maple_frame >> 8;
-    frame.command = maple_frame;
+        frame.recipient_addr = maple_frame >> 8;
+        frame.command = maple_frame;
 
-    for (u32 i = 0; i < instr.transfer_length; i++) {
-        frame.send_bytes.push_back(read_word(addr));
+        for (u32 i = 0; i < instr.transfer_length; i++) {
+            frame.send_bytes.push_back(read_word(addr));
+        }
     }
 
     return frame;
 }
 
 static void transmit_data(Frame& frame) {
-    std::printf("MAPLE Port %c receive address = %08X\n", 'A' + frame.port, frame.receive_addr);
+    std::printf("MAPLE Port %c receive address = %08X, recipient address = %08X\n", 'A' + frame.port, frame.receive_addr, frame.recipient_addr);
     std::printf("MAPLE Port %c command %02X\n", 'A' + frame.port, frame.command);
 
     if (ctx.devices[frame.port] != nullptr) {
@@ -178,15 +181,20 @@ static void execute_maple_dma() {
             case MAPLE_COMMAND_TRANSMIT_DATA:
                 transmit_data(frame);
                 break;
+            case MAPLE_COMMAND_ACKNOWLEDGE:
+                std::puts("MAPLE Acknowledge");
+                break;
             default:
                 std::printf("Unimplemented MAPLE command %u\n", instr.command);
                 exit(1);
         }
 
-        write_word(frame.receive_addr, frame.result_code | (frame.maple_addr << 8) | (frame.receive_bytes.size() << 24));
+        if (frame.receive_bytes.size() != 0) {
+            write_word(frame.receive_addr, frame.result_code | (frame.recipient_addr << 8) | (frame.sender_addr << 16) | (frame.receive_bytes.size() << 24));
 
-        for (u32 data : frame.receive_bytes) {
-            write_word(frame.receive_addr, data);
+            for (u32 data : frame.receive_bytes) {
+                write_word(frame.receive_addr, data);
+            }
         }
 
         if (instr.end_flag) {

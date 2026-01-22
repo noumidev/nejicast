@@ -22,23 +22,33 @@ public:
     ~Controller() {}
 
     void get_device_info(Frame& frame) override {
+        assert((frame.recipient_addr & 63) == 0x20);
+
         frame.receive_bytes.push_back(MAPLE_DEVICE_CONTROLLER);
+        frame.receive_bytes.push_back(0xFE060F00);
+        frame.receive_bytes.push_back(0x00000000);
+        frame.receive_bytes.push_back(0x724400FF);
 
         // TODO
-        for (int i = 0; i < 47; i++) {
+        for (int i = 0; i < 44; i++) {
             frame.receive_bytes.push_back(0);
         }
+
+        frame.sender_addr = 0x20;
 
         frame.result_code = 0x05;
     }
 
     void get_condition(Frame& frame) override {
         assert(frame.send_bytes[0] == MAPLE_DEVICE_CONTROLLER);
+        assert((frame.recipient_addr & 63) == 0x20);
 
         frame.receive_bytes.push_back(MAPLE_DEVICE_CONTROLLER);
 
         frame.receive_bytes.push_back(nejicast::get_button_state());
         frame.receive_bytes.push_back(0x80808080);
+
+        frame.sender_addr = 0x20;
 
         frame.result_code = 0x08;
     }
