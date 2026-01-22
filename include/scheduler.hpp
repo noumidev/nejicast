@@ -28,6 +28,8 @@ i64 to_scheduler_cycles(const i64 cycles) {
     return (SCHEDULER_CLOCKRATE * cycles) / clockrate;
 }
 
+i64 get_timestamp();
+
 void schedule_event(const char* name, Callback callback, const int arg, const i64 cycles);
 
 bool run();

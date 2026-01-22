@@ -66,6 +66,10 @@ void reset() {
 
 void shutdown() {}
 
+i64 get_timestamp() {
+    return global_timestamp;
+}
+
 void schedule_event(const char *name, Callback callback, const int arg, const i64 cycles) {
     if constexpr (!SILENT_SCHEDULER) std::printf("Scheduling event %s with arg = %d, cycles = %lld\n", name, arg, cycles);
 
