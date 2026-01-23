@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <scheduler.hpp>
+
 namespace hw::cpu::ocio::tmu {
 
 #define TOCR  ctx.timer_output_control
@@ -61,6 +63,8 @@ struct {
                 u16                            : 6;
             };
         } control;
+
+        i64 timestamp;
     } timers[NUM_CHANNELS];
 } ctx;
 
@@ -82,9 +86,13 @@ u8 get_timer_start() {
 }
 
 u32 get_counter(const int channel) {
+    constexpr u32 PRESCALERS[5] = {
+        4, 16, 64, 256, 1024,
+    };
+
     assert(channel < NUM_CHANNELS);
 
-    return ctx.timers[channel].counter;
+    return ctx.timers[channel].counter - ((scheduler::get_timestamp() - ctx.timers[channel].timestamp) / PRESCALERS[ctx.timers[channel].control.prescaler]);
 }
 
 u16 get_control(const int channel) {
@@ -98,7 +106,16 @@ void set_timer_output_control(const u8 data) {
 }
 
 void set_timer_start(const u8 data) {
+    const u8 old_start = TSTR.start_counter;
+
     TSTR.raw = data;
+
+    for (int channel = 0; channel < NUM_CHANNELS; channel++) {
+        if (((old_start & (1 << channel)) == 0) && (((TSTR.raw & (1 << channel)) != 0))) {
+            // Timer is enabled
+            ctx.timers[channel].timestamp = scheduler::get_timestamp();
+        }
+    }
 }
 
 void set_constant(const int channel, const u32 data) {
@@ -111,6 +128,10 @@ void set_counter(const int channel, const u32 data) {
     assert(channel < NUM_CHANNELS);
 
     ctx.timers[channel].counter = data;
+
+    if ((TSTR.raw & (1 << channel)) != 0) {
+        ctx.timers[channel].timestamp = scheduler::get_timestamp();
+    }
 }
 
 void set_control(const int channel, const u16 data) {
