@@ -18,141 +18,281 @@
 
 namespace hw::aica::arm {
 
-constexpr u64 NUM_GPRS = 16;
-constexpr u64 NUM_FIQ_ctx = 5;
+constexpr bool SILENT_ARM = false;
 
-constexpr u64 SIZE_ARM_TABLE = 4096;
+// Instruction bit macros
+#define OPCODE (((instr >> 4) & 0x000F) | ((instr >> 16) & 0x0FF0))
+#define DP_OP  ((instr >> 21) & 0x000F)
+#define COND   ((instr >> 28) & 0x000F)
+#define RLIST  ((instr >>  0) & 0xFFFF)
+#define IMM    ((instr >>  0) & 0x00FF)
+#define OFS_8  (((instr >> 0) & 0x000F) | ((instr >> 4) & 0x00F0))
+#define OFS_12 ((instr >>  0) & 0x0FFF)
+#define SHIFT  ((instr >>  5) & 0x0003)
+#define AMOUNT ((instr >>  7) & 0x001F)
+#define ROTATE ((instr >>  8) & 0x000F)
+#define RM     ((instr >>  0) & 0x000F)
+#define RS     ((instr >>  8) & 0x000F)
+#define RD     ((instr >> 12) & 0x000F)
+#define RN     ((instr >> 16) & 0x000F)
+#define MASK   ((instr >> 16) & 0x000F)
+#define P      ((instr >> 24) & 0x0001)
+#define U      ((instr >> 23) & 0x0001)
+#define B      ((instr >> 22) & 0x0001)
+#define W      ((instr >> 21) & 0x0001)
 
-constexpr u32 EXCEPTION_VECTOR_BASE = 0;
+// Register file macros
+#define SP          ctx.gprs[13]
+#define SP_FIQ      ctx.fiq_sp
+#define SP_IRQ      ctx.irq_sp
+#define SP_ABT      ctx.abt_sp
+#define SP_SVC      ctx.svc_sp
+#define SP_UND      ctx.und_sp
+#define LR          ctx.gprs[14]
+#define LR_FIQ      ctx.fiq_lr
+#define LR_IRQ      ctx.irq_lr
+#define LR_ABT      ctx.abt_lr
+#define LR_SVC      ctx.svc_lr
+#define LR_UND      ctx.und_lr
+#define PC          ctx.gprs[15]
+#define PC_DELAY    (ctx.gprs[15] + sizeof(u32))
+#define CPC         ctx.current_pc
+#define GPRS        ctx.gprs
+#define FIQ_GPRS    ctx.fiq_gprs
+#define CPSR        ctx.cpsr
+#define SPSR        ctx.spsr
+#define SPSR_FIQ    ctx.fiq_spsr
+#define SPSR_IRQ    ctx.irq_spsr
+#define SPSR_ABT    ctx.abt_spsr
+#define SPSR_SVC    ctx.svc_spsr
+#define SPSR_UND    ctx.und_spsr
+
+constexpr usize NUM_REGS = 16;
+constexpr usize NUM_FIQ_REGS = 5;
+
+constexpr usize INSTR_TABLE_SIZE = 4096;
 
 enum {
     STATE_RUNNING,
     STATE_SLEEPING,
 };
 
-union Instruction {
+// Program status register
+union ProgramStatus {
     u32 raw;
 
     struct {
-        u32                : 28;
-        u32 condition_code :  4;
-    } none;
-
-    struct {
-        u32 rlist : 16;
-        u32 rn    :  4;
-        u32       :  1;
-        u32 w     :  1;
-        u32 s     :  1;
-        u32 u     :  1;
-        u32 p     :  1;
-        u32       :  7;
-    } bdt;
-
-    struct {
-        u32 offset : 24;
-        u32 h      :  1;
-        u32        :  7;
-    } branch;
-
-    struct {
-        u32 immediate : 8;
-        u32 rotate    : 4;
-        u32 rd        : 4;
-        u32 rn        : 4;
-        u32 s         : 1;
-        u32 opcode    : 4;
-        u32           : 7;
-    } dp_immediate;
-
-    struct {
-        u32 rm     : 4;
-        u32        : 1;
-        u32 shift  : 2;
-        u32 amount : 5;
-        u32 rd     : 4;
-        u32 rn     : 4;
-        u32 s      : 1;
-        u32 opcode : 4;
-        u32        : 7;
-    } dp_shift_immediate;
-
-    struct {
-        u32 rm     : 4;
-        u32        : 1;
-        u32 shift  : 2;
-        u32        : 1;
-        u32 rs     : 4;
-        u32 rd     : 4;
-        u32 rn     : 4;
-        u32 s      : 1;
-        u32 opcode : 4;
-        u32        : 7;
-    } dp_shift_register;
-
-    struct {
-        u32 offsetlo : 4;
-        u32          : 4;
-        u32 offsethi : 4;
-        u32 rd       : 4;
-        u32 rn       : 4;
-        u32          : 1;
-        u32 w        : 1;
-        u32          : 1;
-        u32 u        : 1;
-        u32 p        : 1;
-        u32          : 7;
-    } edt_immediate;
-
-    struct {
-        u32 rm : 4;
-        u32    : 8;
-        u32 rd : 4;
-        u32 rn : 4;
-        u32    : 1;
-        u32 w  : 1;
-        u32    : 1;
-        u32 u  : 1;
-        u32 p  : 1;
-        u32    : 7;
-    } edt_register;
-
-    struct {
-        u32 rm   :  4;
-        u32      :  4;
-        u32 rs   :  4;
-        u32 rdlo :  4;
-        u32 rdhi :  4;
-        u32 s    :  1;
-        u32      : 11;
-    } multiply_long;
-
-    struct {
-        u32 immediate : 8;
-        u32 rotate    : 4;
-        u32           : 4;
-        u32 mask      : 4;
-        u32           : 2;
-        u32 r         : 1;
-        u32           : 9;
-    } msr_immediate;
-
-    struct {
-        u32 immediate : 12;
-        u32 rd        :  4;
-        u32 rn        :  4;
-        u32           :  1;
-        u32 w         :  1;
-        u32 b         :  1;
-        u32 u         :  1;
-        u32 p         :  1;
-        u32           :  7;
-    } sdt_immediate;
-    
-    u32 get_opcode() const {
-        return ((raw >> 4) & 0xF) | ((raw >> 16) & 0xFF0);
-    }
+        u32 mode        :  5;
+        u32             :  1;
+        u32 disable_fiq :  1;
+        u32 disable_irq :  1;
+        u32             : 20;
+        u32 overflow    :  1;
+        u32 carry       :  1;
+        u32 zero        :  1;
+        u32 negative    :  1;
+    };
 };
+
+struct {
+    u32 current_pc;
+
+    u32 gprs[NUM_REGS], fiq_gprs[NUM_FIQ_REGS];
+
+    // PSRs
+    ProgramStatus cpsr;
+    ProgramStatus* spsr;
+
+    u32 carry_out;
+
+    // Banked stack pointers/link registers
+    u32 fiq_sp, svc_sp, abt_sp, irq_sp, und_sp;
+    u32 fiq_lr, svc_lr, abt_lr, irq_lr, und_lr;
+
+    // Banked PSRs
+    ProgramStatus fiq_spsr, svc_spsr, abt_spsr, irq_spsr, und_spsr;
+
+    int state;
+
+    bool pending_interrupt;
+
+    i64 cycles;
+} ctx;
+
+static std::array<void (*)(const u32), INSTR_TABLE_SIZE> instr_table;
+
+static void dump_registers() {
+    for (usize i = 0; i < NUM_REGS; i++) {
+        std::printf("[R%zu%*c] %08X ", i, (i < 10) ? 6 : 5, ' ', (i == 15) ? CPC : GPRS[i]);
+
+        if ((i % 4) == 3) {
+            std::puts("");
+        }
+    }
+}
+
+template<typename T>
+static void fill_table_with_pattern(T table[], const char* pattern, T func) {
+    usize mask = 0;
+    usize value = 0;
+
+    const usize length = std::strlen(pattern);
+
+    for (usize i = 0; i < length; i++) {
+        const usize shifted_bit = 1 << (length - i - 1);
+
+        const char bit = pattern[i];
+        if (bit == '0') {
+            mask |= shifted_bit;
+        } else if (bit == '1') {
+            mask |= shifted_bit;
+            value |= shifted_bit;
+        }
+    }
+
+    for (usize i = 0; i < (1 << length); i++) {
+        if ((i & mask) == value) {
+            table[i] = func;
+        }
+    }
+}
+
+static void set_state(const int state) {
+    ctx.state = state;
+}
+
+enum {
+    MODE_USR = 0x10,
+    MODE_FIQ = 0x11,
+    MODE_IRQ = 0x12,
+    MODE_SVC = 0x13,
+    MODE_ABT = 0x17,
+    MODE_UND = 0x1B,
+    MODE_SYS = 0x1F,
+};
+
+static void change_mode(const int mode) {
+    if (CPSR.mode == mode) {
+        return;
+    }
+
+    // Save old register bank
+    switch (CPSR.mode) {
+        case MODE_USR:
+        case MODE_SYS:
+            break;
+        case MODE_FIQ:
+            for (usize i = 0; i < NUM_FIQ_REGS; i++) {
+                std::swap(FIQ_GPRS[i], GPRS[i + 8]);
+            }
+
+            std::swap(SP_FIQ, SP);
+            std::swap(LR_FIQ, LR);
+            break;
+        case MODE_IRQ:
+            std::swap(SP_IRQ, SP);
+            std::swap(LR_IRQ, LR);
+            break;
+        case MODE_SVC:
+            std::swap(SP_SVC, SP);
+            std::swap(LR_SVC, LR);
+            break;
+        case MODE_ABT:
+            std::swap(SP_ABT, SP);
+            std::swap(LR_ABT, LR);
+            break;
+        case MODE_UND:
+            std::swap(SP_UND, SP);
+            std::swap(LR_UND, LR);
+            break;
+    }
+
+    // Load new register bank
+    switch (mode) {
+        case MODE_USR:
+        case MODE_SYS:
+            SPSR = nullptr;
+            break;
+        case MODE_FIQ:
+            for (usize i = 0; i < NUM_FIQ_REGS; i++) {
+                std::swap(FIQ_GPRS[i], GPRS[i + 8]);
+            }
+
+            std::swap(SP_FIQ, SP);
+            std::swap(LR_FIQ, LR);
+
+            SPSR = &SPSR_FIQ;
+            break;
+        case MODE_IRQ:
+            std::swap(SP_IRQ, SP);
+            std::swap(LR_IRQ, LR);
+
+            SPSR = &SPSR_IRQ;
+            break;
+        case MODE_SVC:
+            std::swap(SP_SVC, SP);
+            std::swap(LR_SVC, LR);
+
+            SPSR = &SPSR_SVC;
+            break;
+        case MODE_ABT:
+            std::swap(SP_ABT, SP);
+            std::swap(LR_ABT, LR);
+
+            SPSR = &SPSR_ABT;
+            break;
+        case MODE_UND:
+            std::swap(SP_UND, SP);
+            std::swap(LR_UND, LR);
+
+            SPSR = &SPSR_UND;
+            break;
+        default:
+            std::printf("ARM Invalid mode %02X\n", mode);
+            exit(1);
+    }
+
+    CPSR.mode = mode;
+}
+
+static void restore_cpsr() {
+    assert(SPSR != nullptr);
+
+    const int mode = SPSR->mode;
+
+    // Restore flags, preserve old mode for mode change
+    CPSR.raw &= 0x1F;
+    CPSR.raw |= SPSR->raw & ~0x1F;
+
+    change_mode(mode);
+}
+
+static void raise_fast_interrupt() {
+    constexpr u32 FIQ_VECTOR = 0x1C;
+
+    const u32 lr = PC_DELAY;
+
+    if constexpr (!SILENT_ARM) std::printf("ARM Fast interrupt @ %08X\n", CPC);
+
+    // Save CPSR
+    SPSR_FIQ = CPSR;
+
+    CPSR.disable_fiq = 1;
+    CPSR.disable_irq = 1;
+
+    change_mode(MODE_FIQ);
+
+    LR = lr;
+    PC = FIQ_VECTOR;
+
+    ctx.pending_interrupt = false;
+}
+
+static void check_pending_interrupts() {
+    if (ctx.pending_interrupt && !CPSR.disable_fiq) {
+        raise_fast_interrupt();
+    }
+}
 
 enum {
     CONDITION_CODE_EQ,
@@ -173,360 +313,36 @@ enum {
     CONDITION_CODE_NV,
 };
 
-enum class AddExtendOpcode {
-    SXTB,
-};
-
-enum class BranchOpcode {
-    B,
-    BL,
-    BLX,
-    Prefix,
-};
-
-namespace DataProcessingOpcode {
-    enum : u32 {
-        AND = 0x0,
-        EOR = 0x1,
-        SUB = 0x2,
-        RSB = 0x3,
-        ADD = 0x4,
-        ADC = 0x5,
-        TST = 0x8,
-        TEQ = 0x9,
-        CMP = 0xA,
-        CMN = 0xB,
-        ORR = 0xC,
-        MOV = 0xD,
-        BIC = 0xE,
-        MVN = 0xF,
-    };
-}
-
-namespace DataProcessingImmediateOpcode {
-    enum : u32 {
-        MOV = 0,
-        CMP = 1,
-        ADD = 2,
-        SUB = 3,
-    };
-}
-
-namespace DataProcessingOpcodeTHUMB {
-    enum : u32 {
-        AND = 0x0,
-        EOR = 0x1,
-        LSL = 0x2,
-        LSR = 0x3,
-        ASR = 0x4,
-        ADC = 0x5,
-        SBC = 0x6,
-        ROR = 0x7,
-        TST = 0x8,
-        NEG = 0x9,
-        CMP = 0xA,
-        ORR = 0xC,
-        MUL = 0xD,
-        BIC = 0xE,
-        MVN = 0xF,
-    };
-}
-
-namespace SingleDataTransferOpcode {
-    enum : u32 {
-        STR   = 0,
-        STRH  = 1,
-        STRB  = 2,
-        LDR   = 4,
-        LDRH  = 5,
-        LDRB  = 6,
-        LDRSH = 7,
-    };
-}
-
-namespace SpecialDataProcessingOpcode {
-    enum : u32 {
-        ADD = 0,
-        CMP = 1,
-        MOV = 2,
-    };
-}
-
-namespace Mode {
-    enum : u32 {
-        User = 0x10,
-        FastInterrupt = 0x11,
-        Interrupt  = 0x12,
-        Supervisor = 0x13,
-        Abort      = 0x17,
-        Undefined  = 0x1B,
-        System     = 0x1F,
-    };
-}
-
-namespace ShiftType {
-    enum : u32 {
-        LSL,
-        LSR,
-        ASR,
-        ROR,
-    };
-}
-
-namespace Register {
-    enum {
-        R0, R1, R2 , R3 , R4 , R5, R6, R7,
-        R8, R9, R10, R11, R12, SP, LR, PC,
-    };
-}
-
-// Program status register
-union PSR {
-    u32 raw;
-    struct {
-        u32 mode :  5;
-        u32      :  1;
-        u32 f    :  1; // FIQ disable
-        u32 i    :  1; // IRQ disable
-        u32      : 19;
-        u32      :  1;
-        u32 v    :  1; // Overflow
-        u32 c    :  1; // Carry
-        u32 z    :  1; // Zero
-        u32 n    :  1; // Negative
-    };
-};
-
-struct {
-    u32 r[NUM_GPRS];
-    u32 cpc;
-
-    // PSRs
-    PSR  cpsr;
-    PSR *spsr;
-
-    u32 carryOut;
-
-    // Banked registers
-    u32 fiqctx[NUM_FIQ_ctx];
-
-    // Banked stack pointers/link registers
-    u32 spFIQ, spSVC, spABT, spIRQ, spUND;
-    u32 lrFIQ, lrSVC, lrABT, lrIRQ, lrUND;
-
-    PSR spsrFIQ, spsrSVC, spsrABT, spsrIRQ, spsrUND;
-
-    int state;
-    i64 cycles;
-
-    bool pending_interrupt;
-} ctx;
-
-std::array<void (*)(Instruction), SIZE_ARM_TABLE> instructionTable;
-
-void dumpctx() {
-    std::printf("%08X %08X %08X %08X\n",   ctx.r[0 ], ctx.r[1 ], ctx.r[2 ], ctx.r[3 ]);
-    std::printf("%08X %08X %08X %08X\n",   ctx.r[4 ], ctx.r[5 ], ctx.r[6 ], ctx.r[7 ]);
-    std::printf("%08X %08X %08X %08X\n",   ctx.r[8 ], ctx.r[9 ], ctx.r[10], ctx.r[11]);
-    std::printf("%08X %08X %08X %08X\n\n", ctx.r[12], ctx.r[13], ctx.r[14], ctx.r[15]);
-}
-
-// Thanks to https://github.com/PSI-Rockin for this helpful function
-template<typename T>
-void fillTableEntries(T table[], const char *pattern, T func) {
-    u64 mask  = 0;
-    u64 value = 0;
-
-    const u64 length = std::strlen(pattern);
-
-    for (u64 i = 0; i < length; i++) {
-        const u64 shiftedBit = 1 << (length - i - 1);
-
-        const char bit = pattern[i];
-        if (bit == '0') {
-            mask  |= shiftedBit;
-        } else if (bit == '1') {
-            mask  |= shiftedBit;
-            value |= shiftedBit;
-        }
-    }
-
-    for (u64 i = 0; i < (1 << length); i++) {
-        if ((i & mask) == value) {
-            table[i] = func;
-        }
-    }
-}
-
-static void set_state(const int state) {
-    ctx.state = state;
-}
-
-void changeMode(const u32 mode) {
-    PSR &cpsr = ctx.cpsr;
-
-    if (cpsr.mode == mode) {
-        return;
-    }
-
-    // Save old register bank
-    switch (cpsr.mode) {
-        case Mode::User:
-        case Mode::System:
-            break;
-        case Mode::FastInterrupt:
-            for (u64 i = 0; i < NUM_FIQ_ctx; i++) {
-                std::swap(ctx.fiqctx[i], ctx.r[i + 8]);
-            }
-
-            std::swap(ctx.spFIQ, ctx.r[Register::SP]);
-            std::swap(ctx.lrFIQ, ctx.r[Register::LR]);
-            break;
-        case Mode::Interrupt:
-            std::swap(ctx.spIRQ, ctx.r[Register::SP]);
-            std::swap(ctx.lrIRQ, ctx.r[Register::LR]);
-            break;
-        case Mode::Supervisor:
-            std::swap(ctx.spSVC, ctx.r[Register::SP]);
-            std::swap(ctx.lrSVC, ctx.r[Register::LR]);
-            break;
-        case Mode::Abort:
-            std::swap(ctx.spABT, ctx.r[Register::SP]);
-            std::swap(ctx.lrABT, ctx.r[Register::LR]);
-            break;
-        case Mode::Undefined:
-            std::swap(ctx.spUND, ctx.r[Register::SP]);
-            std::swap(ctx.lrUND, ctx.r[Register::LR]);
-            break;
-    }
-
-    // Load new register bank
-    switch (mode) {
-        case Mode::User:
-        case Mode::System:
-            ctx.spsr = NULL;
-            break;
-        case Mode::FastInterrupt:
-            for (u64 i = 0; i < NUM_FIQ_ctx; i++) {
-                std::swap(ctx.fiqctx[i], ctx.r[i + 8]);
-            }
-
-            std::swap(ctx.spFIQ, ctx.r[Register::SP]);
-            std::swap(ctx.lrFIQ, ctx.r[Register::LR]);
-
-            ctx.spsr = &ctx.spsrFIQ;
-            break;
-        case Mode::Interrupt:
-            std::swap(ctx.spIRQ, ctx.r[Register::SP]);
-            std::swap(ctx.lrIRQ, ctx.r[Register::LR]);
-
-            ctx.spsr = &ctx.spsrIRQ;
-            break;
-        case Mode::Supervisor:
-            std::swap(ctx.spSVC, ctx.r[Register::SP]);
-            std::swap(ctx.lrSVC, ctx.r[Register::LR]);
-
-            ctx.spsr = &ctx.spsrSVC;
-            break;
-        case Mode::Abort:
-            std::swap(ctx.spABT, ctx.r[Register::SP]);
-            std::swap(ctx.lrABT, ctx.r[Register::LR]);
-
-            ctx.spsr = &ctx.spsrABT;
-            break;
-        case Mode::Undefined:
-            std::swap(ctx.spUND, ctx.r[Register::SP]);
-            std::swap(ctx.lrUND, ctx.r[Register::LR]);
-
-            ctx.spsr = &ctx.spsrUND;
-            break;
-        default:
-            std::printf("[  ARM  ] Unrecognized CPU mode %02X\n", mode);
-
-            exit(1);
-    }
-
-    cpsr.mode = mode;
-}
-
-void reloadCPSR() {
-    if (ctx.spsr == NULL) {
-        std::puts("[  ARM  ] Invalid SPSR\n");
-
-        exit(1);
-    }
-
-    const u32 mode = ctx.spsr->mode;
-
-    ctx.cpsr.raw &= 0x1F;
-    ctx.cpsr.raw |= ctx.spsr->raw & ~0x1F;
-
-    changeMode(mode);
-}
-
-void raise_fast_interrupt() {
-    PSR &cpsr = ctx.cpsr;
-
-    const u32 lr = ctx.r[Register::PC] + 4;
-
-    std::printf("ARM fast interrupt @ %08X\n", ctx.cpc);
-
-    // Save CPSR
-    ctx.spsrFIQ.raw = cpsr.raw;
-
-    cpsr.f = 1;
-
-    changeMode(Mode::FastInterrupt);
-
-    ctx.r[Register::LR] = lr;
-    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE | 0x1C;
-}
-
-void check_pending_interrupts() {
-    if (ctx.pending_interrupt && (ctx.cpsr.f == 0)) {
-        raise_fast_interrupt();
-    }
-}
-
-void setInterruptPending(const bool isInterruptPending) {
-    ctx.pending_interrupt = isInterruptPending;
-
-    if (isInterruptPending) {
-        set_state(STATE_RUNNING);
-    }
-}
-
-bool checkCondition(const u32 conditionCode) {
-    const PSR &cpsr = ctx.cpsr;
-    switch (conditionCode) {
+static bool check_condition(const int condition_code) {
+    switch (condition_code) {
         case CONDITION_CODE_EQ:
-            return cpsr.z != 0;
+            return CPSR.zero;
         case CONDITION_CODE_NE:
-            return cpsr.z == 0;
+            return !CPSR.zero;
         case CONDITION_CODE_HS:
-            return cpsr.c != 0;
+            return CPSR.carry;
         case CONDITION_CODE_LO:
-            return cpsr.c == 0;
+            return !CPSR.carry;
         case CONDITION_CODE_MI:
-            return cpsr.n != 0;
+            return CPSR.negative;
         case CONDITION_CODE_PL:
-            return cpsr.n == 0;
+            return !CPSR.negative;
         case CONDITION_CODE_VS:
-            return cpsr.v != 0;
+            return CPSR.overflow;
         case CONDITION_CODE_VC:
-            return cpsr.v == 0;
+            return !CPSR.overflow;
         case CONDITION_CODE_HI:
-            return (cpsr.c != 0) && (cpsr.z == 0);
+            return CPSR.carry && !CPSR.zero;
         case CONDITION_CODE_LS:
-            return (cpsr.z != 0) || (cpsr.c == 0);
+            return CPSR.zero || !CPSR.carry;
         case CONDITION_CODE_GE:
-            return cpsr.n == cpsr.v;
+            return CPSR.negative == CPSR.overflow;
         case CONDITION_CODE_LT:
-            return cpsr.n != cpsr.v;
+            return CPSR.negative != CPSR.overflow;
         case CONDITION_CODE_GT:
-            return (cpsr.n == cpsr.v) && (cpsr.z == 0);
+            return (CPSR.negative == CPSR.overflow) && !CPSR.zero;
         case CONDITION_CODE_LE:
-            return (cpsr.n != cpsr.v) || (cpsr.z != 0);
+            return (CPSR.negative != CPSR.overflow) || CPSR.zero;
         case CONDITION_CODE_AL:
             return true;
         default:
@@ -535,83 +351,73 @@ bool checkCondition(const u32 conditionCode) {
     }
 }
 
-void setBitFlags(const u32 n) {
-    PSR &cpsr = ctx.cpsr;
-    cpsr.c = ctx.carryOut;
-    cpsr.z = n == 0;
-    cpsr.n = (n >> 31) & 1;
+static void set_bit_flags(const u32 n) {
+    CPSR.carry = ctx.carry_out;
+    CPSR.zero = n == 0;
+    CPSR.negative = (n >> 31) & 1;
 }
 
-void setAddFlags(const u32 a, const u32 b, const u32 n) {
-    PSR &cpsr = ctx.cpsr;
-    cpsr.v = (((a ^ b) >> 31) == 0) && (((a ^ n) >> 31) != 0);
-    cpsr.c = (0xFFFFFFFF - a) < b;
-    cpsr.z = n == 0;
-    cpsr.n = (n >> 31) & 1;
+static void set_add_flags(const u32 a, const u32 b, const u32 n) {
+    CPSR.overflow = (((a ^ b) >> 31) == 0) && (((a ^ n) >> 31) != 0);
+    CPSR.carry = (0xFFFFFFFF - a) < b;
+    CPSR.zero = n == 0;
+    CPSR.negative = (n >> 31) & 1;
 }
 
-void setAddFlagsWithCarry(const u32 a, const u32 b, const u64 n) {
+static void set_add_flags_with_carry(const u32 a, const u32 b, const u64 n) {
     const u32 temp = a + b;
     const u32 n32 = (u32)n;
 
-    PSR &cpsr = ctx.cpsr;
-    cpsr.v = ((((a ^ b) >> 31) == 0) && (((a ^ temp) >> 31) != 0)) || ((((temp ^ ctx.cpsr.c) >> 31) == 0) && (((temp ^ n32) >> 31) != 0));
-    cpsr.c = (n >> 32) & 1;
-    cpsr.z = n32 == 0;
-    cpsr.n = (n >> 31) & 1;
+    CPSR.overflow = ((((a ^ b) >> 31) == 0) && (((a ^ temp) >> 31) != 0)) || ((((temp ^ CPSR.carry) >> 31) == 0) && (((temp ^ n32) >> 31) != 0));
+    CPSR.carry = (n >> 32) & 1;
+    CPSR.zero = n32 == 0;
+    CPSR.negative = (n >> 31) & 1;
 }
 
-void setSubFlags(const u32 a, const u32 b, const u32 n) {
-    PSR &cpsr = ctx.cpsr;
-    cpsr.v = (((a ^ b) >> 31) != 0) && (((a ^ n) >> 31) != 0);
-    cpsr.c = a >= b;
-    cpsr.z = n == 0;
-    cpsr.n = (n >> 31) & 1;
+static void set_sub_flags(const u32 a, const u32 b, const u32 n) {
+    CPSR.overflow = (((a ^ b) >> 31) != 0) && (((a ^ n) >> 31) != 0);
+    CPSR.carry = a >= b;
+    CPSR.zero = n == 0;
+    CPSR.negative = (n >> 31) & 1;
 }
 
-void setSubFlagsWithCarry(const u32 a, const u32 b, const u32 n) {
-    const u32 carryIn = ctx.cpsr.c ^ 1;
+enum {
+    SHIFT_TYPE_LSL,
+    SHIFT_TYPE_LSR,
+    SHIFT_TYPE_ASR,
+    SHIFT_TYPE_ROR,
+};
 
-    const u32 temp1 = a - b;
-    const u32 temp2 = temp1 - carryIn;
-
-    PSR &cpsr = ctx.cpsr;
-    cpsr.v = ((((a ^ b) >> 31) != 0) && (((a ^ temp1) >> 31) != 0)) || ((((temp1 ^ carryIn) >> 31) != 0) && (((temp1 ^ temp2) >> 31) != 0));
-    cpsr.c = (a >= b) || (temp1 >= carryIn);
-    cpsr.z = n == 0;
-    cpsr.n = (n >> 31) & 1;
-}
-
-template<u32 shiftType, bool isImmediate>
-u32 shift(const u32 data, u32 amount) {
+template<int shift_type, bool is_immediate>
+static u32 shift(const u32 data, u32 amount) {
     amount &= 0xFF;
 
-    switch (shiftType) {
-        case ShiftType::LSL:
+    switch (shift_type) {
+        case SHIFT_TYPE_LSL:
             if (amount == 0) {
                 // Don't set flags
-                ctx.carryOut = ctx.cpsr.c;
+                ctx.carry_out = CPSR.carry;
 
                 return data;
             }
 
             if (amount >= 32) {
                 if (amount == 32) {
-                    ctx.carryOut = data & 1;
+                    ctx.carry_out = data & 1;
                 } else {
-                    ctx.carryOut = 0;
+                    ctx.carry_out = 0;
                 }
 
                 return 0;
             }
 
-            ctx.carryOut = ((data << (amount - 1)) >> 31) & 1;
+            ctx.carry_out = ((data << (amount - 1)) >> 31) & 1;
 
             return data << amount;
-        case ShiftType::LSR:
+        case SHIFT_TYPE_LSR:
             if (amount == 0) {
-                if constexpr (!isImmediate) {
-                    ctx.carryOut = ctx.cpsr.c;
+                if constexpr (!is_immediate) {
+                    ctx.carry_out = CPSR.carry;
 
                     return data;
                 }
@@ -621,22 +427,22 @@ u32 shift(const u32 data, u32 amount) {
 
             if (amount >= 32) {
                 if (amount == 32) {
-                    ctx.carryOut = (data >> 31) & 1;
+                    ctx.carry_out = (data >> 31) & 1;
                 } else {
-                    ctx.carryOut = 0;
+                    ctx.carry_out = 0;
                 }
 
                 return 0;
             }
 
-            ctx.carryOut = (data >> (amount - 1)) & 1;
+            ctx.carry_out = (data >> (amount - 1)) & 1;
 
             return data >> amount;
-        case ShiftType::ASR:
+        case SHIFT_TYPE_ASR:
             {
                 if (amount == 0) {
-                    if constexpr (!isImmediate) {
-                        ctx.carryOut = ctx.cpsr.c;
+                    if constexpr (!is_immediate) {
+                        ctx.carry_out = CPSR.carry;
 
                         return data;
                     }
@@ -647,20 +453,20 @@ u32 shift(const u32 data, u32 amount) {
                 if (amount >= 32) {
                     const u32 sign = data >> 31;
 
-                    ctx.carryOut = sign;
+                    ctx.carry_out = sign;
 
                     return 0 - sign;
                 }
                 
-                ctx.carryOut = (data >> (amount - 1)) & 1;
+                ctx.carry_out = (data >> (amount - 1)) & 1;
 
                 return (u32)((i32)data >> amount);
             }
-        case ShiftType::ROR:
+        case SHIFT_TYPE_ROR:
             {
-                if (!isImmediate || (amount != 0)) {
+                if (!is_immediate || (amount != 0)) {
                     if (amount == 0) {
-                        ctx.carryOut = ctx.cpsr.c;
+                        ctx.carry_out = CPSR.carry;
 
                         return data;
                     }
@@ -669,14 +475,14 @@ u32 shift(const u32 data, u32 amount) {
 
                     const u32 out = std::rotr(data, amount - 1);
 
-                    ctx.carryOut = data & 1;
+                    ctx.carry_out = data & 1;
 
                     return std::rotr(out, 1);
                 } else {
                     // RRX
-                    ctx.carryOut = data & 1;
+                    ctx.carry_out = data & 1;
 
-                    return (data >> 1) | (ctx.cpsr.c << 31);
+                    return (data >> 1) | (CPSR.carry << 31);
                 }
             }
     }
@@ -684,12 +490,26 @@ u32 shift(const u32 data, u32 amount) {
 
 template<typename T>
 static T read(const u32 addr) {
+    if (addr == 0x0D2D8800) {
+        dump_registers();
+    }
+
     if ((addr & (sizeof(T) - 1)) != 0) {
         std::printf("Unaligned ARM read%zu @ %08X\n", 8 * sizeof(T), addr);
+
+        dump_registers();
         exit(1);
     }
 
     return bus::read<T>(addr);
+}
+
+static u32 fetch_instr() {
+    const u32 instr = read<u32>(PC);
+
+    PC += sizeof(instr);
+
+    return instr;
 }
 
 template<typename T>
@@ -702,771 +522,502 @@ static void write(const u32 addr, const u32 data) {
     return bus::write<T>(addr, data);
 }
 
-u32 rotateImmediate(const u32 immediate, u32 amount) {
+static u32 rotate_immediate(const u32 immediate, u32 amount) {
     if (amount == 0) {
-        ctx.carryOut = ctx.cpsr.c;
+        ctx.carry_out = CPSR.carry;
 
         return immediate;
     }
 
     amount <<= 1;
 
-    ctx.carryOut = (immediate & (1 << (amount - 1))) != 0;
+    ctx.carry_out = (immediate & (1 << (amount - 1))) != 0;
 
     return std::rotr(immediate, amount);
 }
 
-void BLX_Imm(const Instruction instr) {
-    const u32 offset = (u32)(((i32)instr.branch.offset << 8) >> 6) | (instr.branch.h << 1);
+template<bool use_spsr>
+static void i_mrs(const u32 instr) {
+    assert(RD != 15);
 
-    const u32 pc = ctx.r[Register::PC];
+    if constexpr (use_spsr) {
+        assert(SPSR != nullptr);
 
-    ctx.r[Register::LR] = pc;
-    ctx.r[Register::PC] = pc + offset + 4;
-
-    // Switch to THUMB unconditionally
-}
-
-void BLX_Reg(const Instruction instr) {
-    const u32 rm = instr.dp_shift_immediate.rm;
-    if (rm == Register::PC) {
-        std::puts("[  ARM  ] Invalid BLX source register");
-
-        exit(1);
-    }
-
-    ctx.r[Register::LR] = ctx.r[Register::PC];
-
-    const u32 target = ctx.r[rm];
-
-    ctx.r[Register::PC] = target & ~1;
-}
-
-void BX(const Instruction instr) {
-    const u32 rm = instr.dp_shift_immediate.rm;
-    if (rm == Register::PC) {
-        std::puts("[  ARM  ] Invalid BX source register");
-
-        exit(1);
-    }
-
-    const u32 target = ctx.r[rm];
-
-    ctx.r[Register::PC] = target & ~1;
-}
-
-void CLZ(const Instruction instr) {
-    const u32 rd = instr.dp_shift_immediate.rd;
-    const u32 rm = instr.dp_shift_immediate.rm;
-    if (rm == Register::PC) {
-        std::puts("[  ARM  ] Invalid CLZ source register");
-
-        exit(1);
-    }
-    if (rd == Register::PC) {
-        std::puts("[  ARM  ] Invalid CLZ destination register");
-
-        exit(1);
-    }
-
-    ctx.r[rd] = std::countl_zero(ctx.r[rm]);
-}
-
-void MRS(const Instruction instr) {
-    const u32 rd = instr.dp_immediate.rd;
-    if (rd == Register::PC) {
-        std::puts("[  ARM  ] Invalid MRS destination register");
-
-        exit(1);
-    }
-
-    const bool isSaved = instr.msr_immediate.r != 0;
-    if (isSaved) {
-        if (ctx.spsr == NULL) {
-            std::puts("[  ARM  ] Invalid SPSR");
-
-            exit(1);
-        }
-
-        ctx.r[rd] = ctx.spsr->raw;
+        GPRS[RD] = SPSR->raw;
     } else {
-        ctx.r[rd] = ctx.cpsr.raw;
+        GPRS[RD] = CPSR.raw;
     }
 }
 
-template<AddExtendOpcode op>
-void doAddExtend(const Instruction instr) {
-    const u32 rd = instr.dp_shift_register.rd;
-    const u32 rm = instr.dp_shift_register.rm;
+template<bool is_load>
+static void i_block_data_transfer(const u32 instr) {
+    assert(RN != 15);
+    assert(RLIST != 0);
+    assert((RLIST & (1 << RN)) == 0);
 
-    const u32 rotate = 8 * (instr.dp_shift_register.rs >> 2);
+    bool is_pre_indexed = P;
 
-    switch (op) {
-        case AddExtendOpcode::SXTB:
-            ctx.r[rd] = (u32)(i8)(std::rotr(ctx.r[rm], rotate));
-            break;
-    }
-}
+    u32 addr = GPRS[RN];
 
-template<bool isLoad>
-void doBlockDataTransfer(const Instruction instr) {
-    const u32 rn = instr.bdt.rn;
-    if (rn == Register::PC) {
-        std::puts("[  ARM  ] Invalid base address register");
+    if (!U) {
+        // Transfers always start at the lowest address, even for "decrementing" block transfers
+        addr -= 4 * std::popcount(RLIST);
 
-        exit(1);
+        is_pre_indexed = !is_pre_indexed;
     }
 
-    const bool isWriteBack = instr.bdt.w != 0;
-    const bool isSpecial = instr.bdt.s != 0;
-    const bool isUp = instr.bdt.u != 0;
+    const int mode = CPSR.mode;
 
-    bool isPreIndex = instr.bdt.p != 0;
-
-    const u32 rlist = instr.bdt.rlist;
-    if (rlist == 0) {
-        std::puts("[  ARM  ] Invalid rlist");
-
-        exit(1);
+    if (B && (!is_load || ((RLIST & (1 << 15)) == 0))) {
+        // All STM, LDM that don't load PC transfer USR mode registers here
+        change_mode(MODE_USR);
     }
 
-    u32 addr = ctx.r[rn];
-    if (!isUp) {
-        addr -= 4 * std::popcount(rlist);
-
-        isPreIndex = !isPreIndex;
-    }
-
-    u32 mode = ctx.cpsr.mode;
-    if (isSpecial && (!isLoad || ((rlist & (1 << Register::PC)) == 0))) {
-        changeMode(Mode::User);
-    }
-
-    for (u32 reglist = rlist; reglist != 0;) {
+    for (u32 reglist = RLIST; reglist != 0; ) {
         const u32 i = std::countr_zero(reglist);
 
-        if (isPreIndex) {
+        if (is_pre_indexed) {
             addr += 4;
         }
 
-        if constexpr (isLoad) {
-            ctx.r[i] = read<u32>(addr & ~3);
-
-            if (i == Register::PC) {
-                // State change
-                ctx.r[i] &= ~1;
-            }
+        if constexpr (is_load) {
+            // Address is force-aligned
+            GPRS[i] = read<u32>(addr & ~3);
         } else {
-            u32 data = ctx.r[i];
-            if (i == Register::PC) {
+            u32 data = GPRS[i];
+
+            if (i == 15) {
+                // PC is 12 bytes ahead during a store operation
                 data += 8;
             }
 
             write<u32>(addr & ~3, data);
         }
 
-        if (!isPreIndex) {
+        if (!is_pre_indexed) {
             addr += 4;
         }
 
         reglist ^= 1 << i;
     }
 
-    if (isWriteBack) {
-        if (!isUp) {
-            addr -= 4 * std::popcount(rlist);
+    if (W) {
+        if (!U) {
+            addr -= 4 * std::popcount(RLIST);
         }
 
-        if (!isLoad || ((rlist & (1 << rn)) == 0) || ((31U - std::countl_zero(rlist)) != rn)) {
-            ctx.r[rn] = addr;
-        }
+        GPRS[RN] = addr;
     }
 
-    if (isSpecial) {
-        if (!isLoad || ((rlist & (1 << Register::PC)) == 0)) {
-            changeMode(mode);
+    if (B) {
+        // Either restore the old mode (STM, LDM with PC not in RLIST) OR
+        // restore the CPSR (LDM with PC in RLIST)
+        if (!is_load || ((RLIST & (1 << 15)) == 0)) {
+            change_mode(mode);
         } else {
-            reloadCPSR();
+            restore_cpsr();
         }
     }
 }
 
-template<bool isLink>
-void doBranch(const Instruction instr) {
-    const u32 offset = (u32)(((i32)instr.branch.offset << 8) >> 6);
+template<bool is_link>
+static void i_branch(const u32 instr) {
+    const u32 offset = ((i32)instr << 8) >> 6;
 
-    const u32 pc = ctx.r[Register::PC];
-    if constexpr (isLink) {
-        ctx.r[Register::LR] = pc;
+    if constexpr (is_link) {
+        LR = PC;
     }
 
-    ctx.r[Register::PC] = pc + offset + 4;
+    PC = PC_DELAY + offset;
 }
 
-template<bool isImmediate, bool isImmediateShift>
-void doDataProcessing(const Instruction instr) {
-    const u32 rd = instr.dp_immediate.rd;
-    const u32 rn = instr.dp_immediate.rn;
+enum {
+    DP_OP_AND,
+    DP_OP_EOR,
+    DP_OP_SUB,
+    DP_OP_RSB,
+    DP_OP_ADD,
+    DP_OP_ADC,
+    DP_OP_SBC,
+    DP_OP_RSC,
+    DP_OP_TST,
+    DP_OP_TEQ,
+    DP_OP_CMP,
+    DP_OP_CMN,
+    DP_OP_ORR,
+    DP_OP_MOV,
+    DP_OP_BIC,
+    DP_OP_MVN,
+};
 
-    const u32 opcode = instr.dp_immediate.opcode;
+template<bool is_immediate, bool is_immediate_shift, bool set_flags>
+static void i_data_processing(const u32 instr) {
+    u32 op_1 = GPRS[RN];
 
-    const bool isSpecial = instr.dp_immediate.s != 0;
-    const bool setFlags = isSpecial && (rd != Register::PC);
-
-    u32 op1 = ctx.r[rn];
-    if (rn == Register::PC) {
-        op1 += 4;
+    if (RN == 15) {
+        // PC is at least 8 bytes ahead
+        op_1 += 4;
     }
 
-    // Decode op2
-    u32 op2;
-    if constexpr (isImmediate) {
-        op2 = rotateImmediate(instr.dp_immediate.immediate, instr.dp_immediate.rotate);
+    // Decode second operand
+    u32 op_2;
+
+    if constexpr (is_immediate) {
+        op_2 = rotate_immediate(IMM, ROTATE);
     } else {
-        const u32 rm = instr.dp_shift_immediate.rm;
-
-        op2 = ctx.r[rm];
-        if (rm == Register::PC) {
-            op2 += 4;
+        op_2 = GPRS[RM];
+    
+        if (RM == 15) {
+            // ...
+            op_2 += 4;
         }
 
-        u32 amount;
-        if constexpr (isImmediateShift) {
-            amount = instr.dp_shift_immediate.amount;
-        } else {
-            amount = ctx.r[instr.dp_shift_register.rs];
+        u32 amount = AMOUNT;
 
-            if (rn == Register::PC) {
-                op1 += 4;
+        if constexpr (!is_immediate_shift) {
+            amount = GPRS[RS];
+
+            // Shifting takes a cycle, causing PC to advance by 4 more bytes before the register
+            // values are read
+            if (RN == 15) {
+                op_1 += 4;
             }
 
-            if (rm == Register::PC) {
-                op2 += 4;
+            if (RM == 15) {
+                op_2 += 4;
             }
         }
 
-        switch (instr.dp_shift_immediate.shift) {
-            case ShiftType::LSL:
-                op2 = shift<ShiftType::LSL, isImmediateShift>(op2, amount);
+        switch (SHIFT) {
+            case SHIFT_TYPE_LSL:
+                op_2 = shift<SHIFT_TYPE_LSL, is_immediate_shift>(op_2, amount);
                 break;
-            case ShiftType::LSR:
-                op2 = shift<ShiftType::LSR, isImmediateShift>(op2, amount);
+            case SHIFT_TYPE_LSR:
+                op_2 = shift<SHIFT_TYPE_LSR, is_immediate_shift>(op_2, amount);
                 break;
-            case ShiftType::ASR:
-                op2 = shift<ShiftType::ASR, isImmediateShift>(op2, amount);
+            case SHIFT_TYPE_ASR:
+                op_2 = shift<SHIFT_TYPE_ASR, is_immediate_shift>(op_2, amount);
                 break;
-            case ShiftType::ROR:
-                op2 = shift<ShiftType::ROR, isImmediateShift>(op2, amount);
+            case SHIFT_TYPE_ROR:
+                op_2 = shift<SHIFT_TYPE_ROR, is_immediate_shift>(op_2, amount);
                 break;
+        default:
+            std::printf("ARM Invalid shift type %d\n", SHIFT);
+            exit(1);
         }
     }
 
-    switch (opcode) {
-        case DataProcessingOpcode::AND:
-            ctx.r[rd] = op1 & op2;
+    switch (DP_OP) {
+        case DP_OP_AND:
+            GPRS[RD] = op_1 & op_2;
 
-            if (setFlags) {
-                setBitFlags(ctx.r[rd]);
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::EOR:
-            ctx.r[rd] = op1 ^ op2;
+        case DP_OP_EOR:
+            GPRS[RD] = op_1 ^ op_2;
 
-            if (setFlags) {
-                setBitFlags(ctx.r[rd]);
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::SUB:
-            ctx.r[rd] = op1 - op2;
+        case DP_OP_SUB:
+            GPRS[RD] = op_1 - op_2;
 
-            if (setFlags) {
-                setSubFlags(op1, op2, ctx.r[rd]);
+            if (set_flags) {
+                set_sub_flags(op_1, op_2, GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::RSB:
-            ctx.r[rd] = op2 - op1;
+        case DP_OP_RSB:
+            GPRS[RD] = op_2 - op_1;
 
-            if (setFlags) {
-                setSubFlags(op2, op1, ctx.r[rd]);
+            if (set_flags) {
+                set_sub_flags(op_2, op_1, GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::ADD:
-            ctx.r[rd] = op1 + op2;
+        case DP_OP_ADD:
+            GPRS[RD] = op_1 + op_2;
 
-            if (setFlags) {
-                setAddFlags(op1, op2, ctx.r[rd]);
+            if (set_flags) {
+                set_add_flags(op_1, op_2, GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::ADC:
+        case DP_OP_ADC:
             {
-                const u64 n = (u64)op1 + (u64)op2 + (u64)ctx.cpsr.c;
+                const u64 result = (u64)op_1 + (u64)op_2 + (u64)CPSR.carry;
 
-                if (setFlags) {
-                    setAddFlagsWithCarry(op1, op2, n);
+                GPRS[RD] = (u32)result;
+
+                if (set_flags) {
+                    set_add_flags_with_carry(op_1, op_2, result);
                 }
-
-                ctx.r[rd] = (u32)n;
             }
             break;
-        case DataProcessingOpcode::TST:
-            setBitFlags(op1 & op2);
+        case DP_OP_TST:
+            set_bit_flags(op_1 & op_2);
             break;
-        case DataProcessingOpcode::TEQ:
-            setBitFlags(op1 ^ op2);
+        case DP_OP_TEQ:
+            set_bit_flags(op_1 ^ op_2);
             break;
-        case DataProcessingOpcode::CMP:
-            setSubFlags(op1, op2, op1 - op2);
+        case DP_OP_CMP:
+            set_sub_flags(op_1, op_2, op_1 - op_2);
             break;
-        case DataProcessingOpcode::CMN:
-            setAddFlags(op1, op2, op1 + op2);
+        case DP_OP_CMN:
+            set_add_flags(op_1, op_2, op_1 + op_2);
             break;
-        case DataProcessingOpcode::ORR:
-            ctx.r[rd] = op1 | op2;
+        case DP_OP_ORR:
+            GPRS[RD] = op_1 | op_2;
 
-            if (setFlags) {
-                setBitFlags(ctx.r[rd]);
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::MOV:
-            if (setFlags) {
-                setBitFlags(op2);
-            }
+        case DP_OP_MOV:
+            GPRS[RD] = op_2;
 
-            ctx.r[rd] = op2;
-
-            if (!isSpecial && (rd == Register::PC)) {
-                ctx.r[rd] &= ~1;
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::BIC:
-            ctx.r[rd] = op1 & ~op2;
+        case DP_OP_BIC:
+            GPRS[RD] = op_1 & ~op_2;
 
-            if (setFlags) {
-                setBitFlags(ctx.r[rd]);
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
-        case DataProcessingOpcode::MVN:
-            ctx.r[rd] = ~op2;
+        case DP_OP_MVN:
+            GPRS[RD] = ~op_2;
 
-            if (setFlags) {
-                setBitFlags(ctx.r[rd]);
+            if (set_flags) {
+                set_bit_flags(GPRS[RD]);
             }
             break;
         default:
-            std::printf("[  ARM  ] Unrecognized Data Processing opcode %X\n", opcode);
-
+            std::printf("ARM Unimplemented data processing opcode %u\n", DP_OP);
             exit(1);
     }
 
-    if (isSpecial && (rd == Register::PC)) {
-        reloadCPSR();
+    if (set_flags && (RD == 15)) {
+        // This is used to return from an exception
+        restore_cpsr();
     }
 }
 
-template<bool isImmediate, bool isLoad>
-void doDoublewordDataTransfer(const Instruction instr) {
-    const u32 rd = instr.edt_immediate.rd;
-    const u32 rn = instr.edt_immediate.rn;
+template<bool is_immediate, bool is_load>
+static void i_halfword_data_transfer(const u32 instr) {
+    assert(RD != 15);
+    assert(P || !W);
 
-    const bool isWriteBack = instr.edt_immediate.w != 0;
-    const bool isUp = instr.edt_immediate.u != 0;
-    const bool isPreIndex = instr.edt_immediate.p != 0;
+    u32 addr = GPRS[RN];
 
-    if (((rd & 1) != 0) || (rd >= Register::LR)) {
-        std::puts("[  ARM  ] Invalid DDT destination register");
-
-        exit(1);
-    }
-
-    if (!isPreIndex && isWriteBack) {
-        std::puts("[  ARM  ] Unimplemented unprivileged memory access");
-
-        exit(1);
-    }
-
-    u32 addr = ctx.r[rn];
-
-    u32 offset;
-    if constexpr (isImmediate) {
-        offset = (instr.edt_immediate.offsethi << 4) | instr.edt_immediate.offsetlo;
-    } else {
-        const u32 rm = instr.edt_register.rm;
-        if (rm == Register::PC) {
-            std::puts("[  ARM  ] Invalid offset register");
-
-            exit(1);
-        }
-
-        offset = ctx.r[rm];
-    }
-
-    if (isPreIndex) {
-        if (isUp) {
-            addr += offset;
-        } else {
-            addr -= offset;
-        }
-    }
-
-    if constexpr (isLoad) {
-        ctx.r[rd + 0] = read<u32>(addr + 0);
-        ctx.r[rd + 4] = read<u32>(addr + 4);
-    } else {
-        write<u32>(addr + 0, ctx.r[rd + 0]);
-        write<u32>(addr + 4, ctx.r[rd + 1]);
-    }
-
-    if (!isLoad || (rn != rd)) {
-        if (!isPreIndex) {
-            // Post-indexing implies writeback
-            if ((rn == rd) || (rn == (rd + 1)) || (rn == Register::PC)) {
-                std::puts("[  ARM  ] Invalid writeback register");
-
-                exit(1);
-            }
-
-            if (isUp) {
-                addr += offset;
-            } else {
-                addr -= offset;
-            }
-
-            ctx.r[rn] = addr;
-        } else if (isWriteBack) {
-            ctx.r[rn] = addr;
-        }
-    }
-}
-
-template<bool isImmediate, bool isLoad>
-void doHalfwordDataTransfer(const Instruction instr) {
-    const u32 rd = instr.edt_immediate.rd;
-    const u32 rn = instr.edt_immediate.rn;
-
-    const bool isWriteBack = instr.edt_immediate.w != 0;
-    const bool isUp = instr.edt_immediate.u != 0;
-    const bool isPreIndex = instr.edt_immediate.p != 0;
-
-    if (rd == Register::PC) {
-        std::puts("[  ARM  ] Invalid HDT destination register");
-
-        exit(1);
-    }
-
-    if (!isPreIndex && isWriteBack) {
-        std::puts("[  ARM  ] Unimplemented unprivileged memory access");
-
-        exit(1);
-    }
-
-    u32 addr = ctx.r[rn];
-    if (rn == Register::PC) {
+    if (RN == 15) {
+        // PC is at least 8 bytes ahead
         addr += 4;
     }
 
-    u32 offset;
-    if constexpr (isImmediate) {
-        offset = (instr.edt_immediate.offsethi << 4) | instr.edt_immediate.offsetlo;
-    } else {
-        const u32 rm = instr.edt_register.rm;
-        if (rm == Register::PC) {
-            std::puts("[  ARM  ] Invalid offset register");
+    u32 offset = OFS_8;
 
-            exit(1);
-        }
+    if constexpr (!is_immediate) {
+        assert(RM != 15);
 
-        offset = ctx.r[rm];
+        offset = GPRS[RM];
     }
 
-    if (isPreIndex) {
-        if (isUp) {
+    if (P) {
+        if (U) {
             addr += offset;
         } else {
             addr -= offset;
         }
     }
 
-    if constexpr (isLoad) {
-        if ((addr & 1) != 0) {
-            std::printf("[  ARM  ] Unaligned LDRH address %08X\n", addr);
+    if constexpr (is_load) {
+        assert((addr & 1) == 0);
 
-            exit(1);
-        }
-
-        ctx.r[rd] = read<u16>(addr);
+        GPRS[RD] = read<u16>(addr);
     } else {
-        write<u16>(addr & ~1, ctx.r[rd]);
+        write<u16>(addr & ~1, GPRS[RD]);
     }
 
-    if (!isLoad || (rn != rd)) {
-        if (!isPreIndex) {
+    if (!is_load || (RN != RD)) {
+        if (!P) {
             // Post-indexing implies writeback
-            if (rn == Register::PC) {
-                std::puts("[  ARM  ] Invalid writeback register");
+            assert(RN != 15);
 
-                exit(1);
-            }
-
-            if (isUp) {
+            if (U) {
                 addr += offset;
             } else {
                 addr -= offset;
             }
 
-            ctx.r[rn] = addr;
-        } else if (isWriteBack) {
-            ctx.r[rn] = addr;
+            GPRS[RN] = addr;
+        } else if (W) {
+            GPRS[RN] = addr;
         }
     }
 }
 
-template<bool isImmediate>
-void doMoveToStatusRegister(const Instruction instr) {
+template<bool is_immediate, bool use_spsr>
+static void i_msr(const u32 instr) {
     u32 op;
-    if constexpr (isImmediate) {
-        op = rotateImmediate(instr.dp_immediate.immediate, instr.dp_immediate.rotate);
+
+    if constexpr (is_immediate) {
+        op = rotate_immediate(IMM, ROTATE);
     } else {
-        op = ctx.r[instr.dp_shift_immediate.rm];
+        op = GPRS[RM];
     }
 
-    u32 mask = instr.msr_immediate.mask;
-    if (ctx.cpsr.mode == Mode::User) {
-        mask &= 8;
-    }
+    u32 old_mode;
 
-    const bool isSaved = instr.msr_immediate.r != 0;
+    ProgramStatus* psr;
 
-    u32 mode;
+    if constexpr (use_spsr) {
+        assert(SPSR != nullptr);
 
-    PSR *psr;
-    if (isSaved) {
-        psr = ctx.spsr;
+        psr = SPSR;
     } else {
-        psr = &ctx.cpsr;
+        psr = &CPSR;
 
-        if ((mask & 1) != 0) {
-            mode = psr->mode;
+        if ((MASK & 1) != 0) {
+            // Save mode for mode change
+            old_mode = psr->mode;
         }
     }
 
-    if (psr == NULL) {
-        std::puts("[  ARM  ] Invalid SPSR");
+    // Build PSR mask
+    u32 mask = 0;
 
-        exit(1);
+    for (int i = 0; i < 3; i++) {
+        if ((MASK & (1 << i)) != 0) {
+            mask |= 0xFF << (8 * i);
+        }
     }
 
-    u32 psrMask = 0;
-    if ((mask & 1) != 0) {
-        psrMask |= 0xFF;
+    if (CPSR.mode == MODE_USR) {
+        mask &= 0xFF000000;
     }
 
-    if ((mask & 2) != 0) {
-        psrMask |= 0xFF00;
-    }
+    psr->raw &= ~mask;
+    psr->raw |= op & mask;
 
-    if ((mask & 4) != 0) {
-        psrMask |= 0xFF0000;
-    }
+    if (!use_spsr && ((MASK & 1) != 0)) {
+        const int mode = op & 0x1F;
 
-    if ((mask & 8) != 0) {
-        psrMask |= 0xFF000000;
-    }
+        psr->mode = old_mode;
 
-    psr->raw &= ~psrMask;
-    psr->raw |= op & psrMask;
-
-    if (!isSaved && ((mask & 1) != 0)) {
-        const u32 newMode = op & 0x1F;
-
-        psr->mode = mode;
-
-        changeMode(newMode);
+        change_mode(mode);
     }
 }
 
-template<bool isAccumulate>
-void doMultiply(const Instruction instr) {
-    const u32 rd = instr.multiply_long.rdhi;
-    const u32 rm = instr.multiply_long.rm;
-    const u32 rn = instr.multiply_long.rdlo;
-    const u32 rs = instr.multiply_long.rs;
+template<bool is_accumulate, bool set_flags>
+static void i_multiply(const u32 instr) {
+    assert((RD != 15) && (RM != 15) && (RD != 15) && (RS != 15));
+    assert(RN != RM);
 
-    if ((rm == Register::PC) || (rn == Register::PC) || (rs == Register::PC)) {
-        std::puts("[  ARM  ] Invalid MUL source register");
+    u32 result = GPRS[RM] * GPRS[RS];
 
-        exit(1);
+    if constexpr (is_accumulate) {
+        // Actually RN
+        result += GPRS[RD];
     }
 
-    if ((rd == Register::PC)) {
-        std::puts("[  ARM  ] Invalid MUL destination register");
+    // Actually RD
+    GPRS[RN] = result;
 
-        exit(1);
-    }
-
-    const bool setFlags = instr.multiply_long.s != 0;
-
-    u32 n = ctx.r[rm] * ctx.r[rs];
-    if constexpr (isAccumulate) {
-        n += ctx.r[rn];
-    }
-
-    ctx.r[rd] = n;
-
-    if (setFlags) {
-        setBitFlags(n);
+    if constexpr (set_flags) {
+        set_bit_flags(result);
     }
 }
 
-template<bool isSigned, bool isAccumulate>
-void domultiply_long(const Instruction instr) {
-    const u32 rdhi = instr.multiply_long.rdhi;
-    const u32 rdlo = instr.multiply_long.rdlo;
+template<bool is_immediate, bool is_load>
+void i_single_data_transfer(const u32 instr) {
+    assert(P || !W);
 
-    const u32 rm = instr.multiply_long.rm;
-    const u32 rs = instr.multiply_long.rs;
+    u32 addr = GPRS[RN];
 
-    if ((rm == Register::PC) || (rs == Register::PC)) {
-        std::puts("[  ARM  ] Invalid MULL source register");
-
-        exit(1);
-    }
-
-    if ((rdhi == Register::PC) || (rdlo == Register::PC) || (rdhi == rdlo)) {
-        std::puts("[  ARM  ] Invalid MULL destination register");
-
-        exit(1);
-    }
-
-    const bool setFlags = instr.multiply_long.s != 0;
-
-    const u64 accumulator = ((u64)ctx.r[rdhi] << 32) | (u64)ctx.r[rdlo];
-
-    u64 n;
-    if constexpr (isSigned) {
-        n = (i64)(i32)ctx.r[rm] * (i64)(i32)ctx.r[rs];
-    } else {
-        n = (u64)ctx.r[rm] * (u64)ctx.r[rs];
-    }
-
-    if constexpr (isAccumulate) {
-        n += accumulator;
-    }
-
-    ctx.r[rdlo] = (u32)n;
-    ctx.r[rdhi] = (u32)(n >> 32);
-
-    if (setFlags) {
-        ctx.cpsr.z = n == 0;
-        ctx.cpsr.n = (n >> 63) & 1;
-    }
-}
-
-template<bool isImmediate, bool isLoad>
-void doSingleDataTransfer(const Instruction instr) {
-    const u32 rd = instr.sdt_immediate.rd;
-    const u32 rn = instr.sdt_immediate.rn;
-
-    const bool isWriteBack = instr.sdt_immediate.w != 0;
-    const bool isByte = instr.sdt_immediate.b != 0;
-    const bool isUp = instr.sdt_immediate.u != 0;
-    const bool isPreIndex = instr.sdt_immediate.p != 0;
-
-    if (!isPreIndex && isWriteBack) {
-        std::puts("[  ARM  ] Unimplemented unprivileged memory access");
-
-        exit(1);
-    }
-
-    u32 addr = ctx.r[rn];
-    if (rn == Register::PC) {
+    if (RN == 15) {
+        // PC is at least 8 bytes ahead
         addr += 4;
     }
 
-    u32 offset;
-    if constexpr (isImmediate) {
-        offset = instr.sdt_immediate.immediate;
-    } else {
-        const u32 rm = instr.dp_shift_immediate.rm;
+    u32 offset = OFS_12;
 
-        offset = ctx.r[rm];
-        if (rm == Register::PC) {
+    if constexpr (!is_immediate) {
+        offset = GPRS[RM];
+    
+        if (RM == 15) {
+            // ...
             offset += 4;
         }
 
-        const u32 amount = instr.dp_shift_immediate.amount;
-
-        switch (instr.dp_shift_immediate.shift) {
-            case ShiftType::LSL:
-                offset = shift<ShiftType::LSL, true>(offset, amount);
+        switch (SHIFT) {
+            case SHIFT_TYPE_LSL:
+                offset = shift<SHIFT_TYPE_LSL, true>(offset, AMOUNT);
                 break;
-            case ShiftType::LSR:
-                offset = shift<ShiftType::LSR, true>(offset, amount);
+            case SHIFT_TYPE_LSR:
+                offset = shift<SHIFT_TYPE_LSR, true>(offset, AMOUNT);
                 break;
-            case ShiftType::ASR:
-                offset = shift<ShiftType::ASR, true>(offset, amount);
+            case SHIFT_TYPE_ASR:
+                offset = shift<SHIFT_TYPE_ASR, true>(offset, AMOUNT);
                 break;
-            case ShiftType::ROR:
-                offset = shift<ShiftType::ROR, true>(offset, amount);
+            case SHIFT_TYPE_ROR:
+                offset = shift<SHIFT_TYPE_ROR, true>(offset, AMOUNT);
                 break;
         }
     }
 
-    if (isPreIndex) {
-        if (isUp) {
+    if (P) {
+        if (U) {
             addr += offset;
         } else {
             addr -= offset;
         }
     }
 
-    if constexpr (isLoad) {
-        if (isByte) {
-            ctx.r[rd] = read<u8>(addr);
+    if constexpr (is_load) {
+        if (B) {
+            GPRS[RD] = read<u8>(addr);
         } else {
-            ctx.r[rd] = read<u32>(addr);
-
-            if (rd == Register::PC) {
-                ctx.r[rd] &= ~1;
-            }
+            GPRS[RD] = std::rotr(read<u32>(addr & ~3), 8 * (addr & 3));
         }
     } else {
-        u32 data = ctx.r[rd];
-        if (rd == Register::PC) {
-            addr += 8;
+        u32 data = GPRS[RD];
+
+        if (RD == 15) {
+            data += 8;
         }
 
-        if (isByte) {
-            write<u8>(addr, (u8)data);
+        if (B) {
+            write<u8>(addr, data);
         } else {
             write<u32>(addr & ~3, data);
         }
     }
 
-    if (!isLoad || (rn != rd)) {
-        if (!isPreIndex) {
+    if (!is_load || (RN != RD)) {
+        if (!P) {
             // Post-indexing implies writeback
-            if (rn == Register::PC) {
-                std::puts("[  ARM  ] Invalid writeback register");
+            assert(RN != 15);
 
-                exit(1);
-            }
-
-            if (isUp) {
+            if (U) {
                 addr += offset;
             } else {
                 addr -= offset;
             }
 
-            ctx.r[rn] = addr;
-        } else if (isWriteBack) {
-            ctx.r[rn] = addr;
+            GPRS[RN] = addr;
+        } else if (W) {
+            GPRS[RN] = addr;
         }
     }
 }
 
-void undefinedInstruction(const Instruction instr) {
-    std::printf("[  ARM  ] Unrecognized instruction %08X (opcode = %03X, PC = %08X)\n", instr.raw, instr.get_opcode(), ctx.cpc);
+static void i_undefined(const u32 instr) {
+    std::printf("Undefined ARM instruction %08X\n", instr);
 
+    dump_registers();
     exit(1);
 }
 
@@ -1476,101 +1027,87 @@ static void add_jump_target(const u32 addr) {
     static std::unordered_set<u32> jump_targets;
 
     if (jump_targets.find(addr) == jump_targets.end()) {
-        std::printf("Jump @ %08X to %08X\n", ctx.cpc, addr);
+        std::printf("Jump @ %08X to %08X\n", CPC, addr);
 
         jump_targets.insert(addr);
     }
 }
 
-void decodeARM() {
-    u32 &pc = ctx.r[Register::PC];
-    pc &= ~3;
+static void run_instr() {
+    // Initialize carry-out for instructions that don't use the barrel shifter
+    ctx.carry_out = CPSR.carry;
 
-    ctx.cpc = pc;
+    assert((PC & 3) == 0);
 
-    if ((pc & 3) != 0) {
-        std::printf("[  ARM  ] Unaligned PC (address = %08X)\n", pc);
+    CPC = PC;
 
-        exit(1);
-    }
+    const u32 instr = fetch_instr();
 
-    const Instruction instr{.raw = read<u32>(ctx.cpc)};
-
-    pc += sizeof(Instruction);
-
-    const u32 conditionCode = instr.none.condition_code;
-
-    if (checkCondition(conditionCode)) {
-        instructionTable[instr.get_opcode()](instr);
+    if (check_condition(COND)) {
+        instr_table[OPCODE](instr);
     }
     
-    if (pc != (ctx.cpc + 4)) {
-        add_jump_target(pc);
+    if (PC != (CPC + sizeof(u32))) {
+        add_jump_target(PC);
     }
 }
 
-static void initTables() {
-    instructionTable.fill(undefinedInstruction);
+static void initialize_instr_table() {
+    instr_table.fill(i_undefined);
 
-    fillTableEntries(instructionTable.data(), "000xxxxxxxx0", doDataProcessing<0, 1>);
-    fillTableEntries(instructionTable.data(), "000xxxxx0xx1", doDataProcessing<0, 0>);
-    fillTableEntries(instructionTable.data(), "0000000x1001", doMultiply<0>);
-    fillTableEntries(instructionTable.data(), "0000001x1001", doMultiply<1>);
-    fillTableEntries(instructionTable.data(), "0000100x1001", domultiply_long<0, 0>);
-    fillTableEntries(instructionTable.data(), "0000101x1001", domultiply_long<0, 1>);
-    fillTableEntries(instructionTable.data(), "0000110x1001", domultiply_long<1, 0>);
-    fillTableEntries(instructionTable.data(), "0000111x1001", domultiply_long<1, 1>);
-    fillTableEntries(instructionTable.data(), "00010x001001", undefinedInstruction); // TODO: SWP
-    fillTableEntries(instructionTable.data(), "000xx0x01011", doHalfwordDataTransfer<0, 0>);
-    fillTableEntries(instructionTable.data(), "000xx1x01011", doHalfwordDataTransfer<1, 0>);
-    fillTableEntries(instructionTable.data(), "000xx0x11011", doHalfwordDataTransfer<0, 1>);
-    fillTableEntries(instructionTable.data(), "000xx1x11011", doHalfwordDataTransfer<1, 1>);
-    fillTableEntries(instructionTable.data(), "000xx0x01101", doDoublewordDataTransfer<0, 1>);
-    fillTableEntries(instructionTable.data(), "000xx1x01101", doDoublewordDataTransfer<1, 1>);
-    fillTableEntries(instructionTable.data(), "000xx0x111x1", undefinedInstruction); // TODO: LDRSB/LDRSH
-    fillTableEntries(instructionTable.data(), "000xx0x01111", doDoublewordDataTransfer<0, 0>);
-    fillTableEntries(instructionTable.data(), "000xx1x01111", doDoublewordDataTransfer<1, 0>);
-    fillTableEntries(instructionTable.data(), "000xx1x111x1", undefinedInstruction); // TODO: LDRSB/LDRSH
-    fillTableEntries(instructionTable.data(), "00010x000000", MRS); // TODO: MRS
-    fillTableEntries(instructionTable.data(), "00010x100000", doMoveToStatusRegister<0>); // TODO: MSR
-    fillTableEntries(instructionTable.data(), "000100100001", BX);
-    fillTableEntries(instructionTable.data(), "000100100011", BLX_Reg);
-    fillTableEntries(instructionTable.data(), "000101100001", CLZ);
-    fillTableEntries(instructionTable.data(), "00010xx00101", undefinedInstruction); // TODO: DSP add/subtract
-    fillTableEntries(instructionTable.data(), "000100100111", undefinedInstruction); // TODO: breakpoint
-    fillTableEntries(instructionTable.data(), "00010xx01xx0", undefinedInstruction); // TODO: DSP multiply
-    fillTableEntries(instructionTable.data(), "001xxxxxxxxx", doDataProcessing<1, 0>);
-    fillTableEntries(instructionTable.data(), "00110x00xxxx", undefinedInstruction);
-    fillTableEntries(instructionTable.data(), "00110x10xxxx", doMoveToStatusRegister<1>);
-    fillTableEntries(instructionTable.data(), "010xxxx0xxxx", doSingleDataTransfer<1, 0>);
-    fillTableEntries(instructionTable.data(), "010xxxx1xxxx", doSingleDataTransfer<1, 1>);
-    fillTableEntries(instructionTable.data(), "011xxxx0xxx0", doSingleDataTransfer<0, 0>);
-    fillTableEntries(instructionTable.data(), "011xxxx1xxx0", doSingleDataTransfer<0, 1>);
-    fillTableEntries(instructionTable.data(), "011010100111", doAddExtend<AddExtendOpcode::SXTB>);
-    fillTableEntries(instructionTable.data(), "100xxxx0xxxx", doBlockDataTransfer<0>);
-    fillTableEntries(instructionTable.data(), "100xxxx1xxxx", doBlockDataTransfer<1>);
-    fillTableEntries(instructionTable.data(), "1010xxxxxxxx", doBranch<0>);
-    fillTableEntries(instructionTable.data(), "1011xxxxxxxx", doBranch<1>);
+    fill_table_with_pattern(instr_table.data(), "000xxxx0xxx0", i_data_processing<0, 1, 0>);
+    fill_table_with_pattern(instr_table.data(), "000xxxx00xx1", i_data_processing<0, 0, 0>);
+    fill_table_with_pattern(instr_table.data(), "000xxxx1xxx0", i_data_processing<0, 1, 1>);
+    fill_table_with_pattern(instr_table.data(), "000xxxx10xx1", i_data_processing<0, 0, 1>);
+    fill_table_with_pattern(instr_table.data(), "000000001001", i_multiply<0, 0>);
+    fill_table_with_pattern(instr_table.data(), "000000011001", i_multiply<0, 1>);
+    fill_table_with_pattern(instr_table.data(), "000000101001", i_multiply<1, 0>);
+    fill_table_with_pattern(instr_table.data(), "000000111001", i_multiply<1, 1>);
+    fill_table_with_pattern(instr_table.data(), "00010x001001", i_undefined); // TODO: SWP
+    fill_table_with_pattern(instr_table.data(), "000xx0x01011", i_halfword_data_transfer<0, 0>);
+    fill_table_with_pattern(instr_table.data(), "000xx1x01011", i_halfword_data_transfer<1, 0>);
+    fill_table_with_pattern(instr_table.data(), "000xx0x11011", i_halfword_data_transfer<0, 1>);
+    fill_table_with_pattern(instr_table.data(), "000xx1x11011", i_halfword_data_transfer<1, 1>);
+    fill_table_with_pattern(instr_table.data(), "000xx0x111x1", i_undefined); // TODO: LDRSB/LDRSH
+    fill_table_with_pattern(instr_table.data(), "000xx1x111x1", i_undefined); // TODO: LDRSB/LDRSH
+    fill_table_with_pattern(instr_table.data(), "000100000000", i_mrs<0>);
+    fill_table_with_pattern(instr_table.data(), "000101000000", i_mrs<1>);
+    fill_table_with_pattern(instr_table.data(), "000100100000", i_msr<0, 0>);
+    fill_table_with_pattern(instr_table.data(), "000101100000", i_msr<0, 1>);
+    fill_table_with_pattern(instr_table.data(), "001xxxx0xxxx", i_data_processing<1, 0, 0>);
+    fill_table_with_pattern(instr_table.data(), "001xxxx1xxxx", i_data_processing<1, 0, 1>);
+    fill_table_with_pattern(instr_table.data(), "00110x00xxxx", i_undefined);
+    fill_table_with_pattern(instr_table.data(), "00110010xxxx", i_msr<1, 0>);
+    fill_table_with_pattern(instr_table.data(), "00110110xxxx", i_msr<1, 1>);
+    fill_table_with_pattern(instr_table.data(), "010xxxx0xxxx", i_single_data_transfer<1, 0>);
+    fill_table_with_pattern(instr_table.data(), "010xxxx1xxxx", i_single_data_transfer<1, 1>);
+    fill_table_with_pattern(instr_table.data(), "011xxxx0xxx0", i_single_data_transfer<0, 0>);
+    fill_table_with_pattern(instr_table.data(), "011xxxx1xxx0", i_single_data_transfer<0, 1>);
+    fill_table_with_pattern(instr_table.data(), "100xxxx0xxxx", i_block_data_transfer<0>);
+    fill_table_with_pattern(instr_table.data(), "100xxxx1xxxx", i_block_data_transfer<1>);
+    fill_table_with_pattern(instr_table.data(), "1010xxxxxxxx", i_branch<0>);
+    fill_table_with_pattern(instr_table.data(), "1011xxxxxxxx", i_branch<1>);
 }
 
 void initialize() {
-    initTables();
+    initialize_instr_table();
 }
 
 void reset() {
-    std::puts("ARM Reset");
+    constexpr u32 RESET_VECTOR = 0;
+
+    if constexpr (!SILENT_ARM) std::puts("ARM Reset");
 
     std::memset(&ctx, 0, sizeof(ctx));
 
     // Set initial CPSR
-    PSR &cpsr = ctx.cpsr;
-    cpsr.mode = Mode::User;
-    cpsr.f = 1;
-    cpsr.i = 1;
+    CPSR.mode = MODE_USR;
+    CPSR.disable_fiq = 1;
+    CPSR.disable_irq = 1;
 
-    changeMode(Mode::Supervisor);
+    change_mode(MODE_SVC);
 
-    ctx.r[Register::PC] = EXCEPTION_VECTOR_BASE;
+    PC = RESET_VECTOR;
 }
 
 void shutdown() {}
@@ -1603,9 +1140,7 @@ void step() {
     }
 
     for (; ctx.cycles > 0; ctx.cycles -= 2) {
-        ctx.carryOut = ctx.cpsr.c;
-
-        decodeARM();
+        run_instr();
 
         check_pending_interrupts();
     }
