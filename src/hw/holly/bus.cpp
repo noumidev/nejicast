@@ -213,6 +213,18 @@ void setup_for_sideload() {
     write<u32>(0x0CFFFFF8, 0x8C000128);
 }
 
+u32 get_texture_memory_address(const u32 addr) {
+    u32 offset = addr - BASE_VRAM_64;
+
+    offset = ((offset >> 3) << 2) + (offset & 3);
+
+    if ((addr & 4) != 0) {
+        offset += 0x400000;
+    }
+
+    return BASE_VRAM_32 + offset;
+}
+
 template<typename T>
 static T read_texture_memory(const u32 addr) {
     std::printf("Unmapped texture memory read%zu @ %08X\n", 8 * sizeof(T), addr);
@@ -221,15 +233,7 @@ static T read_texture_memory(const u32 addr) {
 
 template<>
 u32 read_texture_memory(const u32 addr) {
-    const u32 offset = (addr - BASE_VRAM_64) >> 2;
-
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        return read<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1));
-    } else {
-        // First VRAM module
-        return read<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1));
-    }
+    return read<u32>(get_texture_memory_address(addr));
 }
 
 template<typename T>
@@ -324,49 +328,23 @@ static void write_texture_memory(const u32 addr, const T data) {
 
 template<>
 void write_texture_memory(const u32 addr, const u8 data) {
-    const u32 offset = (addr - BASE_VRAM_64) >> 2;
-
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        write<u8>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 3), data);
-    } else {
-        // First VRAM module
-        write<u8>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 3), data);
-    }
+    write<u8>(get_texture_memory_address(addr), data);
 }
 
 template<>
 void write_texture_memory(const u32 addr, const u16 data) {
-    const u32 offset = (addr - BASE_VRAM_64) >> 2;
-
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        write<u16>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 2), data);
-    } else {
-        // First VRAM module
-        write<u16>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 2), data);
-    }
+    write<u16>(get_texture_memory_address(addr), data);
 }
 
 template<>
 void write_texture_memory(const u32 addr, const u32 data) {
-    const u32 offset = (addr - BASE_VRAM_64) >> 2;
-
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        write<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1), data);
-    } else {
-        // First VRAM module
-        write<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1), data);
-    }
+    write<u32>(get_texture_memory_address(addr), data);
 }
 
 template<>
 void write_texture_memory(const u32 addr, const u64 data) {
-    const u32 offset = (addr - BASE_VRAM_64) >> 2;
-
-    write<u32>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1), data);
-    write<u32>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1), data >> 32);
+    write_texture_memory<u32>(addr + 0, data);
+    write_texture_memory<u32>(addr + 4, data >> 32);
 }
 
 template<typename T>
