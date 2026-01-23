@@ -12,6 +12,8 @@
 
 namespace hw::pvr::interface {
 
+constexpr bool SILENT_PVR_IF = true;
+
 enum : u32 {
     IO_PDSTAP = 0x005F7C00,
     IO_PDSTAR = 0x005F7C04,
@@ -73,7 +75,7 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_PDEN:
-            std::puts("SB_PDEN read32");
+            if constexpr (!SILENT_PVR_IF) std::puts("SB_PDEN read32");
 
             return SB_PDEN;
         default:
@@ -96,42 +98,42 @@ template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_PDSTAP:
-            std::printf("SB_PDSTAP write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDSTAP write32 = %08X\n", data);
 
             SB_PDSTAP = data;
             break;
         case IO_PDSTAR:
-            std::printf("SB_PDSTAR write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDSTAR write32 = %08X\n", data);
 
             SB_PDSTAR = data;
             break;
         case IO_PDLEN:
-            std::printf("SB_PDLEN write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDLEN write32 = %08X\n", data);
 
             SB_PDLEN = data;
             break;
         case IO_PDDIR:
-            std::printf("SB_PDDIR write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDDIR write32 = %08X\n", data);
 
             SB_PDDIR = (data & 1) != 0;
             break;
         case IO_PDTSEL:
-            std::printf("SB_PDTSEL write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDTSEL write32 = %08X\n", data);
 
             SB_PDTSEL = (data & 1) != 0;
             break;
         case IO_PDEN:
-            std::printf("SB_PDEN write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDEN write32 = %08X\n", data);
 
             SB_PDEN = (data & 1) != 0;
             break;
         case IO_PDST:
-            std::printf("SB_PDST write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_PDST write32 = %08X\n", data);
 
             assert((data & 1) == 0);
             break;
         case IO_PDAPRO:
-            std::printf("SB_MDAPRO write32 = %08X\n", data);
+            if constexpr (!SILENT_PVR_IF) std::printf("SB_MDAPRO write32 = %08X\n", data);
 
             if ((data & ~0xFFFF) == 0x67020000) {
                 SB_PDAPRO.raw = (u16)data;
