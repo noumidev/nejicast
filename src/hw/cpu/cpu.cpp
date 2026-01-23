@@ -25,6 +25,8 @@
 
 namespace hw::cpu {
 
+constexpr bool SILENT_SH4 = true;
+
 // Instruction bit macros
 #define IMM  ((instr >> 0) & 0x0FF)
 #define DISP ((instr >> 0) & 0xFFF)
@@ -446,7 +448,7 @@ namespace ExceptionOffset {
 static void raise_exception(const u32 event, const u32 offset) {
     constexpr u32 RESET_VECTOR = 0xA0000000;
 
-    std::printf("SH-4 exception @ %08X (code: %03X)\n", CPC, event);
+    if constexpr (!SILENT_SH4) std::printf("SH-4 exception @ %08X (code: %03X)\n", CPC, event);
 
     // Save exception context
     SPC = PC;
@@ -1566,6 +1568,14 @@ static i64 i_rotcl(const u16 instr) {
     return 1;
 }
 
+static i64 i_rotl(const u16 instr) {
+    SR.t = GPRS[N] >> 31;
+
+    GPRS[N] = std::rotl(GPRS[N], 1);
+
+    return 1;
+}
+
 static i64 i_rotr(const u16 instr) {
     SR.t = GPRS[N] & 1;
 
@@ -1600,6 +1610,14 @@ static i64 i_rts(const u16) {
 
 static i64 i_sett(const u16) {
     SR.t = 1;
+
+    return 1;
+}
+
+static i64 i_shal(const u16 instr) {
+    SR.t = GPRS[N] >> 31;
+
+    GPRS[N] <<= 1;
 
     return 1;
 }
@@ -1866,6 +1884,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000001", i_shlr<1>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000010", i_sts<SystemRegister::Mach, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000011", i_stc<ControlRegister::Sr, AddressingMode::RegisterIndirectPredecrement>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000100", i_rotl);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000101", i_rotr);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000110", i_lds<SystemRegister::Mach, AddressingMode::RegisterIndirectPostincrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00000111", i_ldc<ControlRegister::Sr, AddressingMode::RegisterIndirectPostincrement>);
@@ -1888,6 +1907,7 @@ static void initialize_instr_table() {
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011010", i_lds<SystemRegister::Macl, AddressingMode::RegisterDirect>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011011", i_tas);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00011110", i_ldc<ControlRegister::Gbr, AddressingMode::RegisterDirect>);
+    fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100000", i_shal);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100001", i_shar);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100010", i_sts<SystemRegister::Pr, AddressingMode::RegisterIndirectPredecrement>);
     fill_table_with_pattern(ctx.instr_table.data(), "0100xxxx00100011", i_stc<ControlRegister::Vbr, AddressingMode::RegisterIndirectPredecrement>);
@@ -2062,7 +2082,7 @@ static bool in_delay_slot() {
 }
 
 static void raise_interrupt(const u32 level) {
-    std::printf("SH-4 interrupt @ %08X (level = %u)\n", CPC, level);
+    if constexpr (!SILENT_SH4) std::printf("SH-4 interrupt @ %08X (level = %u)\n", CPC, level);
 
     // Save exception context
     SPC = PC;
@@ -2102,7 +2122,7 @@ void assert_interrupt(const int interrupt_level) {
     if ((ctx.pending_interrupts & (1 << interrupt_level)) == 0) {
         ctx.pending_interrupts |= 1 << interrupt_level;
 
-        std::printf("SH-4 level %d interrupt pending\n", interrupt_level);
+        if constexpr (!SILENT_SH4) std::printf("SH-4 level %d interrupt pending\n", interrupt_level);
     }
 }
 
@@ -2110,7 +2130,7 @@ void clear_interrupt(const int interrupt_level) {
     if ((ctx.pending_interrupts & (1 << interrupt_level)) != 0) {
         ctx.pending_interrupts &= ~(1 << interrupt_level);
 
-        std::printf("SH-4 level %d interrupt cleared\n", interrupt_level);
+        if constexpr (!SILENT_SH4) std::printf("SH-4 level %d interrupt cleared\n", interrupt_level);
     }
 }
 
