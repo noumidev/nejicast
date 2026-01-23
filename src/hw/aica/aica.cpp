@@ -16,18 +16,23 @@
 #include <scheduler.hpp>
 #include <hw/aica/arm.hpp>
 #include <hw/aica/bus.hpp>
+#include <hw/holly/intc.hpp>
 
 namespace hw::aica {
 
+constexpr bool SILENT_AICA = true;
+
 enum : u32 {
     IO_SLOTCTL_L  = 0x00700000,
+    IO_SLOTCTL_H  = 0x00700001,
     IO_SA         = 0x00700004,
     IO_LSA        = 0x00700008,
     IO_LEA        = 0x0070000C,
     IO_ADSR_L     = 0x00700010,
     IO_ADSR_H     = 0x00700014,
     IO_PITCH      = 0x00700018,
-    IO_LFOCTL     = 0x0070001C,
+    IO_LFOCTL_L   = 0x0070001C,
+    IO_LFOCTL_H   = 0x0070001D,
     IO_INCTL      = 0x00700020,
     IO_DIPAN      = 0x00700024,
     IO_DISDL      = 0x00700025,
@@ -43,11 +48,15 @@ enum : u32 {
     IO_OUTCTL_0   = 0x00702000,
     IO_OUTCTL_17  = 0x00702044,
     IO_MVOL       = 0x00702800,
+    IO_MEMCTL     = 0x00702801,
     IO_RBCTL      = 0x00702804,
     IO_MIDIIN     = 0x00702808,
+    IO_MIDIOUT    = 0x0070280C,
     IO_EGSTAT_L   = 0x0070280D,
     IO_EGSTAT_M   = 0x00702810,
     IO_CA         = 0x00702814,
+    IO_DMEA_H     = 0x00702880,
+    IO_DMEA_L     = 0x00702884,
     IO_TIMA       = 0x00702890,
     IO_TACTL      = 0x00702891,
     IO_TIMB       = 0x00702894,
@@ -55,10 +64,14 @@ enum : u32 {
     IO_TIMC       = 0x00702898,
     IO_TCCTL      = 0x00702899,
     IO_SCIEB_L    = 0x0070289C,
+    IO_SCIPD_L    = 0x007028A0,
     IO_SCIRE_L    = 0x007028A4,
     IO_SCILV0     = 0x007028A8,
     IO_SCILV1     = 0x007028AC,
     IO_SCILV2     = 0x007028B0,
+    IO_MCIEB_L    = 0x007028B4,
+    IO_MCIPD_L    = 0x007028B8,
+    IO_MCIRE_L    = 0x007028BC,
     IO_ARMRST     = 0x00702C00,
     IO_INTREQ     = 0x00702D00,
     IO_INTCLR     = 0x00702D04,
@@ -74,7 +87,7 @@ enum : u32 {
 #define     LEA(x) SLOT(x).loop_end
 #define    ADSR(x) SLOT(x).adsr
 #define   PITCH(x) SLOT(x).pitch
-#define  LFOCNT(x) SLOT(x).lfo_control
+#define  LFOCTL(x) SLOT(x).lfo_control
 #define   INCTL(x) SLOT(x).dsp_send
 #define   DICTL(x) SLOT(x).direct_control
 #define    FCTL(x) SLOT(x).filter_control
@@ -86,10 +99,13 @@ enum : u32 {
 #define MIDIIN     ctx.midi_in
 #define EGSTAT     ctx.attenuation_monitor
 #define CA         ctx.current_address
+#define DMEA       ctx.dma_address
 #define     TIM(x) TIMER(x).counter
 #define    TCTL(x) TIMER(x).prescaler
 #define SCIEB      ctx.arm_interrupt_mask
 #define SCIPD      ctx.arm_interrupt_flags
+#define MCIEB      ctx.sh4_interrupt_mask
+#define MCIPD      ctx.sh4_interrupt_flags
 #define ARMRST     ctx.arm_reset
 #define INTREQ     ctx.active_interrupt
 
@@ -218,6 +234,7 @@ struct Slot {
     int adsr_state;
     int adsr_steps;
     int sample_count;
+    bool looped;
 
     f32 phase;
 };
@@ -281,6 +298,11 @@ struct {
 
     u8 arm_interrupt_levels[8];
 
+    u16 sh4_interrupt_mask;
+    u16 sh4_interrupt_flags;
+
+    u32 dma_address;
+
     union {
         u32 raw;
 
@@ -308,7 +330,7 @@ enum {
     SAMPLE_INTERRUPT  = 10,
 };
 
-static void check_pending_interrupts() {
+static void check_pending_arm_interrupts() {
     if ((INTREQ == 0) && (SCIEB & SCIPD) != 0) {
         // Pick one of the pending interrupt requests
         // TODO: priority?
@@ -327,14 +349,39 @@ static void check_pending_interrupts() {
     }
 }
 
-static void assert_interrupt(const int interrupt_number) {
+static void check_pending_sh4_interrupts() {
+    constexpr int AICA_INTERRUPT = 1;
+
+    if ((MCIEB & MCIPD) != 0) {
+        holly::intc::assert_external_interrupt(AICA_INTERRUPT);
+    } else {
+        holly::intc::clear_external_interrupt(AICA_INTERRUPT);
+    }
+}
+
+static void assert_arm_interrupt(const int interrupt_number) {
     if ((SCIPD & (1 << interrupt_number)) == 0) {
-        std::printf("Asserting AICA interrupt %d\n", interrupt_number);
+        std::printf("Asserting AICA (ARM) interrupt %d\n", interrupt_number);
 
         SCIPD |= 1 << interrupt_number;
 
-        check_pending_interrupts();
+        check_pending_arm_interrupts();
     }
+}
+
+static void assert_sh4_interrupt(const int interrupt_number) {
+    if ((MCIPD & (1 << interrupt_number)) == 0) {
+        std::printf("Asserting AICA (SH-4) interrupt %d\n", interrupt_number);
+
+        MCIPD |= 1 << interrupt_number;
+
+        check_pending_sh4_interrupts();
+    }
+}
+
+static void assert_interrupt(const int interrupt_number) {
+    assert_arm_interrupt(interrupt_number);
+    assert_sh4_interrupt(interrupt_number);
 }
 
 static void schedule_sample_event() {
@@ -436,6 +483,9 @@ static void slot_key_on(const int slot) {
 
     slot_set_attenuation(slot, INITIAL_ATTENUATION);
     slot_set_adsr_state(slot, ADSR_STATE_ATTACK);
+
+    SLOT(slot).current_address = 0;
+    SLOT(slot).looped = false;
 }
 
 static void slot_key_off(const int slot) {
@@ -614,6 +664,13 @@ static void slot_step_all() {
         if (slot_is_active(slot)) {
             // slot_generate_phase(slot);
             slot_step_adsr(slot);
+
+            SLOT(slot).current_address++;
+
+            if (SLOT(slot).current_address >= LEA(slot)) {
+                SLOT(slot).current_address = LSA(slot);
+                SLOT(slot).looped = true;
+            }
         }
     }
 }
@@ -653,8 +710,16 @@ u8 read(const u32 addr) {
         const int slot = (addr & 0x1FFF) / 0x80;
 
         switch (g2_addr & ~0x1F80) {
+            case IO_SLOTCTL_H:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d SLOTCTL_H read8\n", slot);
+
+                return SLOTCTL(slot).raw >> 8;
+            case IO_LFOCTL_H:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LFOCTL_H read8\n", slot);
+
+                return LFOCTL(slot).raw >> 8;
             case IO_INCTL:
-                std::printf("Slot %d INCTL read8\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d INCTL read8\n", slot);
 
                 return INCTL(slot).raw;
             default:
@@ -668,13 +733,13 @@ u8 read(const u32 addr) {
 
         switch (slot) {
             case 16:
-                std::puts("OUTCTL_CDDA_L read8");
+                if constexpr (!SILENT_AICA) std::puts("OUTCTL_CDDA_L read8");
                 break;
             case 17:
-                std::puts("OUTCTL_CDDA_R read8");
+                if constexpr (!SILENT_AICA) std::puts("OUTCTL_CDDA_R read8");
                 break;
             default:
-                std::printf("OUTCTL%d read8\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL%d read8\n", slot);
                 break;
         }
 
@@ -682,6 +747,10 @@ u8 read(const u32 addr) {
     }
 
     switch (g2_addr) {
+        case IO_INTREQ:
+            if constexpr (!SILENT_AICA) std::puts("INTREQ read8");
+
+            return INTREQ;
         default:
             std::printf("Unhandled AICA read8 @ %08X\n", addr);
             exit(1);
@@ -702,19 +771,39 @@ u32 read(const u32 addr) {
 
         switch (g2_addr & ~0x1F80) {
             case IO_SLOTCTL_L:
-                std::printf("Slot %d SLOTCTL read32\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d SLOTCTL read32\n", slot);
 
                 return SLOTCTL(slot).raw;
             case IO_LSA:
-                std::printf("Slot %d LSA read32\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LSA read32\n", slot);
 
                 return LSA(slot);
             case IO_LEA:
-                std::printf("Slot %d LEA read32\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LEA read32\n", slot);
 
                 return LEA(slot);
+            case IO_ADSR_L:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d ADSR_L read32\n", slot);
+
+                return (u16)ADSR(slot).raw;
+            case IO_ADSR_H:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d ADSR_H read32\n", slot);
+
+                return (u16)(ADSR(slot).raw >> 16);
+            case IO_PITCH:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d PITCH read32\n", slot);
+
+                return PITCH(slot).raw;
+            case IO_LFOCTL_L:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LFOCTL read32\n", slot);
+
+                return LFOCTL(slot).raw;
+            case IO_FCTL:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FCTL/TL read32\n", slot);
+
+                return (TL(slot) << 8) | FCTL(slot).raw;
             default:
-                std::printf("AICA Unimplemented slot32 %d read @ %08X\n", slot, addr);
+                std::printf("AICA Unimplemented slot %d read32 @ %08X\n", slot, addr);
                 exit(1);
         }
     }
@@ -724,13 +813,13 @@ u32 read(const u32 addr) {
 
         switch (slot) {
             case 16:
-                std::puts("OUTCTL_CDDA_L read32");
+                if constexpr (!SILENT_AICA) std::puts("OUTCTL_CDDA_L read32");
                 break;
             case 17:
-                std::puts("OUTCTL_CDDA_R read32");
+                if constexpr (!SILENT_AICA) std::puts("OUTCTL_CDDA_R read32");
                 break;
             default:
-                std::printf("OUTCTL%d read32\n", slot);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL%d read32\n", slot);
                 break;
         }
 
@@ -739,27 +828,32 @@ u32 read(const u32 addr) {
 
     switch (g2_addr) {
         case IO_MIDIIN:
-            std::puts("MIDIIN read32");
+            if constexpr (!SILENT_AICA) std::puts("MIDIIN read32");
 
             return MIDIIN.raw << 8;
         case IO_EGSTAT_M:
-            std::puts("EGSTAT_M read32");
+            // if constexpr (!SILENT_AICA) std::puts("EGSTAT_M read32");
 
             // Update monitor
             EGSTAT.eg = (SLOT(EGSTAT.mslc).attenuation >= MAX_ATTENUATION) ? 0x1FFF : SLOT(EGSTAT.mslc).attenuation;
             EGSTAT.sgc = SLOT(EGSTAT.mslc).adsr_state;
+            EGSTAT.lp = SLOT(EGSTAT.mslc).looped;
 
             return EGSTAT.raw >> 8;
         case IO_CA:
-            std::puts("CA read32");
-
+            // if constexpr (!SILENT_AICA) std::puts("CA read32");
+            
             return SLOT(EGSTAT.mslc).current_address;
+        case IO_SCIPD_L:
+            if constexpr (!SILENT_AICA) std::puts("SCIPD read32");
+
+            return SCIPD;
         case IO_ARMRST:
             std::puts("ARMRST read32");
 
             return ARMRST.raw;
         case IO_INTREQ:
-            std::puts("INTREQ read32");
+            if constexpr (!SILENT_AICA) std::puts("INTREQ read32");
 
             return INTREQ;
         default:
@@ -792,28 +886,46 @@ void write(const u32 addr, const u8 data) {
         assert(slot < NUM_SLOTS);
 
         switch (g2_addr & ~0x1F80) {
+            case IO_SLOTCTL_H:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d SLOTCTL_H write8 = %02X\n", slot, data);
+
+                SLOTCTL(slot).raw &= 0xFF;
+                SLOTCTL(slot).raw |= data << 8;
+
+                if (SLOTCTL(slot).kyonex) {
+                    kyonex();
+
+                    SLOTCTL(slot).kyonex = 0;
+                }
+                break;
+            case IO_LFOCTL_H:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LFOCTL_H write8 = %02X\n", slot, data);
+
+                LFOCTL(slot).raw &= 0xFF;
+                LFOCTL(slot).raw |= data << 8;
+                break;
             case IO_INCTL:
-                std::printf("Slot %d INCTL write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d INCTL write8 = %02X\n", slot, data);
 
                 INCTL(slot).raw = data;
                 break;
             case IO_DIPAN:
-                std::printf("Slot %d DIPAN write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d DIPAN write8 = %02X\n", slot, data);
 
                 DICTL(slot).pan = data;
                 break;
             case IO_DISDL:
-                std::printf("Slot %d DISDL write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d DISDL write8 = %02X\n", slot, data);
 
                 DICTL(slot).sdl = data;
                 break;
             case IO_FCTL:
-                std::printf("Slot %d FCTL write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FCTL write8 = %02X\n", slot, data);
 
                 FCTL(slot).raw = data;
                 break;
             case IO_TL:
-                std::printf("Slot %d TL write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d TL write8 = %02X\n", slot, data);
 
                 TL(slot) = data;
                 break;
@@ -830,18 +942,18 @@ void write(const u32 addr, const u8 data) {
         return;
     }
 
-    if ((g2_addr >= IO_OUTCTL_0) && (g2_addr <= IO_OUTCTL_17)) {
+    if ((g2_addr >= IO_OUTCTL_0) && (g2_addr <= (IO_OUTCTL_17 + sizeof(u8)))) {
         const int slot = (g2_addr - IO_OUTCTL_0) >> 2;
 
         switch (slot) {
             case 16:
-                std::printf("OUTCTL_CDDA_L write8 = %02X\n", data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL_CDDA_L write8 = %02X\n", data);
                 break;
             case 17:
-                std::printf("OUTCTL_CDDA_R write8 = %02X\n", data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL_CDDA_R write8 = %02X\n", data);
                 break;
             default:
-                std::printf("OUTCTL%d write8 = %02X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL%d write8 = %02X\n", slot, data);
                 break;
         }
 
@@ -850,16 +962,22 @@ void write(const u32 addr, const u8 data) {
 
     switch (g2_addr) {
         case IO_MVOL:
-            std::printf("MVOL write8 = %02X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("MVOL write8 = %02X\n", data);
+            break;
+        case IO_MEMCTL:
+            if constexpr (!SILENT_AICA) std::printf("MEMCTL write8 = %02X\n", data);
+            break;
+        case IO_MIDIOUT:
+            if constexpr (!SILENT_AICA) std::printf("MIDIOUT write8 = %02X\n", data);
             break;
         case IO_EGSTAT_L:
-            std::printf("EGSTAT_L write8 = %02X\n", data);
+            // if constexpr (!SILENT_AICA) std::printf("EGSTAT_L write8 = %02X\n", data);
 
             EGSTAT.raw &= ~0xFF;
             EGSTAT.raw |= data;
             break;
         case IO_SCILV0:
-            std::printf("SCILV0 write8 = %02X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("SCILV0 write8 = %02X\n", data);
 
             for (int level = 0; level < 8; level++) {
                 ctx.arm_interrupt_levels[level] &= ~1;
@@ -867,7 +985,7 @@ void write(const u32 addr, const u8 data) {
             }
             break;
         case IO_SCILV1:
-            std::printf("SCILV1 write8 = %02X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("SCILV1 write8 = %02X\n", data);
 
             for (int level = 0; level < 8; level++) {
                 ctx.arm_interrupt_levels[level] &= ~2;
@@ -875,12 +993,19 @@ void write(const u32 addr, const u8 data) {
             }
             break;
         case IO_SCILV2:
-            std::printf("SCILV2 write8 = %02X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("SCILV2 write8 = %02X\n", data);
 
             for (int level = 0; level < 8; level++) {
                 ctx.arm_interrupt_levels[level] &= ~4;
                 ctx.arm_interrupt_levels[level] |= ((data >> level) & 1) << 2;
             }
+            break;
+        case IO_INTCLR:
+            if constexpr (!SILENT_AICA) std::printf("INTCLR write8 = %02X\n", data);
+
+            INTREQ = 0;
+
+            // check_pending_arm_interrupts();
             break;
         default:
             std::printf("Unmapped AICA write8 @ %08X = %02X\n", addr, data);
@@ -909,7 +1034,7 @@ void write(const u32 addr, const u32 data) {
 
         switch (g2_addr & ~0x1F80) {
             case IO_SLOTCTL_L:
-                std::printf("Slot %d SLOTCTL write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d SLOTCTL write32 = %08X\n", slot, data);
 
                 SLOTCTL(slot).raw = data;
 
@@ -923,81 +1048,93 @@ void write(const u32 addr, const u32 data) {
                 SA(slot) |= (data & 0x7F) << 16;
                 break;
             case IO_SA:
-                std::printf("Slot %d SA write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d SA write32 = %08X\n", slot, data);
 
                 SA(slot) &= ~0xFFFF;
                 SA(slot) |= data & 0xFFFF;
                 break;
             case IO_LSA:
-                std::printf("Slot %d LSA write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LSA write32 = %08X\n", slot, data);
 
                 LSA(slot) = data;
                 break;
             case IO_LEA:
-                std::printf("Slot %d LEA write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LEA write32 = %08X\n", slot, data);
 
                 LEA(slot) = data;
                 break;
             case IO_ADSR_L:
-                std::printf("Slot %d ADSR_L write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d ADSR_L write32 = %08X\n", slot, data);
 
                 ADSR(slot).raw &= ~0xFFFF;
                 ADSR(slot).raw |= data & 0xFFFF;
                 break;
             case IO_ADSR_H:
-                std::printf("Slot %d ADSR_H write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d ADSR_H write32 = %08X\n", slot, data);
 
                 ADSR(slot).raw &= 0xFFFF;
                 ADSR(slot).raw |= data << 16;
                 break;
             case IO_PITCH:
-                std::printf("Slot %d PITCH write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d PITCH write32 = %08X\n", slot, data);
 
                 PITCH(slot).raw = data;
                 break;
-            case IO_LFOCTL:
-                std::printf("Slot %d LFOCTL write32 = %08X\n", slot, data);
+            case IO_LFOCTL_L:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d LFOCTL write32 = %08X\n", slot, data);
 
-                LFOCNT(slot).raw = data;
+                LFOCTL(slot).raw = data;
                 break;
             case IO_INCTL:
-                std::printf("Slot %d INCTL write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d INCTL write32 = %08X\n", slot, data);
 
                 INCTL(slot).raw = data;
                 break;
+            case IO_DIPAN:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d DIPAN/DISDL write32 = %08X\n", slot, data);
+
+                DICTL(slot).pan = data;
+                DICTL(slot).sdl = data >> 8;
+                break;
+            case IO_FCTL:
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FCTL/TL write32 = %08X\n", slot, data);
+
+                FCTL(slot).raw = data;
+                TL(slot) = data >> 8;
+                break;
             case IO_FLV0:
-                std::printf("Slot %d FLV0 write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FLV0 write32 = %08X\n", slot, data);
 
                 FLV(slot)[0] = data;
                 break;
             case IO_FLV1:
-                std::printf("Slot %d FLV1 write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FLV1 write32 = %08X\n", slot, data);
 
                 FLV(slot)[1] = data;
                 break;
             case IO_FLV2:
-                std::printf("Slot %d FLV2 write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FLV2 write32 = %08X\n", slot, data);
 
                 FLV(slot)[2] = data;
                 break;
             case IO_FLV3:
-                std::printf("Slot %d FLV3 write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FLV3 write32 = %08X\n", slot, data);
 
                 FLV(slot)[3] = data;
                 break;
             case IO_FLV4:
-                std::printf("Slot %d FLV4 write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FLV4 write32 = %08X\n", slot, data);
 
                 FLV(slot)[4] = data;
                 break;
             case IO_FADSR_L:
-                std::printf("Slot %d FADSR_L write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FADSR_L write32 = %08X\n", slot, data);
 
                 FADSR(slot).raw &= ~0xFFFF;
                 FADSR(slot).raw |= data & 0xFFFF;
                 break;
             case IO_FADSR_H:
-                std::printf("Slot %d FADSR_H write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("Slot %d FADSR_H write32 = %08X\n", slot, data);
 
                 FADSR(slot).raw &= 0xFFFF;
                 FADSR(slot).raw |= data << 16;
@@ -1020,13 +1157,13 @@ void write(const u32 addr, const u32 data) {
 
         switch (slot) {
             case 16:
-                std::printf("OUTCTL_CDDA_L write32 = %08X\n", data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL_CDDA_L write32 = %08X\n", data);
                 break;
             case 17:
-                std::printf("OUTCTL_CDDA_R write32 = %08X\n", data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL_CDDA_R write32 = %08X\n", data);
                 break;
             default:
-                std::printf("OUTCTL%d write32 = %08X\n", slot, data);
+                if constexpr (!SILENT_AICA) std::printf("OUTCTL%d write32 = %08X\n", slot, data);
                 break;
         }
 
@@ -1034,21 +1171,33 @@ void write(const u32 addr, const u32 data) {
     }
 
     if (g2_addr >= IO_DSPCOEF) {
-        std::printf("AICA Unimplemented DSP write32 @ %08X = %08X\n", addr, data);
+        if constexpr (!SILENT_AICA) std::printf("AICA Unimplemented DSP write32 @ %08X = %08X\n", addr, data);
         return;
     }
 
     switch (g2_addr) {
         case IO_MVOL:
-            std::printf("MVOL/MEMCTL write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("MVOL/MEMCTL write32 = %08X\n", data);
             break;
         case IO_RBCTL:
-            std::printf("RBCTL write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("RBCTL write32 = %08X\n", data);
 
             RBCTL.raw = data;
             break;
+        case IO_DMEA_H:
+            if constexpr (!SILENT_AICA) std::printf("DMEA_H write32 = %08X\n", data);
+
+            DMEA &= 0xFFFF;
+            DMEA |= ((data & 0xFFFF) >> 9) << 16;
+            break;
+        case IO_DMEA_L:
+            if constexpr (!SILENT_AICA) std::printf("DMEA_L write32 = %08X\n", data);
+
+            DMEA &= ~0xFFFF;
+            DMEA |= data & 0xFFFF;
+            break;
         case IO_TIMA:
-            std::printf("TIMA/TACTL write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("TIMA/TACTL write32 = %08X\n", data);
 
             TIM(0) = data;
             TCTL(0) = 1 << (u8)(data >> 8);
@@ -1057,7 +1206,7 @@ void write(const u32 addr, const u32 data) {
             TIMER(0).subcounter = 0;
             break;
         case IO_TIMB:
-            std::printf("TIMB/TBCTL write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("TIMB/TBCTL write32 = %08X\n", data);
 
             TIM(1) = data;
             TCTL(1) = 1 << (u8)(data >> 8);
@@ -1066,7 +1215,7 @@ void write(const u32 addr, const u32 data) {
             TIMER(1).subcounter = 0;
             break;
         case IO_TIMC:
-            std::printf("TIMC/TCCTL write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("TIMC/TCCTL write32 = %08X\n", data);
 
             TIM(2) = data;
             TCTL(2) = 1 << (u8)(data >> 8);
@@ -1075,18 +1224,70 @@ void write(const u32 addr, const u32 data) {
             TIMER(2).subcounter = 0;
             break;
         case IO_SCIEB_L:
-            std::printf("SCIEB write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("SCIEB write32 = %08X\n", data);
             
             SCIEB = data;
 
-            check_pending_interrupts();
+            check_pending_arm_interrupts();
+            break;
+        case IO_SCIPD_L:
+            if constexpr (!SILENT_AICA) std::printf("SCIPD write32 = %08X\n", data);
+            
+            SCIPD |= (data & 0x20);
+
+            check_pending_arm_interrupts();
             break;
         case IO_SCIRE_L:
-            std::printf("SCIRE write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("SCIRE write32 = %08X\n", data);
             
             SCIPD &= ~data;
 
-            check_pending_interrupts();
+            check_pending_arm_interrupts();
+            break;
+        case IO_SCILV0:
+            if constexpr (!SILENT_AICA) std::printf("SCILV0 write32 = %08X\n", data);
+
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~1;
+                ctx.arm_interrupt_levels[level] |= (data >> level) & 1;
+            }
+            break;
+        case IO_SCILV1:
+            if constexpr (!SILENT_AICA) std::printf("SCILV1 write32 = %08X\n", data);
+
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~2;
+                ctx.arm_interrupt_levels[level] |= ((data >> level) & 1) << 1;
+            }
+            break;
+        case IO_SCILV2:
+            if constexpr (!SILENT_AICA) std::printf("SCILV2 write32 = %08X\n", data);
+
+            for (int level = 0; level < 8; level++) {
+                ctx.arm_interrupt_levels[level] &= ~4;
+                ctx.arm_interrupt_levels[level] |= ((data >> level) & 1) << 2;
+            }
+            break;
+        case IO_MCIEB_L:
+            if constexpr (!SILENT_AICA) std::printf("MCIEB write32 = %08X\n", data);
+            
+            MCIEB = data;
+
+            check_pending_sh4_interrupts();
+            break;
+        case IO_MCIPD_L:
+            if constexpr (!SILENT_AICA) std::printf("MCIPD write32 = %08X\n", data);
+            
+            MCIPD |= (data & 0x20);
+
+            check_pending_sh4_interrupts();
+            break;
+        case IO_MCIRE_L:
+            if constexpr (!SILENT_AICA) std::printf("SCIRE write32 = %08X\n", data);
+            
+            MCIPD &= ~data;
+
+            check_pending_sh4_interrupts();
             break;
         case IO_ARMRST:
             std::printf("ARMRST write32 = %08X\n", data);
@@ -1096,11 +1297,9 @@ void write(const u32 addr, const u32 data) {
             arm::assert_reset(ARMRST.reset_arm);
             break;
         case IO_INTCLR:
-            std::printf("INTCLR write32 = %08X\n", data);
+            if constexpr (!SILENT_AICA) std::printf("INTCLR write32 = %08X\n", data);
 
             INTREQ = 0;
-
-            check_pending_interrupts();
             break;
         default:
             std::printf("Unmapped AICA write32 @ %08X = %08X\n", addr, data);
