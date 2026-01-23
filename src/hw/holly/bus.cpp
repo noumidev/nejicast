@@ -52,6 +52,7 @@ enum : u32 {
     BASE_VRAM_32   = 0x05000000,
     BASE_DRAM      = 0x0C000000,
     BASE_TA_FIFO   = 0x10000000,
+    BASE_YUV_FIFO  = 0x10800000,
     BASE_TEX_PATH  = 0x11000000,
     BASE_OCRAM     = 0x1C000000,
 };
@@ -467,6 +468,9 @@ void block_write(const u32 addr, const u8 *bytes) {
             break;
         case BASE_TA_FIFO:
             hw::pvr::ta::fifo_block_write(bytes);
+            break;
+        case BASE_YUV_FIFO:
+            // TODO
             break;
         default:
             std::printf("Unmapped block write @ %08X = ", addr);
