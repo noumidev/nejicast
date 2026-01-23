@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -69,71 +70,61 @@ T read_vram_interleaved(const u32 addr) {
 
 template<>
 u8 read_vram_interleaved(const u32 addr) {
-    const u32 masked_addr = addr & (VRAM_SIZE - 1);
+    u32 offset = ((addr >> 3) << 2);
 
-    const u32 offset = masked_addr >> 2;
+    if ((addr & 4) != 0) {
+        offset += 0x400000;
+    }
 
     u32 data;
 
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        std::memcpy(&data, &ctx.video_ram[(VRAM_SIZE >> 1) + sizeof(u32) * (offset >> 1)], sizeof(data));
-    } else {
-        // First VRAM module
-        std::memcpy(&data, &ctx.video_ram[sizeof(u32) * (offset >> 1)], sizeof(data));
-    }
+    std::memcpy(&data, &ctx.video_ram[offset], sizeof(data));
 
     return data >> ((addr & 3) * 8);
 }
 
 template<>
 u16 read_vram_interleaved(const u32 addr) {
-    const u32 masked_addr = addr & (VRAM_SIZE - 1);
+    u32 offset = ((addr >> 3) << 2);
 
-    const u32 offset = masked_addr >> 2;
+    if ((addr & 4) != 0) {
+        offset += 0x400000;
+    }
 
     u32 data;
 
-    if ((offset & 1) != 0) {
-        // Second VRAM module
-        std::memcpy(&data, &ctx.video_ram[(VRAM_SIZE >> 1) + sizeof(u32) * (offset >> 1)], sizeof(data));
-    } else {
-        // First VRAM module
-        std::memcpy(&data, &ctx.video_ram[sizeof(u32) * (offset >> 1)], sizeof(data));
-    }
+    std::memcpy(&data, &ctx.video_ram[offset], sizeof(data));
 
     return ((addr & 2) != 0) ? data >> 16 : data;
 }
 
 template u32 read_vram_interleaved(u32);
 
-static u32 swizzle_to_linear(u32 x, u32 y) {
-    int u_size = ctx.u_size;
-    int v_size = ctx.v_size;
-
-    u32 i = 0;
-    u32 n = 0;
-
-    // Interleave bits with respect to texture size
-    while ((u_size > 0) || (v_size > 0)) {
-        if (v_size > 0) {
-            n |= (y & 1) << i++;
-
-            y >>= 1;
-
-            v_size >>= 1;
-        }
-
-        if (u_size > 0) {
-            n |= (x & 1) << i++;
-
-            x >>= 1;
-
-            u_size >>= 1;
-        }
-    }
+static u32 interleave_bits(u32 n) {
+    n = (n | (n << 8)) & 0x00FF00FF;
+    n = (n | (n << 4)) & 0x0F0F0F0F;
+    n = (n | (n << 2)) & 0x33333333;
+    n = (n | (n << 1)) & 0x55555555;
 
     return n;
+}
+
+static u32 swizzle_to_linear(u32 x, u32 y) {
+    const int u_size = ctx.u_size;
+    const int v_size = ctx.v_size;
+
+    const u32 min_dim = std::min(u_size, v_size);
+    const u32 mask = min_dim - 1;
+
+    u32 linear_offset = interleave_bits(y & mask) | (interleave_bits(x & mask) << 1);
+
+    if (u_size > v_size) {
+        linear_offset |= ((x & ~mask) << (31 - std::countl_zero(min_dim)));
+    } else if (v_size > u_size) {
+        linear_offset |= ((y & ~mask) << (31 - std::countl_zero(min_dim)));
+    }
+
+    return linear_offset;
 }
 
 enum {
@@ -149,9 +140,13 @@ static T read_texel(const u32, const u32) {
 
 template<>
 u16 read_texel(const u32 x, const u32 y) {
+    assert(!ctx.texture_control.regular.use_mipmapping || (ctx.u_size == ctx.v_size));
+
     u32 addr = ctx.texture_addr;
 
     if (ctx.texture_control.regular.scan_order == SCAN_ORDER_SWIZZLED) {
+        assert(!ctx.texture_control.regular.select_stride);
+
         const u32 offset = swizzle_to_linear(x, y);
 
         if (ctx.texture_control.regular.use_compression) {
@@ -167,97 +162,6 @@ u16 read_texel(const u32 x, const u32 y) {
     }
 
     return read_vram_interleaved<u16>(addr);
-}
-
-static f32 edge_function(const Vertex& a, const Vertex& b, const Vertex& c) {
-    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
-
-static f32 interpolate(
-    const f32 w0,
-    const f32 w1,
-    const f32 w2,
-    const f32 a,
-    const f32 b,
-    const f32 c,
-    const f32 area
-) {
-    return (w0 * a + w1 * b + w2 * c) / area;
-}
-
-static u8 clamp_color_channel(const f32 channel) {
-    if (channel < 0.0) {
-        return 0;
-    } else if (channel > 255.0) {
-        return 255;
-    }
-
-    return (u8)channel;
-}
-
-static u8 clamp_color_channel(const int channel) {
-    if (channel > 255) {
-        return 255;
-    }
-
-    return (u8)channel;
-}
-
-static Color add_and_clamp(const Color color, const Color other_color) {
-    return Color{
-        .a = clamp_color_channel(color.a + other_color.a),
-        .r = clamp_color_channel(color.r + other_color.r),
-        .g = clamp_color_channel(color.g + other_color.g),
-        .b = clamp_color_channel(color.b + other_color.b),
-    };
-}
-
-static f32 clamp_uv(const f32 uv) {
-    if (uv < 0.0) {
-        return 0.0;
-    } else if (uv > 1.0) {
-        return 1.0;
-    }
-
-    return uv;
-}
-
-static f32 repeat_uv(const f32 uv) {
-    return std::abs(std::fmodf(uv, 1.0));
-}
-
-static u32 interpolate_colors(
-    const f32 w0,
-    const f32 w1,
-    const f32 w2,
-    const Vertex& a,
-    const Vertex& b,
-    const Vertex& c,
-    const f32 area
-) {
-    const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.color.b, b.color.b, c.color.b, area));
-    const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.color.g, b.color.g, c.color.g, area));
-    const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.color.r, b.color.r, c.color.r, area));
-    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.color.a, b.color.a, c.color.a, area));
-
-    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
-}
-
-static u32 interpolate_offset_colors(
-    const f32 w0,
-    const f32 w1,
-    const f32 w2,
-    const Vertex& a,
-    const Vertex& b,
-    const Vertex& c,
-    const f32 area
-) {
-    const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.b, b.offset_color.b, c.offset_color.b, area));
-    const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.g, b.offset_color.g, c.offset_color.g, area));
-    const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.r, b.offset_color.r, c.offset_color.r, area));
-    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.a, b.offset_color.a, c.offset_color.a, area));
-
-    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
 }
 
 enum : u32 {
@@ -314,6 +218,139 @@ static Color unpack_texel(const u16 texel) {
     }
 
     return color;
+}
+
+static u8 clamp_color_channel_f32(const f32 channel) {
+    if (channel < 0.0) {
+        return 0;
+    } else if (channel > 255.0) {
+        return 255;
+    }
+
+    return (u8)channel;
+}
+
+static Color sample_nearest(const f32 tex_x, const f32 tex_y) {
+    return unpack_texel(read_texel<u16>((int)tex_x, (int)tex_y));
+}
+
+static Color sample_bilinear(const f32 tex_x, const f32 tex_y) {
+    const int x0 = (int)tex_x;
+    const int x1 = std::min(x0 + 1, (int)(ctx.u_size - 1));
+    const int y0 = (int)tex_y;
+    const int y1 = std::min(y0 + 1, (int)(ctx.v_size - 1));
+
+    const f32 dx = tex_x - x0;
+    const f32 dy = tex_y - y0;
+
+    Color colors[6] = {
+        unpack_texel(read_texel<u16>(x0, y0)),
+        unpack_texel(read_texel<u16>(x1, y0)),
+        unpack_texel(read_texel<u16>(x0, y1)),
+        unpack_texel(read_texel<u16>(x1, y1)),
+    };
+
+    // Blend top pixels
+    colors[4].r = clamp_color_channel_f32((f32)colors[0].r * (1.0 - dx) + (f32)colors[1].r * dx);
+    colors[4].g = clamp_color_channel_f32(colors[0].g * (1.0 - dx) + colors[1].g * dx);
+    colors[4].b = clamp_color_channel_f32(colors[0].b * (1.0 - dx) + colors[1].b * dx);
+    colors[4].a = clamp_color_channel_f32(colors[0].a * (1.0 - dx) + colors[1].a * dx);
+
+    // Blend bottom pixels
+    colors[5].r = clamp_color_channel_f32(colors[2].r * (1.0 - dx) + colors[3].r * dx);
+    colors[5].g = clamp_color_channel_f32(colors[2].g * (1.0 - dx) + colors[3].g * dx);
+    colors[5].b = clamp_color_channel_f32(colors[2].b * (1.0 - dx) + colors[3].b * dx);
+    colors[5].a = clamp_color_channel_f32(colors[2].a * (1.0 - dx) + colors[3].a * dx);
+
+    return Color {
+        .r = clamp_color_channel_f32(colors[4].r * (1.0 - dy) + colors[5].r * dy),
+        .g = clamp_color_channel_f32(colors[4].g * (1.0 - dy) + colors[5].g * dy),
+        .b = clamp_color_channel_f32(colors[4].b * (1.0 - dy) + colors[5].b * dy),
+        .a = clamp_color_channel_f32(colors[4].a * (1.0 - dy) + colors[5].a * dy),
+    };
+}
+
+static f32 edge_function(const Vertex& a, const Vertex& b, const Vertex& c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+static f32 interpolate(
+    const f32 w0,
+    const f32 w1,
+    const f32 w2,
+    const f32 a,
+    const f32 b,
+    const f32 c,
+    const f32 area
+) {
+    return (w0 * a + w1 * b + w2 * c) / area;
+}
+
+static u8 clamp_color_channel(const int channel) {
+    if (channel > 255) {
+        return 255;
+    }
+
+    return (u8)channel;
+}
+
+static Color add_and_clamp(const Color color, const Color other_color) {
+    return Color{
+        .a = clamp_color_channel(color.a + other_color.a),
+        .r = clamp_color_channel(color.r + other_color.r),
+        .g = clamp_color_channel(color.g + other_color.g),
+        .b = clamp_color_channel(color.b + other_color.b),
+    };
+}
+
+static f32 clamp_uv(const f32 uv) {
+    if (uv < 0.0) {
+        return 0.0;
+    } else if (uv > 1.0) {
+        return 1.0;
+    }
+
+    return uv;
+}
+
+static f32 repeat_uv(const f32 uv) {
+    return std::abs(std::fmodf(uv, 1.0));
+}
+
+static u32 interpolate_colors(
+    const f32 w0,
+    const f32 w1,
+    const f32 w2,
+    const Vertex& a,
+    const Vertex& b,
+    const Vertex& c,
+    const f32 area,
+    const f32 z
+) {
+    const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.color.b * a.z, b.color.b * b.z, c.color.b * c.z, area) / z);
+    const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.color.g * a.z, b.color.g * b.z, c.color.g * c.z, area) / z);
+    const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.color.r * a.z, b.color.r * b.z, c.color.r * c.z, area) / z);
+    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.color.a * a.z, b.color.a * b.z, c.color.a * c.z, area) / z);
+
+    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
+}
+
+static u32 interpolate_offset_colors(
+    const f32 w0,
+    const f32 w1,
+    const f32 w2,
+    const Vertex& a,
+    const Vertex& b,
+    const Vertex& c,
+    const f32 area,
+    const f32 z
+) {
+    const u8 blue = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.b * a.z, b.offset_color.b * b.z, c.offset_color.b * c.z, area) / z);
+    const u8 green = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.g * a.z, b.offset_color.g * b.z, c.offset_color.g * c.z, area) / z);
+    const u8 red = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.r * a.z, b.offset_color.r * b.z, c.offset_color.r * c.z, area) / z);
+    const u8 alpha = clamp_color_channel(interpolate(w0, w1, w2, a.offset_color.a * a.z, b.offset_color.a * b.z, c.offset_color.a * c.z, area) / z);
+
+    return Color{.b = blue, .g = green, .r = red, .a = alpha}.raw;
 }
 
 enum {
@@ -543,10 +580,10 @@ static void draw_triangle(const Vertex* vertices) {
     const f32 area = edge_function(a, b, c);
 
     // Calculate bounding box
-    const int x_min = std::max(std::min(c.x, std::min(a.x, b.x)), 0.0F);
-    const int x_max = std::min(std::max(c.x, std::max(a.x, b.x)), (f32)SCREEN_WIDTH - 1);
-    const int y_min = std::max(std::min(c.y, std::min(a.y, b.y)), 0.0F);
-    const int y_max = std::min(std::max(c.y, std::max(a.y, b.y)), (f32)SCREEN_HEIGHT - 1);
+    const int x_min = std::floor(std::max(std::min(c.x, std::min(a.x, b.x)), 0.0F));
+    const int x_max = std::floor(std::min(std::max(c.x, std::max(a.x, b.x)), (f32)SCREEN_WIDTH - 1));
+    const int y_min = std::floor(std::max(std::min(c.y, std::min(a.y, b.y)), 0.0F));
+    const int y_max = std::floor(std::min(std::max(c.y, std::max(a.y, b.y)), (f32)SCREEN_HEIGHT - 1));
 
     if constexpr (!SILENT_PVR) std::printf("PVR Bounding box (xmin: %d, xmax: %d, ymin: %d, ymax: %d)\n", x_min, x_max, y_min, y_max);
 
@@ -556,10 +593,7 @@ static void draw_triangle(const Vertex* vertices) {
 
     for (int y = y_min; y <= y_max; y++) {
         for (int x = x_min; x <= x_max; x++) {
-            Vertex p{};
-
-            p.x = (f32)x + 0.5;
-            p.y = (f32)y + 0.5;
+            Vertex p{.x = (f32)x, .y = (f32)y};
 
             // Calculate weights
             const f32 w0 = edge_function(b, c, p);
@@ -577,8 +611,8 @@ static void draw_triangle(const Vertex* vertices) {
                 Color offset_color = c.offset_color;
 
                 if (ctx.isp_instr.regular.use_gouraud_shading) {
-                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area);
-                    offset_color.raw = interpolate_offset_colors(w0, w1, w2, a, b, c, area);
+                    color.raw = interpolate_colors(w0, w1, w2, a, b, c, area, z);
+                    offset_color.raw = interpolate_offset_colors(w0, w1, w2, a, b, c, area, z);
                 }
 
                 if (!ctx.tsp_instr.use_alpha) {
@@ -586,11 +620,8 @@ static void draw_triangle(const Vertex* vertices) {
                 }
 
                 if (ctx.isp_instr.regular.use_texture_mapping) {
-                    f32 u = interpolate(w0, w1, w2, a.u / (1.0 / a.z), b.u / (1.0 / b.z), c.u / (1.0 / c.z), area);
-                    f32 v = interpolate(w0, w1, w2, a.v / (1.0 / a.z), b.v / (1.0 / b.z), c.v / (1.0 / c.z), area);
-
-                    u /= z;
-                    v /= z;
+                    f32 u = interpolate(w0, w1, w2, a.u * a.z, b.u * b.z, c.u * c.z, area) / z;
+                    f32 v = interpolate(w0, w1, w2, a.v * a.z, b.v * b.z, c.v * c.z, area) / z;
 
                     if (ctx.tsp_instr.clamp_u) {
                         u = clamp_uv(u);
@@ -612,12 +643,14 @@ static void draw_triangle(const Vertex* vertices) {
                         v = 1.0 - v;
                     }
 
-                    const int tex_x = ctx.u_size * u;
-                    const int tex_y = ctx.v_size * v;
+                    const f32 tex_x = (ctx.u_size - 1) * u;
+                    const f32 tex_y = (ctx.v_size - 1) * v;
+
+                    const Color texel_color = (ctx.tsp_instr.filter_mode == 0) ? sample_nearest(tex_x, tex_y) : sample_bilinear(tex_x, tex_y);
 
                     color = combine_colors(
                         color,
-                        unpack_texel(read_texel<u16>(tex_x, tex_y)),
+                        texel_color,
                         offset_color
                     );
                 }
