@@ -5,6 +5,7 @@
 
 #include <hw/pvr/core.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdio>
@@ -134,6 +135,12 @@ struct VertexStrip {
     int list_type;
 
     std::vector<Vertex> vertices;
+};
+
+struct VertexStripKey {
+    int index;
+    f32 average_depth;
+    int list_type;
 };
 
 struct DisplayList {
@@ -483,6 +490,36 @@ static void draw_background() {
     }
 }
 
+static std::vector<VertexStripKey> build_strip_keys(const DisplayList& display_list) {
+    constexpr int LIST_PRIORITY[] = {
+        0, 3, 2, 4, 1,
+    };
+    
+    std::vector<VertexStripKey> strip_keys;
+
+    for (int i = 0; i < (int)display_list.strips.size(); i++) {
+        const VertexStrip& strip = display_list.strips[i];
+
+        f32 average_depth = 0;
+
+        for (const Vertex& vertex : strip.vertices) {
+            average_depth += vertex.z;
+        }
+
+        average_depth /= strip.vertices.size();
+
+        strip_keys.push_back(
+            VertexStripKey{
+                .index = i,
+                .average_depth = average_depth,
+                .list_type = LIST_PRIORITY[strip.list_type]
+            }
+        );
+    }
+
+    return strip_keys;
+}
+
 static void start_render() {
     if (ctx.display_lists.empty()) {
         std::puts("CORE has no display lists");
@@ -495,7 +532,32 @@ static void start_render() {
 
     const auto& display_list = ctx.display_lists.front();
 
-    for (const auto& strip : display_list.strips) {
+    // Sort strips by their average depth
+    auto strip_keys = build_strip_keys(display_list);
+
+    std::sort(strip_keys.begin(), strip_keys.end(), [](const VertexStripKey& strip_key, const VertexStripKey& other_strip_key) {
+        if (strip_key.list_type < other_strip_key.list_type) {
+            // Lower list type values take priority
+            return true;
+        } else if (strip_key.list_type == other_strip_key.list_type) {
+            if (strip_key.average_depth == other_strip_key.average_depth) {
+                return false;
+            }
+
+            if (strip_key.list_type == 1) {
+                // Sort transparent strips from back to front, drawing farther strips first
+                return strip_key.average_depth > other_strip_key.average_depth;
+            } else {
+                return strip_key.average_depth < other_strip_key.average_depth;
+            }
+        }
+
+        return false;
+    });
+
+    for (const auto& strip_key : strip_keys) {
+        const auto& strip = display_list.strips[strip_key.index];
+
         if (strip.vertices.size() < 3) {
             continue;
         }
