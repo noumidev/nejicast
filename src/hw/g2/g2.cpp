@@ -18,6 +18,8 @@
 
 namespace hw::g2 {
 
+constexpr bool SILENT_G2 = true;
+
 enum : u32 {
     IO_ADSTAG  = 0x005F7800,
     IO_ADSTAR  = 0x005F7804,
@@ -209,35 +211,35 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_ADEN:
-            std::puts("SB_ADEN read32");
+            if constexpr (!SILENT_G2) std::puts("SB_ADEN read32");
 
             return SB_ADEN;
         case IO_ADST:
-            std::puts("SB_ADST read32");
+            if constexpr (!SILENT_G2) std::puts("SB_ADST read32");
 
             return SB_ADST;
         case IO_E1EN:
-            std::puts("SB_E1EN read32");
+            if constexpr (!SILENT_G2) std::puts("SB_E1EN read32");
 
             return SB_E1EN;
         case IO_E1ST:
-            std::puts("SB_E1ST read32");
+            if constexpr (!SILENT_G2) std::puts("SB_E1ST read32");
 
             return SB_E1ST;
         case IO_E2EN:
-            std::puts("SB_E2EN read32");
+            if constexpr (!SILENT_G2) std::puts("SB_E2EN read32");
 
             return SB_E2EN;
         case IO_E2ST:
-            std::puts("SB_E2ST read32");
+            if constexpr (!SILENT_G2) std::puts("SB_E2ST read32");
 
             return SB_E2ST;
         case IO_DDEN:
-            std::puts("SB_DDEN read32");
+            if constexpr (!SILENT_G2) std::puts("SB_DDEN read32");
 
             return SB_DDEN;
         case IO_DDST:
-            std::puts("SB_DDST read32");
+            if constexpr (!SILENT_G2) std::puts("SB_DDST read32");
 
             return SB_DDST;
         default:
@@ -260,37 +262,37 @@ template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_ADSTAG:
-            std::printf("SB_ADSTAG write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADSTAG write32 = %08X\n", data);
 
             SB_ADSTAG = data;
             break;
         case IO_ADSTAR:
-            std::printf("SB_ADSTAR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADSTAR write32 = %08X\n", data);
 
             SB_ADSTAR = data;
             break;
         case IO_ADLEN:
-            std::printf("SB_ADLEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADLEN write32 = %08X\n", data);
 
             SB_ADLEN = data;
             break;
         case IO_ADDIR:
-            std::printf("SB_ADDIR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADDIR write32 = %08X\n", data);
 
             SB_ADDIR = (data & 1) != 0;
             break;
         case IO_ADTSEL:
-            std::printf("SB_ADTSEL write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADTSEL write32 = %08X\n", data);
 
             SB_ADTSEL = data;
             break;
         case IO_ADEN:
-            std::printf("SB_ADEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADEN write32 = %08X\n", data);
 
             SB_ADEN = (data & 1) != 0;
             break;
         case IO_ADST:
-            std::printf("SB_ADST write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADST write32 = %08X\n", data);
 
             SB_ADST = (data & 1) != 0;
 
@@ -299,152 +301,152 @@ void write(const u32 addr, const u32 data) {
             }
             break;
         case IO_ADSUSP:
-            std::printf("SB_ADSUSP write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_ADSUSP write32 = %08X\n", data);
 
             SB_ADSUSP.raw = data;
             break;
         case IO_E1STAG:
-            std::printf("SB_E1STAG write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1STAG write32 = %08X\n", data);
 
             SB_E1STAG = data;
             break;
         case IO_E1STAR:
-            std::printf("SB_E1STAR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1STAR write32 = %08X\n", data);
 
             SB_E1STAR = data;
             break;
         case IO_E1LEN:
-            std::printf("SB_E1LEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1LEN write32 = %08X\n", data);
 
             SB_E1LEN = data;
             break;
         case IO_E1DIR:
-            std::printf("SB_E1DIR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1DIR write32 = %08X\n", data);
 
             SB_E1DIR = (data & 1) != 0;
             break;
         case IO_E1TSEL:
-            std::printf("SB_E1TSEL write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1TSEL write32 = %08X\n", data);
 
             SB_E1TSEL = data;
             break;
         case IO_E1EN:
-            std::printf("SB_E1EN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1EN write32 = %08X\n", data);
 
             SB_E1EN = (data & 1) != 0;
             break;
         case IO_E1ST:
-            std::printf("SB_E1ST write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1ST write32 = %08X\n", data);
 
             assert((data & 1) == 0);
             break;
         case IO_E1SUSP:
-            std::printf("SB_E1SUSP write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E1SUSP write32 = %08X\n", data);
 
             SB_E1SUSP.raw = data;
             break;
         case IO_E2STAG:
-            std::printf("SB_E2STAG write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2STAG write32 = %08X\n", data);
 
             SB_E2STAG = data;
             break;
         case IO_E2STAR:
-            std::printf("SB_E2STAR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2STAR write32 = %08X\n", data);
 
             SB_E2STAR = data;
             break;
         case IO_E2LEN:
-            std::printf("SB_E2LEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2LEN write32 = %08X\n", data);
 
             SB_E2LEN = data;
             break;
         case IO_E2DIR:
-            std::printf("SB_E2DIR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2DIR write32 = %08X\n", data);
 
             SB_E2DIR = (data & 1) != 0;
             break;
         case IO_E2TSEL:
-            std::printf("SB_E2TSEL write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2TSEL write32 = %08X\n", data);
 
             SB_E2TSEL = data;
             break;
         case IO_E2EN:
-            std::printf("SB_E2EN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2EN write32 = %08X\n", data);
 
             SB_E2EN = (data & 1) != 0;
             break;
         case IO_E2ST:
-            std::printf("SB_E2ST write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2ST write32 = %08X\n", data);
 
             assert((data & 1) == 0);
             break;
         case IO_E2SUSP:
-            std::printf("SB_E2SUSP write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_E2SUSP write32 = %08X\n", data);
 
             SB_E2SUSP.raw = data;
             break;
         case IO_DDSTAG:
-            std::printf("SB_DDSTAG write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDSTAG write32 = %08X\n", data);
 
             SB_DDSTAG = data;
             break;
         case IO_DDSTAR:
-            std::printf("SB_DDSTAR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDSTAR write32 = %08X\n", data);
 
             SB_DDSTAR = data;
             break;
         case IO_DDLEN:
-            std::printf("SB_DDLEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDLEN write32 = %08X\n", data);
 
             SB_DDLEN = data;
             break;
         case IO_DDDIR:
-            std::printf("SB_DDDIR write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDDIR write32 = %08X\n", data);
 
             SB_DDDIR = (data & 1) != 0;
             break;
         case IO_DDTSEL:
-            std::printf("SB_DDTSEL write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDTSEL write32 = %08X\n", data);
 
             SB_DDTSEL = data;
             break;
         case IO_DDEN:
-            std::printf("SB_DDEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDEN write32 = %08X\n", data);
 
             SB_DDEN = (data & 1) != 0;
             break;
         case IO_DDST:
-            std::printf("SB_DDST write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDST write32 = %08X\n", data);
 
             assert((data & 1) == 0);
             break;
         case IO_DDSUSP:
-            std::printf("SB_DDSUSP write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_DDSUSP write32 = %08X\n", data);
 
             SB_DDSUSP.raw = data;
             break;
         case IO_G2DSTO:
-            std::printf("SB_G2DSTO write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_G2DSTO write32 = %08X\n", data);
 
             SB_G2DSTO = data;
             break;
         case IO_G2TRTO:
-            std::printf("SB_G2TRTO write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_G2TRTO write32 = %08X\n", data);
 
             SB_G2TRTO = data;
             break;
         case IO_G2MDMTO:
-            std::printf("SB_G2MDMTO write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_G2MDMTO write32 = %08X\n", data);
 
             SB_G2MDMTO = data;
             break;
         case IO_G2MDMW:
-            std::printf("SB_G2MDMW write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_G2MDMW write32 = %08X\n", data);
 
             SB_G2MDMW = data;
             break;
         case IO_G2APRO:
-            std::printf("SB_G2APRO write32 = %08X\n", data);
+            if constexpr (!SILENT_G2) std::printf("SB_G2APRO write32 = %08X\n", data);
 
             if ((data & ~0xFFFF) == 0x46590000) {
                 SB_G2APRO.raw = (u16)data;
@@ -457,7 +459,7 @@ void write(const u32 addr, const u32 data) {
         case 0x005F78B0:
         case 0x005F78B4:
         case 0x005F78B8:
-            std::printf("Unknown G2 write32 @ %08X = %08X\n", addr, data);
+            if constexpr (!SILENT_G2) std::printf("Unknown G2 write32 @ %08X = %08X\n", addr, data);
             break;
         default:
             std::printf("Unmapped G2 write32 @ %08X = %08X\n", addr, data);
