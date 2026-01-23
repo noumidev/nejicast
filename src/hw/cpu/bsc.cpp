@@ -376,7 +376,7 @@ void set_port_data(const int port, const u16 data) {
         if (is_output) {
             const u16 bit = (data >> i) & 1;
 
-            std::printf("Port %d:%d write = %u\n", 'A' + port, i, bit);
+            std::printf("Port %c:%d write = %u\n", 'A' + port, i, bit);
         }
     }
 
