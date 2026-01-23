@@ -7,19 +7,18 @@
 
 #include <common/types.hpp>
 
-// AICA functions
-namespace hw::g2::aica {
+namespace hw::aica::arm {
 
 void initialize();
 void reset();
 void shutdown();
 
-template<typename T>
-T read(const u32 addr);
+void assert_fast_interrupt();
+void clear_fast_interrupt();
 
-template<typename T>
-void write(const u32 addr, const T data);
+void assert_reset(const bool is_reset);
+void step();
 
-u8* get_wave_ram_ptr();
+i64* get_cycles();
 
 }

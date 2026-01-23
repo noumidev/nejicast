@@ -16,6 +16,8 @@
 
 namespace hw::holly {
 
+constexpr bool SILENT_HOLLY = true;
+
 enum : u32 {
     IO_C2DSTAT = 0x005F6800,
     IO_C2DLEN  = 0x005F6804,
@@ -112,24 +114,24 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_C2DST:
-            std::puts("SB_C2DST read32");
+            if constexpr (!SILENT_HOLLY) std::puts("SB_C2DST read32");
 
             return SB_C2DST;
         case IO_SDST:
-            std::puts("SB_SDST read32");
+            if constexpr (!SILENT_HOLLY) std::puts("SB_SDST read32");
 
             return SB_SDST;
         case IO_FFST:
             // There's no need to implement this properly (yet?)
-            // std::puts("SB_FFST read32");
+            // if constexpr (!SILENT_HOLLY) std::puts("SB_FFST read32");
 
             return 0;
         case IO_SBREV:
-            std::puts("SB_REV read32");
+            if constexpr (!SILENT_HOLLY) std::puts("SB_REV read32");
 
             return SB_REV;
         case IO_RBSPLT:
-            std::puts("SB_RBSPLT read32");
+            if constexpr (!SILENT_HOLLY) std::puts("SB_RBSPLT read32");
 
             return SB_RBSPLT;
         default:
@@ -152,17 +154,17 @@ template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_C2DSTAT:
-            std::printf("SB_C2DSTAT write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_C2DSTAT write32 = %08X\n", data);
 
             SB_C2DSTAT = data;
             break;
         case IO_C2DLEN:
-            std::printf("SB_C2DLEN write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_C2DLEN write32 = %08X\n", data);
 
             SB_C2DLEN = data;
             break;
         case IO_C2DST:
-            std::printf("SB_C2DST write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_C2DST write32 = %08X\n", data);
 
             SB_C2DST = (data & 1) != 0;
 
@@ -171,64 +173,64 @@ void write(const u32 addr, const u32 data) {
             }
             break;
         case IO_SDSTAW:
-            std::printf("SB_SDSTAW write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_SDSTAW write32 = %08X\n", data);
 
             SB_SDSTAW = data | (1 << 27); // Bit 27 is hardwired to 1
             break;
         case IO_SDBAAW:
-            std::printf("SB_SDBAAW write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_SDBAAW write32 = %08X\n", data);
 
             SB_SDBAAW = data | (1 << 27); // Bit 27 is hardwired to 1
             break;
         case IO_SDWLT:
-            std::printf("SB_SDWLT write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_SDWLT write32 = %08X\n", data);
 
             SB_SDWLT = (data & 1) != 0;
             break;
         case IO_SDLAS:
-            std::printf("SB_SDLAS write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_SDLAS write32 = %08X\n", data);
 
             SB_SDLAS = (data & 1) != 0;
             break;
         case IO_SDST:
-            std::printf("SB_SDST write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_SDST write32 = %08X\n", data);
 
             SB_SDST = (data & 1) != 0;
 
             assert(!SB_SDST);
             break;
         case IO_DBREQM:
-            std::printf("SB_DBREQM write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_DBREQM write32 = %08X\n", data);
 
             SB_DBREQM = (data & 1) != 0;
             break;
         case IO_BAVLWC:
-            std::printf("SB_BAVLWC write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_BAVLWC write32 = %08X\n", data);
 
             SB_BAVLWC = data;
             break;
         case IO_C2DPRYC:
-            std::printf("SB_C2DPRYC write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_C2DPRYC write32 = %08X\n", data);
 
             SB_C2DPRYC = data;
             break;
         case IO_C2DMAXL:
-            std::printf("SB_C2DMAXL write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_C2DMAXL write32 = %08X\n", data);
 
             SB_C2DMAXL = data;
             break;
         case IO_LMMODE0:
-            std::printf("SB_LMMODE0 write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_LMMODE0 write32 = %08X\n", data);
 
             SB_LMMODE0 = (data & 1) != 0;
             break;
         case IO_LMMODE1:
-            std::printf("SB_LMMODE1 write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_LMMODE1 write32 = %08X\n", data);
 
             SB_LMMODE1 = (data & 1) != 0;
             break;
         case IO_RBSPLT:
-            std::printf("SB_RBSPLT write32 = %08X\n", data);
+            if constexpr (!SILENT_HOLLY) std::printf("SB_RBSPLT write32 = %08X\n", data);
 
             SB_RBSPLT = (data >> 31) != 0;
             break;

@@ -68,6 +68,25 @@ T read_vram_interleaved(const u32 addr) {
 }
 
 template<>
+u8 read_vram_interleaved(const u32 addr) {
+    const u32 masked_addr = addr & (VRAM_SIZE - 1);
+
+    const u32 offset = masked_addr >> 2;
+
+    u32 data;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        std::memcpy(&data, &ctx.video_ram[(VRAM_SIZE >> 1) + sizeof(u32) * (offset >> 1)], sizeof(data));
+    } else {
+        // First VRAM module
+        std::memcpy(&data, &ctx.video_ram[sizeof(u32) * (offset >> 1)], sizeof(data));
+    }
+
+    return data >> ((addr & 3) * 8);
+}
+
+template<>
 u16 read_vram_interleaved(const u32 addr) {
     const u32 masked_addr = addr & (VRAM_SIZE - 1);
 
@@ -88,13 +107,30 @@ u16 read_vram_interleaved(const u32 addr) {
 
 template u32 read_vram_interleaved(u32);
 
-static u32 swizzle_to_linear(const u32 x, const u32 y) {
+static u32 swizzle_to_linear(u32 x, u32 y) {
+    int u_size = ctx.u_size;
+    int v_size = ctx.v_size;
+
+    u32 i = 0;
     u32 n = 0;
 
-    // Interleave bits
-    for (u32 i = 0; i < 16; i++) {
-        n |= ((y >> i) & 1) << (2 * i);
-        n |= ((x >> i) & 1) << (2 * i + 1);
+    // Interleave bits with respect to texture size
+    while ((u_size > 0) || (v_size > 0)) {
+        if (v_size > 0) {
+            n |= (y & 1) << i++;
+
+            y >>= 1;
+
+            v_size >>= 1;
+        }
+
+        if (u_size > 0) {
+            n |= (x & 1) << i++;
+
+            x >>= 1;
+
+            u_size >>= 1;
+        }
     }
 
     return n;
@@ -116,9 +152,18 @@ u16 read_texel(const u32 x, const u32 y) {
     u32 addr = ctx.texture_addr;
 
     if (ctx.texture_control.regular.scan_order == SCAN_ORDER_SWIZZLED) {
-        addr += 2 * swizzle_to_linear(x, y);
+        const u32 offset = swizzle_to_linear(x, y);
+
+        if (ctx.texture_control.regular.use_compression) {
+            // Get index
+            const u8 index = read_vram_interleaved<u8>(addr + 0x800 + offset / 4);
+
+            return read_vram_interleaved<u16>(addr + sizeof(u64) * index + 2 * (offset & 3));
+        } else {
+            addr += 2 * offset;
+        }
     } else {
-        addr += 2 * (ctx.u_size * y + x);
+        addr += 2 * ((ctx.texture_control.regular.select_stride ? core::get_stride() : ctx.u_size) * y + x);
     }
 
     return read_vram_interleaved<u16>(addr);
@@ -219,6 +264,7 @@ enum : u32 {
     TEXTURE_FORMAT_ARGB1555 = 0,
     TEXTURE_FORMAT_RGB565   = 1,
     TEXTURE_FORMAT_ARGB4444 = 2,
+    TEXTURE_FORMAT_YUV422   = 3,
 };
 
 static Color unpack_texel(const u16 texel) {
@@ -226,6 +272,7 @@ static Color unpack_texel(const u16 texel) {
 
     switch (ctx.texture_control.regular.pixel_format) {
         case TEXTURE_FORMAT_ARGB1555:
+        case 7:
             color.a = (texel >> 15);
             color.r = (texel >> 10) << 3;
             color.g = (texel >>  5) << 3;
@@ -253,6 +300,9 @@ static Color unpack_texel(const u16 texel) {
             color.r |= color.r >> 4;
             color.g |= color.g >> 4;
             color.b |= color.b >> 4;
+            break;
+        case TEXTURE_FORMAT_YUV422:
+            color.raw = 0xFFCC00CC;
             break;
         default:
             std::printf("TSP Unimplemented texture format %u\n", ctx.texture_control.regular.pixel_format);
@@ -316,7 +366,9 @@ static bool depth_test(const f32 z, const u32 x, const u32 y) {
 }
 
 enum {
+    COMBINE_MODE_DECAL          = 0,
     COMBINE_MODE_MODULATE       = 1,
+    COMBINE_MODE_DECAL_ALPHA    = 2,
     COMBINE_MODE_MODULATE_ALPHA = 3,
 };
 
@@ -328,6 +380,11 @@ static Color combine_colors(const Color vertex_color, const Color texel_color, c
     Color color{};
 
     switch (ctx.tsp_instr.shading_instr) {
+        case COMBINE_MODE_DECAL:
+            color = add_and_clamp(texel_color, offset_color);
+
+            color.a = texel_color.a;
+            break;
         case COMBINE_MODE_MODULATE:
             color.r = color_multiply(vertex_color.r, texel_color.r);
             color.g = color_multiply(vertex_color.g, texel_color.g);
@@ -336,6 +393,24 @@ static Color combine_colors(const Color vertex_color, const Color texel_color, c
             color = add_and_clamp(color, offset_color);
 
             color.a = texel_color.a;
+            break;
+        case COMBINE_MODE_DECAL_ALPHA:
+            color.r = clamp_color_channel(
+                (int)color_multiply(texel_color.r, texel_color.a) +
+                (int)color_multiply(vertex_color.r, 255 - texel_color.a)
+            );
+            color.g = clamp_color_channel(
+                (int)color_multiply(texel_color.g, texel_color.a) +
+                (int)color_multiply(vertex_color.g, 255 - texel_color.a)
+            );
+            color.b = clamp_color_channel(
+                (int)color_multiply(texel_color.b, texel_color.a) +
+                (int)color_multiply(vertex_color.b, 255 - texel_color.a)
+            );
+
+            color = add_and_clamp(color, offset_color);
+
+            color.a = vertex_color.a;
             break;
         case COMBINE_MODE_MODULATE_ALPHA:
             color.r = color_multiply(vertex_color.r, texel_color.r);
@@ -357,8 +432,10 @@ static Color combine_colors(const Color vertex_color, const Color texel_color, c
 enum {
     BLEND_FUNCTION_ZERO                 = 0,
     BLEND_FUNCTION_ONE                  = 1,
+    BLEND_FUNCTION_INVERSE_OTHER        = 3,
     BLEND_FUNCTION_SOURCE_ALPHA         = 4,
     BLEND_FUNCTION_INVERSE_SOURCE_ALPHA = 5,
+    BLEND_FUNCTION_DESTINATION_ALPHA    = 6,
 };
 
 static void blend_and_flush(const Color source_color, const u32 x, const u32 y) {
@@ -381,6 +458,9 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
         const Color src_saved = src;
 
         switch (ctx.tsp_instr.source_instr) {
+            case BLEND_FUNCTION_ZERO:
+                src.raw = 0;
+                break;
             case BLEND_FUNCTION_ONE:
                 // Nothing to do here
                 break;
@@ -402,11 +482,29 @@ static void blend_and_flush(const Color source_color, const u32 x, const u32 y) 
             case BLEND_FUNCTION_ONE:
                 // Nothing to do here
                 break;
+            case BLEND_FUNCTION_INVERSE_OTHER:
+                dst.a = 255 - src_saved.a;
+                dst.r = 255 - src_saved.r;
+                dst.g = 255 - src_saved.g;
+                dst.b = 255 - src_saved.b;
+                break;
+            case BLEND_FUNCTION_SOURCE_ALPHA:
+                dst.r = color_multiply(dst.r, src_saved.a);
+                dst.g = color_multiply(dst.g, src_saved.a);
+                dst.b = color_multiply(dst.b, src_saved.a);
+                dst.a = color_multiply(dst.a, src_saved.a);
+                break;
             case BLEND_FUNCTION_INVERSE_SOURCE_ALPHA:
                 dst.a = color_multiply(dst.a, 255 - src_saved.a);
                 dst.r = color_multiply(dst.r, 255 - src_saved.a);
                 dst.g = color_multiply(dst.g, 255 - src_saved.a);
                 dst.b = color_multiply(dst.b, 255 - src_saved.a);
+                break;
+            case BLEND_FUNCTION_DESTINATION_ALPHA:
+                dst.r = color_multiply(dst.r, dst.a);
+                dst.g = color_multiply(dst.g, dst.a);
+                dst.b = color_multiply(dst.b, dst.a);
+                dst.a = color_multiply(dst.a, dst.a);
                 break;
             default:
                 std::printf("Unimplemented destination blend function %u\n", ctx.tsp_instr.destination_instr);
@@ -460,8 +558,8 @@ static void draw_triangle(const Vertex* vertices) {
         for (int x = x_min; x <= x_max; x++) {
             Vertex p{};
 
-            p.x = (f32)x;
-            p.y = (f32)y;
+            p.x = (f32)x + 0.5;
+            p.y = (f32)y + 0.5;
 
             // Calculate weights
             const f32 w0 = edge_function(b, c, p);

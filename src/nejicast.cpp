@@ -17,6 +17,7 @@
 #include <common/cdi.hpp>
 #include <common/elf.hpp>
 #include <common/file.hpp>
+#include <hw/aica/aica.hpp>
 #include <hw/cpu/cpu.hpp>
 #include <hw/g1/g1.hpp>
 #include <hw/g2/g2.hpp>
@@ -87,6 +88,7 @@ u16 get_button_state() {
 void initialize(const common::Config& config) {
     scheduler::initialize();
 
+    hw::aica::initialize();
     hw::cpu::initialize();
     hw::g1::initialize(config.boot_path, config.flash_path);
     hw::g2::initialize();
@@ -107,6 +109,7 @@ void initialize(const common::Config& config) {
 void shutdown() {
     scheduler::shutdown();
 
+    hw::aica::shutdown();
     hw::cpu::shutdown();
     hw::g1::shutdown();
     hw::g2::shutdown();
@@ -118,6 +121,7 @@ void shutdown() {
 void reset() {
     scheduler::reset();
 
+    hw::aica::reset();
     hw::cpu::reset();
     hw::g1::reset();
     hw::g2::reset();

@@ -410,6 +410,25 @@ static bool can_parse_vertex() {
     }
 }
 
+static f32 clamp_color(const f32 color) {
+    if (color > 1.0) {
+        return 1.0;
+    } else if (color < 0.0) {
+        return 0.0;
+    }
+
+    return color;
+}
+
+static Color apply_intensity(Color color, const f32 intensity) {
+    color.a = clamp_color((f32)color.a / 255. * intensity) * 255;
+    color.r = clamp_color((f32)color.r / 255. * intensity) * 255;
+    color.g = clamp_color((f32)color.g / 255. * intensity) * 255;
+    color.b = clamp_color((f32)color.b / 255. * intensity) * 255;
+
+    return color;
+}
+
 static void ta_end_of_list() {
     if constexpr (!SILENT_TA) std::puts("TA End of list");
     
@@ -500,6 +519,14 @@ static void ta_global_sprite() {
     ctx.global_color.raw = ctx.fifo_bytes[4];
     ctx.global_offset_color.raw = ctx.fifo_bytes[5];
 
+    if (!ctx.has_list_type) {
+        if (ctx.current_global_parameter.list_type == LIST_TYPE_OPAQUE) {
+            core::begin_display_list();
+        }
+
+        ctx.has_list_type = true;
+    }
+
     ctx.geometry_type = GEOMETRY_TYPE_SPRITE;
     ctx.has_parameter_control = false;
 }
@@ -508,6 +535,14 @@ static void ta_global_modifier_volume() {
     if constexpr (!SILENT_TA) std::puts("TA Global parameter (modifier volume)");
 
     ctx.current_isp_instr = IspInstruction{.raw = ctx.fifo_bytes[1]};
+
+    if (!ctx.has_list_type) {
+        if (ctx.current_global_parameter.list_type == LIST_TYPE_OPAQUE) {
+            core::begin_display_list();
+        }
+
+        ctx.has_list_type = true;
+    }
 
     ctx.geometry_type = GEOMETRY_TYPE_MODIFIER_VOLUME;
     ctx.has_parameter_control = false;
@@ -591,8 +626,8 @@ static void ta_vertex() {
                 ctx.prev_color = ctx.global_color;
             }
 
-            color.raw = ctx.prev_color.raw * to_f32(ctx.fifo_bytes[6]);
-            offset_color.raw = ctx.global_offset_color.raw * to_f32(ctx.fifo_bytes[7]);
+            color = apply_intensity(ctx.prev_color, to_f32(ctx.fifo_bytes[6]));
+            offset_color = apply_intensity(ctx.global_offset_color, to_f32(ctx.fifo_bytes[7]));
 
             u = to_f32(ctx.fifo_bytes[4]);
             v = to_f32(ctx.fifo_bytes[5]);
@@ -602,8 +637,8 @@ static void ta_vertex() {
                 ctx.prev_color = ctx.global_color;
             }
 
-            color.raw = ctx.prev_color.raw * to_f32(ctx.fifo_bytes[6]);
-            offset_color.raw = ctx.global_offset_color.raw * to_f32(ctx.fifo_bytes[7]);
+            color = apply_intensity(ctx.prev_color, to_f32(ctx.fifo_bytes[6]));
+            offset_color = apply_intensity(ctx.global_offset_color, to_f32(ctx.fifo_bytes[7]));
 
             u = to_f32(ctx.fifo_bytes[4] & 0xFFFF0000);
             v = to_f32((ctx.fifo_bytes[4] & 0xFFFF) << 16);

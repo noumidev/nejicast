@@ -12,10 +12,10 @@
 #include <cstring>
 #include <vector>
 
+#include <hw/aica/aica.hpp>
 #include <hw/g1/g1.hpp>
 #include <hw/g1/flash.hpp>
 #include <hw/g1/gdrom.hpp>
-#include <hw/g2/aica.hpp>
 #include <hw/g2/g2.hpp>
 #include <hw/g2/modem.hpp>
 #include <hw/g2/rtc.hpp>
@@ -52,6 +52,7 @@ enum : u32 {
     BASE_VRAM_32   = 0x05000000,
     BASE_DRAM      = 0x0C000000,
     BASE_TA_FIFO   = 0x10000000,
+    BASE_YUV_FIFO  = 0x10800000,
     BASE_TEX_PATH  = 0x11000000,
     BASE_OCRAM     = 0x1C000000,
 };
@@ -156,7 +157,7 @@ void initialize() {
     );
 
     map_memory(
-        g2::aica::get_wave_ram_ptr(),
+        aica::get_wave_ram_ptr(),
         BASE_WAVE_RAM,
         SIZE_WAVE_RAM,
         true,
@@ -279,7 +280,7 @@ T read(const u32 addr) {
     }
 
     if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
-        return hw::g2::aica::read<T>(addr);
+        return hw::aica::read<T>(addr);
     }
     
     if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
@@ -319,6 +320,32 @@ template<typename T>
 static void write_texture_memory(const u32 addr, const T data) {
     std::printf("Unmapped texture memory write%zu @ %08X = %0*llX\n", 8 * sizeof(T), addr, (int)(2 * sizeof(T)), (u64)data);
     exit(1);
+}
+
+template<>
+void write_texture_memory(const u32 addr, const u8 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        write<u8>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 3), data);
+    } else {
+        // First VRAM module
+        write<u8>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 3), data);
+    }
+}
+
+template<>
+void write_texture_memory(const u32 addr, const u16 data) {
+    const u32 offset = (addr - BASE_VRAM_64) >> 2;
+
+    if ((offset & 1) != 0) {
+        // Second VRAM module
+        write<u16>(BASE_VRAM_32 + (SIZE_VRAM_32 >> 1) + sizeof(u32) * (offset >> 1) + (addr & 2), data);
+    } else {
+        // First VRAM module
+        write<u16>(BASE_VRAM_32 + sizeof(u32) * (offset >> 1) + (addr & 2), data);
+    }
 }
 
 template<>
@@ -392,7 +419,7 @@ void write(const u32 addr, const T data) {
     }
 
     if ((addr & ~(SIZE_AICA - 1)) == BASE_AICA) {
-        return hw::g2::aica::write<T>(addr, data);
+        return hw::aica::write<T>(addr, data);
     }
 
     if ((addr & ~(SIZE_VRAM_32 - 1)) == BASE_VRAM_64) {
@@ -441,6 +468,9 @@ void block_write(const u32 addr, const u8 *bytes) {
             break;
         case BASE_TA_FIFO:
             hw::pvr::ta::fifo_block_write(bytes);
+            break;
+        case BASE_YUV_FIFO:
+            // TODO
             break;
         default:
             std::printf("Unmapped block write @ %08X = ", addr);
@@ -508,6 +538,16 @@ void remap_scratchpad(const bool enable_scratchpad, const bool indexed_mode) {
                 }
             }
         }
+    }
+}
+
+void copy(
+    const u32 start_addr,
+    const u32 end_addr,
+    const u32 copy_size
+) {
+    for (u32 i = 0; i < copy_size; i++) {
+        write<u8>(end_addr + i, read<u8>(start_addr + i));
     }
 }
 

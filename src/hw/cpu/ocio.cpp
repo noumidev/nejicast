@@ -24,8 +24,7 @@
 
 namespace hw::cpu::ocio {
 
-constexpr bool SILENT_TMU = true;
-constexpr bool SILENT_SCIF = true;
+constexpr bool SILENT_OCIO = true;
 
 enum : u32 {
     BASE_INSTRUCTION_CACHE_ADDRESS = 0x10000000,
@@ -183,11 +182,11 @@ template<>
 u8 read(const u32 addr) {
     switch (addr) {
         case IO_WTCSR:
-            std::puts("WTCSR read8");
+            if constexpr (!SILENT_OCIO) std::puts("WTCSR read8");
 
             return cpg::get_watchdog_timer_control();
         case IO_TSTR:
-            if constexpr (!SILENT_TMU) std::puts("TSTR read8");
+            if constexpr (!SILENT_OCIO) std::puts("TSTR read8");
 
             return tmu::get_timer_start();
         default:
@@ -200,47 +199,47 @@ template<>
 u16 read(const u32 addr) {
     switch (addr) {
         case IO_PMCR0:
-            std::puts("PMCR0 read16");
+            if constexpr (!SILENT_OCIO) std::puts("PMCR0 read16");
 
             return prfc::get_control(prfc::CHANNEL_0);
         case IO_RFCR:
-            std::puts("RFCR read16");
+            if constexpr (!SILENT_OCIO) std::puts("RFCR read16");
 
             return bsc::get_refresh_count();
         case IO_PDTRA:
-            std::puts("PDTRA read16");
+            if constexpr (!SILENT_OCIO) std::puts("PDTRA read16");
 
             return bsc::get_port_data(bsc::PORT_A);
         case IO_IPRA:
-            std::puts("IPRA read16");
+            if constexpr (!SILENT_OCIO) std::puts("IPRA read16");
 
             return intc::get_priority(intc::PRIORITY_A);
         case IO_IPRB:
-            std::puts("IPRB read16");
+            if constexpr (!SILENT_OCIO) std::puts("IPRB read16");
 
             return intc::get_priority(intc::PRIORITY_B);
         case IO_IPRC:
-            std::puts("IPRC read16");
+            if constexpr (!SILENT_OCIO) std::puts("IPRC read16");
 
             return intc::get_priority(intc::PRIORITY_C);
         case IO_TCR0:
-            if constexpr (!SILENT_TMU) std::puts("TCR0 read16");
+            if constexpr (!SILENT_OCIO) std::puts("TCR0 read16");
 
             return tmu::get_control(tmu::CHANNEL_0);
         case IO_TCR1:
-            if constexpr (!SILENT_TMU) std::puts("TCR1 read16");
+            if constexpr (!SILENT_OCIO) std::puts("TCR1 read16");
 
             return tmu::get_control(tmu::CHANNEL_1);
         case IO_TCR2:
-            if constexpr (!SILENT_TMU) std::puts("TCR2 read16");
+            if constexpr (!SILENT_OCIO) std::puts("TCR2 read16");
 
             return tmu::get_control(tmu::CHANNEL_2);
         case IO_SCFSR2:
-            if constexpr (!SILENT_SCIF) std::puts("SCFSR2 read16");
+            if constexpr (!SILENT_OCIO) std::puts("SCFSR2 read16");
 
             return scif::get_serial_status();
         case IO_SCLSR2:
-            if constexpr (!SILENT_SCIF) std::puts("SCLSR2 read16");
+            if constexpr (!SILENT_OCIO) std::puts("SCLSR2 read16");
 
             return scif::get_line_status();
         default:
@@ -255,62 +254,70 @@ template<>
 u32 read(const u32 addr) {
     switch (addr & 0xFF000000) {
         case BASE_INSTRUCTION_CACHE_ADDRESS:
-            std::printf("SH-4 instruction cache address read32 @ %08X\n", addr);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 instruction cache address read32 @ %08X\n", addr);
             return 0;
         case BASE_OPERAND_CACHE_TAG:
-            std::printf("SH-4 operand cache tag read32 @ %08X\n", addr);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 operand cache tag read32 @ %08X\n", addr);
             return 0;
         case BASE_UNIFIED_TLB_ADDRESS:
-            std::printf("SH-4 unified TLB address read32 @ %08X\n", addr);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 unified TLB address read32 @ %08X\n", addr);
             return 0;
         case BASE_UNIFIED_TLB_DATA:
-            std::printf("SH-4 unified TLB data read32 @ %08X\n", addr);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 unified TLB data read32 @ %08X\n", addr);
             return 0;
     }
 
     switch (addr) {
         case IO_MMUCR:
-            std::puts("MMUCR read32");
+            if constexpr (!SILENT_OCIO) std::puts("MMUCR read32");
 
             return ccn::get_mmu_control();
         case IO_CCR:
-            std::puts("CCR read32");
+            if constexpr (!SILENT_OCIO) std::puts("CCR read32");
 
             return ccn::get_cache_control();
         case IO_EXPEVT:
-            std::puts("EXPEVT read32");
+            if constexpr (!SILENT_OCIO) std::puts("EXPEVT read32");
 
             return ccn::get_exception_event();
         case IO_INTEVT:
-            std::puts("INTEVT read32");
+            if constexpr (!SILENT_OCIO) std::puts("INTEVT read32");
 
             return ccn::get_interrupt_event();
         case IO_CPUVER:
-            std::puts("CPUVER read32");
+            if constexpr (!SILENT_OCIO) std::puts("CPUVER read32");
 
             return CPUVER;
         case IO_PCTRA:
-            std::puts("PCTRA read32");
+            if constexpr (!SILENT_OCIO) std::puts("PCTRA read32");
 
             return bsc::get_port_control(bsc::PORT_A);
+        case IO_CHCR1:
+            if constexpr (!SILENT_OCIO) std::puts("CHCR1 read32");
+            
+            return dmac::get_control(dmac::CHANNEL_1);
         case IO_CHCR2:
-            std::puts("CHCR2 read32");
+            if constexpr (!SILENT_OCIO) std::puts("CHCR2 read32");
             
             return dmac::get_control(dmac::CHANNEL_2);
+        case IO_CHCR3:
+            if constexpr (!SILENT_OCIO) std::puts("CHCR3 read32");
+            
+            return dmac::get_control(dmac::CHANNEL_3);
         case IO_DMAOR:
-            std::puts("DMAOR read32");
+            if constexpr (!SILENT_OCIO) std::puts("DMAOR read32");
             
             return dmac::get_dma_operation();
         case IO_TCNT0:
-            if constexpr (!SILENT_TMU) std::puts("TCNT0 read32");
+            if constexpr (!SILENT_OCIO) std::puts("TCNT0 read32");
 
             return tmu::get_counter(tmu::CHANNEL_0);
         case IO_TCNT1:
-            if constexpr (!SILENT_TMU) std::puts("TCNT1 read32");
+            if constexpr (!SILENT_OCIO) std::puts("TCNT1 read32");
 
             return tmu::get_counter(tmu::CHANNEL_1);
         case IO_TCNT2:
-            if constexpr (!SILENT_TMU) std::puts("TCNT2 read32");
+            if constexpr (!SILENT_OCIO) std::puts("TCNT2 read32");
 
             return tmu::get_counter(tmu::CHANNEL_2);
         default:
@@ -333,7 +340,7 @@ void write(const u32 addr, const u8 data) {
         // TODO: handle 32-bit bus SDMR3 writes?
         const u16 sdram_mode = (data & 0x1FF8) >> 3;
 
-        std::printf("SDMR3 write = %03X\n", sdram_mode);
+        if constexpr (!SILENT_OCIO) std::printf("SDMR3 write = %03X\n", sdram_mode);
 
         bsc::set_sdram_mode_3(sdram_mode);
         return;
@@ -341,62 +348,62 @@ void write(const u32 addr, const u8 data) {
 
     switch (addr) {
         case IO_BASRA:
-            std::printf("BASRA write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BASRA write8 = %02X\n", data);
 
             ubc::set_asid(ubc::CHANNEL_A, data);
             break;
         case IO_BASRB:
-            std::printf("BASRB write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BASRB write8 = %02X\n", data);
 
             ubc::set_asid(ubc::CHANNEL_B, data);
             break;
         case IO_BAMRA:
-            std::printf("BAMRA write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BAMRA write8 = %02X\n", data);
 
             ubc::set_address_mask(ubc::CHANNEL_A, data);
             break;
         case IO_BAMRB:
-            std::printf("BAMRB write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BAMRB write8 = %02X\n", data);
 
             ubc::set_address_mask(ubc::CHANNEL_B, data);
             break;
         case IO_STBCR:
-            std::printf("STBCR write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("STBCR write8 = %02X\n", data);
 
             cpg::set_standby_control(data);
             break;
         case IO_STBCR2:
-            std::printf("STBCR2 write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("STBCR2 write8 = %02X\n", data);
 
             cpg::set_standby_control_2(data);
             break;
         case IO_RMONAR:
-            std::printf("RMONAR write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("RMONAR write8 = %02X\n", data);
 
             rtc::set_rtc_month_alarm(data);
             break;
         case IO_RCR1:
-            std::printf("RCR1 write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("RCR1 write8 = %02X\n", data);
 
             rtc::set_rtc_control_1(data);
             break;
         case IO_TOCR:
-            std::printf("TOCR write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TOCR write8 = %02X\n", data);
             
             tmu::set_timer_output_control(data);
             break;
         case IO_TSTR:
-            std::printf("TSTR write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TSTR write8 = %02X\n", data);
             
             tmu::set_timer_start(data);
             break;
         case IO_SCBRR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCBRR2 write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCBRR2 write8 = %02X\n", data);
 
             scif::set_bit_rate(data);
             break;
         case IO_SCFTDR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCFTDR2 write8 = %02X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCFTDR2 write8 = %02X\n", data);
 
             scif::set_transmit_fifo_data(data);
             break;
@@ -410,141 +417,141 @@ template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
         case IO_PMCR0:
-            std::printf("PMCR0 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PMCR0 write16 = %04X\n", data);
 
             prfc::set_control(prfc::CHANNEL_0, data);
             break;
         case IO_BBRA:
-            std::printf("BBRA write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BBRA write16 = %04X\n", data);
 
             ubc::set_bus_cycle(ubc::CHANNEL_A, data);
             break;
         case IO_BBRB:
-            std::printf("BBRB write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BBRB write16 = %04X\n", data);
 
             ubc::set_bus_cycle(ubc::CHANNEL_B, data);
             break;
         case IO_BRCR:
-            std::printf("BRCR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BRCR write16 = %04X\n", data);
             
             ubc::set_break_control(data);
             break;
         case IO_BCR2:
-            std::printf("BCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BCR2 write16 = %04X\n", data);
             
             bsc::set_bus_control_2(data);
             break;
         case IO_PCR:
-            std::printf("PCR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PCR write16 = %04X\n", data);
             break;
         case IO_RTCSR:
-            std::printf("RTCSR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("RTCSR write16 = %04X\n", data);
 
             bsc::set_refresh_timer_control(data);
             break;
         case IO_RTCOR:
-            std::printf("RTCOR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("RTCOR write16 = %04X\n", data);
 
             bsc::set_refresh_time_constant(data);
             break;
         case IO_RFCR:
-            std::printf("RFCR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("RFCR write16 = %04X\n", data);
 
             bsc::set_refresh_count(data);
             break;
         case IO_PDTRA:
-            std::printf("PDTRA write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PDTRA write16 = %04X\n", data);
             
             bsc::set_port_data(bsc::PORT_A, data);
             break;
         case IO_PDTRB:
-            std::printf("PDTRB write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PDTRB write16 = %04X\n", data);
             
             bsc::set_port_data(bsc::PORT_A, data);
             break;
         case IO_GPIOIC:
-            std::printf("GPIOIC write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("GPIOIC write16 = %04X\n", data);
             
             bsc::set_gpio_interrupt_control(data);
             break;
         case IO_WTCNT:
-            std::printf("WTCNT write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("WTCNT write16 = %04X\n", data);
 
             cpg::set_watchdog_timer_counter(data);
             break;
         case IO_WTCSR:
-            std::printf("WTCSR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("WTCSR write16 = %04X\n", data);
 
             cpg::set_watchdog_timer_control(data);
             break;
         case IO_ICR:
-            std::printf("ICR write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("ICR write16 = %04X\n", data);
             
             intc::set_interrupt_control(data);
             break;
         case IO_IPRA:
-            std::printf("IPRA write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("IPRA write16 = %04X\n", data);
             
             intc::set_priority(intc::PRIORITY_A, data);
             break;
         case IO_IPRB:
-            std::printf("IPRB write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("IPRB write16 = %04X\n", data);
             
             intc::set_priority(intc::PRIORITY_B, data);
             break;
         case IO_IPRC:
-            std::printf("IPRC write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("IPRC write16 = %04X\n", data);
             
             intc::set_priority(intc::PRIORITY_C, data);
             break;
         case IO_TCR0:
-            if constexpr (!SILENT_TMU) std::printf("TCR0 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCR0 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_0, data);
             break;
         case IO_TCR1:
-            if constexpr (!SILENT_TMU) std::printf("TCR1 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCR1 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_1, data);
             break;
         case IO_TCR2:
-            if constexpr (!SILENT_TMU) std::printf("TCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCR2 write16 = %04X\n", data);
             
             tmu::set_control(tmu::CHANNEL_2, data);
             break;
         case IO_SCSMR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCSMR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCSMR2 write16 = %04X\n", data);
 
             scif::set_serial_mode(data);
             break;
         case IO_SCSCR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCSCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCSCR2 write16 = %04X\n", data);
 
             scif::set_serial_control(data);
             break;
         case IO_SCFSR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCFSR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCFSR2 write16 = %04X\n", data);
 
             scif::set_serial_status(data);
             break;
         case IO_SCFCR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCFCR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCFCR2 write16 = %04X\n", data);
 
             scif::set_fifo_control(data);
             break;
         case IO_SCSPTR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCSPTR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCSPTR2 write16 = %04X\n", data);
 
             scif::set_serial_port(data);
             break;
         case IO_SCLSR2:
-            if constexpr (!SILENT_SCIF) std::printf("SCLSR2 write16 = %04X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SCLSR2 write16 = %04X\n", data);
 
             scif::set_line_status(data);
             break;
         default:
             std::printf("Unmapped SH-4 P4 write16 @ %08X = %04X\n", addr, data);
-            exit(1);
+            break;
     }
 }
 
@@ -557,223 +564,223 @@ void write(const u32 addr, const u32 data) {
 
         ctx.store_queues[is_second_queue].bytes[select_longword] = data;
 
-        // std::printf("SQ%d[%zu] write32 = %08X\n", is_second_queue, select_longword, data);
+        // if constexpr (!SILENT_OCIO) std::printf("SQ%d[%zu] write32 = %08X\n", is_second_queue, select_longword, data);
         return;
     }
 
     switch (addr & 0xFF000000) {
         case BASE_INSTRUCTION_CACHE_ADDRESS:
-            std::printf("SH-4 instruction cache address write32 @ %08X = %08X\n", addr, data);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 instruction cache address write32 @ %08X = %08X\n", addr, data);
             return;
         case BASE_OPERAND_CACHE_TAG:
-            std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 operand cache tag write32 @ %08X = %08X\n", addr, data);
             return;
         case BASE_UNIFIED_TLB_ADDRESS:
-            std::printf("SH-4 unified TLB address write32 @ %08X = %08X\n", addr, data);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 unified TLB address write32 @ %08X = %08X\n", addr, data);
             return;
         case BASE_UNIFIED_TLB_DATA:
-            std::printf("SH-4 unified TLB data write32 @ %08X = %08X\n", addr, data);
+            if constexpr (!SILENT_OCIO) std::printf("SH-4 unified TLB data write32 @ %08X = %08X\n", addr, data);
             return;
     }
 
     switch (addr) {
         case IO_PTEH:
-            std::printf("PTEH write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PTEH write32 = %08X\n", data);
 
             ccn::set_page_table_entry_hi(data);
             break;
         case IO_PTEL:
-            std::printf("PTEL write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PTEL write32 = %08X\n", data);
 
             ccn::set_page_table_entry_lo(data);
             break;
         case IO_TTB:
-            std::printf("TTB write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TTB write32 = %08X\n", data);
             
             ccn::set_translation_table_base(data);
             break;
         case IO_TEA:
-            std::printf("TEA write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TEA write32 = %08X\n", data);
             
             ccn::set_tlb_exception_address(data);
             break;
         case IO_MMUCR:
-            std::printf("MMUCR write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("MMUCR write32 = %08X\n", data);
 
             ccn::set_mmu_control(data);
             break;
         case IO_CCR:
-            std::printf("CCR write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("CCR write32 = %08X\n", data);
             
             ccn::set_cache_control(data);
             break;
         case IO_TRAPA:
-            std::printf("TRAPA write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TRAPA write32 = %08X\n", data);
             
             ccn::set_trapa_exception(data);
             break;
         case IO_EXPEVT:
-            std::printf("EXPEVT write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("EXPEVT write32 = %08X\n", data);
             
             ccn::set_exception_event(data);
             break;
         case IO_INTEVT:
-            std::printf("INTEVT write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("INTEVT write32 = %08X\n", data);
             
             ccn::set_interrupt_event(data);
             break;
         case IO_PTEA:
-            std::printf("PTEA write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PTEA write32 = %08X\n", data);
             
             ccn::set_page_table_assistance(data);
             break;
         case IO_QACR1:
-            // std::printf("QACR1 write32 = %08X\n", data);
+            // if constexpr (!SILENT_OCIO) std::printf("QACR1 write32 = %08X\n", data);
             
             ccn::set_queue_address_control(ccn::STORE_QUEUE_1, data);
             break;
         case IO_QACR2:
-            // std::printf("QACR2 write32 = %08X\n", data);
+            // if constexpr (!SILENT_OCIO) std::printf("QACR2 write32 = %08X\n", data);
             
             ccn::set_queue_address_control(ccn::STORE_QUEUE_2, data);
             break;
         case IO_BARA:
-            std::printf("BARA write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BARA write32 = %08X\n", data);
             
             ubc::set_address(ubc::CHANNEL_A, data);
             break;
         case IO_BARB:
-            std::printf("BARB write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BARB write32 = %08X\n", data);
             
             ubc::set_address(ubc::CHANNEL_B, data);
             break;
         case IO_BCR1:
-            std::printf("BCR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("BCR1 write32 = %08X\n", data);
             
             bsc::set_bus_control_1(data);
             break;
         case IO_WCR1:
-            std::printf("WCR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("WCR1 write32 = %08X\n", data);
             
             bsc::set_wait_control_1(data);
             break;
         case IO_WCR2:
-            std::printf("WCR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("WCR2 write32 = %08X\n", data);
             
             bsc::set_wait_control_2(data);
             break;
         case IO_WCR3:
-            std::printf("WCR3 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("WCR3 write32 = %08X\n", data);
             
             bsc::set_wait_control_3(data);
             break;
         case IO_MCR:
-            std::printf("MCR write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("MCR write32 = %08X\n", data);
             
             bsc::set_memory_control(data);
             break;
         case IO_PCTRA:
-            std::printf("PCTRA write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PCTRA write32 = %08X\n", data);
             
             bsc::set_port_control(bsc::PORT_A, data);
             break;
         case IO_PCTRB:
-            std::printf("PCTRB write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("PCTRB write32 = %08X\n", data);
             
             bsc::set_port_control(bsc::PORT_B, data);
             break;
         case IO_SAR1:
-            std::printf("SAR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SAR1 write32 = %08X\n", data);
             
             dmac::set_source_address(dmac::CHANNEL_1, data);
             break;
         case IO_DAR1:
-            std::printf("DAR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DAR1 write32 = %08X\n", data);
             
             dmac::set_destination_address(dmac::CHANNEL_1, data);
             break;
         case IO_DMATCR1:
-            std::printf("DMATCR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DMATCR1 write32 = %08X\n", data);
             
             dmac::set_transfer_count(dmac::CHANNEL_1, data);
             break;
         case IO_CHCR1:
-            std::printf("CHCR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("CHCR1 write32 = %08X\n", data);
             
             dmac::set_control(dmac::CHANNEL_1, data);
             break;
         case IO_SAR2:
-            std::printf("SAR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SAR2 write32 = %08X\n", data);
             
             dmac::set_source_address(dmac::CHANNEL_2, data);
             break;
         case IO_DAR2:
-            std::printf("DAR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DAR2 write32 = %08X\n", data);
             
             dmac::set_destination_address(dmac::CHANNEL_2, data);
             break;
         case IO_DMATCR2:
-            std::printf("DMATCR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DMATCR2 write32 = %08X\n", data);
             
             dmac::set_transfer_count(dmac::CHANNEL_2, data);
             break;
         case IO_CHCR2:
-            std::printf("CHCR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("CHCR2 write32 = %08X\n", data);
             
             dmac::set_control(dmac::CHANNEL_2, data);
             break;
         case IO_SAR3:
-            std::printf("SAR3 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("SAR3 write32 = %08X\n", data);
             
             dmac::set_source_address(dmac::CHANNEL_3, data);
             break;
         case IO_DAR3:
-            std::printf("DAR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DAR2 write32 = %08X\n", data);
             
             dmac::set_destination_address(dmac::CHANNEL_3, data);
             break;
         case IO_DMATCR3:
-            std::printf("DMATCR3 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DMATCR3 write32 = %08X\n", data);
             
             dmac::set_transfer_count(dmac::CHANNEL_3, data);
             break;
         case IO_CHCR3:
-            std::printf("CHCR3 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("CHCR3 write32 = %08X\n", data);
             
             dmac::set_control(dmac::CHANNEL_3, data);
             break;
         case IO_DMAOR:
-            std::printf("DMAOR write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("DMAOR write32 = %08X\n", data);
             
             dmac::set_dma_operation(data);
             break;
         case IO_TCOR0:
-            if constexpr (!SILENT_TMU) std::printf("TCOR0 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCOR0 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_0, data);
             break;
         case IO_TCNT0:
-            if constexpr (!SILENT_TMU) std::printf("TCNT0 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCNT0 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_0, data);
             break;
         case IO_TCOR1:
-            if constexpr (!SILENT_TMU) std::printf("TCOR1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCOR1 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_1, data);
             break;
         case IO_TCNT1:
-            if constexpr (!SILENT_TMU) std::printf("TCNT1 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCNT1 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_1, data);
             break;
         case IO_TCOR2:
-            if constexpr (!SILENT_TMU) std::printf("TCOR2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCOR2 write32 = %08X\n", data);
             
             tmu::set_constant(tmu::CHANNEL_2, data);
             break;
         case IO_TCNT2:
-            if constexpr (!SILENT_TMU) std::printf("TCNT2 write32 = %08X\n", data);
+            if constexpr (!SILENT_OCIO) std::printf("TCNT2 write32 = %08X\n", data);
             
             tmu::set_counter(tmu::CHANNEL_2, data);
             break;
@@ -796,7 +803,7 @@ void write(const u32 addr, const u64 data) {
             sizeof(data)
         );
 
-        // std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
+        // if constexpr (!SILENT_OCIO) std::printf("SQ%d[%zu] write64 = %016llX\n", is_second_queue, select_longword, data);
         return;
     }
 
@@ -812,7 +819,7 @@ void flush_store_queue(const u32 addr) {
 
     const bool is_second_queue = (addr >> 5) != 0;
 
-    // std::printf("Flushing SQ%d\n", is_second_queue);
+    // if constexpr (!SILENT_OCIO) std::printf("Flushing SQ%d\n", is_second_queue);
 
     hw::holly::bus::block_write(
     (addr & 0x03FFFFE0) | (ccn::get_store_queue_area(is_second_queue) << 26),

@@ -21,6 +21,9 @@ T read(const u32 addr);
 template<typename T>
 void write(const u32 addr, const T data);
 
+u32 get_framebuffer_addr();
+u32 get_stride();
+
 void begin_display_list();
 
 void begin_vertex_strip(

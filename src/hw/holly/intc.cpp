@@ -56,6 +56,8 @@ enum {
 #define SB_G2DTNRM ctx.g2_dma.normal_mask
 #define SB_G2DTEXT ctx.g2_dma.external_mask
 
+constexpr bool SILENT_INTC = true;
+
 struct {
     u32 normal_flags;
     u32 external_flags;
@@ -128,51 +130,51 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_ISTNRM:
-            // std::puts("SB_ISTNRM read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_ISTNRM read32");
 
             return SB_ISTNRM;
         case IO_ISTEXT:
-            std::puts("SB_ISTEXT read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_ISTEXT read32");
 
             return SB_ISTEXT;
         case IO_ISTERR:
-            std::puts("SB_ISTERR read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_ISTERR read32");
 
             return SB_ISTERR;
         case IO_IML2NRM:
-            std::puts("SB_IML2NRM read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML2NRM read32");
 
             return SB_IML2NRM;
         case IO_IML2EXT:
-            std::puts("SB_IML2EXT read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML2EXT read32");
 
             return SB_IML2EXT;
         case IO_IML2ERR:
-            std::puts("SB_IML2ERR read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML2ERR read32");
 
             return SB_IML2ERR;
         case IO_IML4NRM:
-            std::puts("SB_IML4NRM read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML4NRM read32");
 
             return SB_IML4NRM;
         case IO_IML4EXT:
-            std::puts("SB_IML4EXT read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML4EXT read32");
 
             return SB_IML4EXT;
         case IO_IML4ERR:
-            std::puts("SB_IML4ERR read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML4ERR read32");
 
             return SB_IML4ERR;
         case IO_IML6NRM:
-            std::puts("SB_IML6NRM read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML6NRM read32");
 
             return SB_IML6NRM;
         case IO_IML6EXT:
-            std::puts("SB_IML6EXT read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML6EXT read32");
 
             return SB_IML6EXT;
         case IO_IML6ERR:
-            std::puts("SB_IML6ERR read32");
+            if constexpr (!SILENT_INTC) std::puts("SB_IML6ERR read32");
 
             return SB_IML6ERR;
         default:
@@ -195,82 +197,82 @@ template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_ISTNRM:
-            std::printf("SB_ISTNRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_ISTNRM write32 = %08X\n", data);
 
             SB_ISTNRM &= ~data;
             break;
         case IO_ISTEXT:
-            std::printf("SB_ISTEXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_ISTEXT write32 = %08X\n", data);
 
             SB_ISTEXT &= ~data;
             break;
         case IO_ISTERR:
-            std::printf("SB_ISTERR write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_ISTERR write32 = %08X\n", data);
 
             SB_ISTERR &= ~data;
             break;
         case IO_IML2NRM:
-            std::printf("SB_IML2NRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML2NRM write32 = %08X\n", data);
 
             SB_IML2NRM = data;
             break;
         case IO_IML2EXT:
-            std::printf("SB_IML2EXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML2EXT write32 = %08X\n", data);
 
             SB_IML2EXT = data;
             break;
         case IO_IML2ERR:
-            std::printf("SB_IML2ERR write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML2ERR write32 = %08X\n", data);
 
             SB_IML2ERR = data;
             break;
         case IO_IML4NRM:
-            std::printf("SB_IML4NRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML4NRM write32 = %08X\n", data);
 
             SB_IML4NRM = data;
             break;
         case IO_IML4EXT:
-            std::printf("SB_IML4EXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML4EXT write32 = %08X\n", data);
 
             SB_IML4EXT = data;
             break;
         case IO_IML4ERR:
-            std::printf("SB_IML4ERR write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML4ERR write32 = %08X\n", data);
 
             SB_IML4ERR = data;
             break;
         case IO_IML6NRM:
-            std::printf("SB_IML6NRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML6NRM write32 = %08X\n", data);
 
             SB_IML6NRM = data;
             break;
         case IO_IML6EXT:
-            std::printf("SB_IML6EXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML6EXT write32 = %08X\n", data);
 
             SB_IML6EXT = data;
             break;
         case IO_IML6ERR:
-            std::printf("SB_IML6ERR write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_IML6ERR write32 = %08X\n", data);
 
             SB_IML6ERR = data;
             break;
         case IO_PDTNRM:
-            std::printf("SB_PDTNRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_PDTNRM write32 = %08X\n", data);
 
             SB_PDTNRM = data;
             break;
         case IO_PDTEXT:
-            std::printf("SB_PDTEXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_PDTEXT write32 = %08X\n", data);
 
             SB_PDTEXT = data;
             break;
         case IO_G2DTNRM:
-            std::printf("SB_G2DTNRM write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_G2DTNRM write32 = %08X\n", data);
 
             SB_G2DTNRM = data;
             break;
         case IO_G2DTEXT:
-            std::printf("SB_G2DTEXT write32 = %08X\n", data);
+            if constexpr (!SILENT_INTC) std::printf("SB_G2DTEXT write32 = %08X\n", data);
 
             SB_G2DTEXT = data;
             break;
@@ -288,7 +290,7 @@ template void write(u32, u64);
 
 void assert_normal_interrupt(const int interrupt_number) {
     if ((SB_ISTNRM & (1 << interrupt_number)) == 0) {
-        std::printf("Asserting normal interrupt %d\n", interrupt_number);
+        if constexpr (!SILENT_INTC) std::printf("Asserting normal interrupt %d\n", interrupt_number);
 
         SB_ISTNRM |= 1 << interrupt_number;
 
@@ -298,7 +300,7 @@ void assert_normal_interrupt(const int interrupt_number) {
 
 void assert_external_interrupt(const int interrupt_number) {
     if ((SB_ISTEXT & (1 << interrupt_number)) == 0) {
-        std::printf("Asserting external interrupt %d\n", interrupt_number);
+        if constexpr (!SILENT_INTC) std::printf("Asserting external interrupt %d\n", interrupt_number);
 
         SB_ISTEXT |= 1 << interrupt_number;
 
@@ -308,7 +310,7 @@ void assert_external_interrupt(const int interrupt_number) {
 
 void clear_external_interrupt(const int interrupt_number) {
     if ((SB_ISTEXT & (1 << interrupt_number)) != 0) {
-        std::printf("Clearing external interrupt %d\n", interrupt_number);
+        if constexpr (!SILENT_INTC) std::printf("Clearing external interrupt %d\n", interrupt_number);
 
         SB_ISTEXT &= ~(1 << interrupt_number);
     }

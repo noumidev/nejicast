@@ -20,6 +20,8 @@
 
 namespace hw::g1 {
 
+constexpr bool SILENT_G1 = true;
+
 constexpr usize BOOT_ROM_SIZE = 0x200000;
 
 enum : u32 {
@@ -215,23 +217,23 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_GDEN:
-            std::puts("SB_GDEN read32");
+            if constexpr (!SILENT_G1) std::puts("SB_GDEN read32");
 
             return SB_GDEN;
         case IO_GDST:
-            // std::puts("SB_GDST read32");
+            // if constexpr (!SILENT_G1) std::puts("SB_GDST read32");
 
             return SB_GDST;
         case IO_GDRPROS:
-            std::puts("SB_GDRPROS read32");
+            if constexpr (!SILENT_G1) std::puts("SB_GDRPROS read32");
 
             return ROM_PROTECTION_STATUS_PASSED;
         case IO_GDSTARD:
-            std::puts("SB_GDSTARD read32");
+            if constexpr (!SILENT_G1) std::puts("SB_GDSTARD read32");
 
             return SB_GDSTARD;
         case IO_GDLEND:
-            std::puts("SB_GDLEND read32");
+            if constexpr (!SILENT_G1) std::puts("SB_GDLEND read32");
 
             return SB_GDLEND;
         default:
@@ -254,7 +256,7 @@ template<>
 void write(const u32 addr, const u16 data) {
     switch (addr) {
         case IO_G1RRC:
-            std::printf("SB_G1RRC write16 = %04X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1RRC write16 = %04X\n", data);
 
             SB_G1RRC.raw = data;
             break;
@@ -268,27 +270,27 @@ template<>
 void write(const u32 addr, const u32 data) {
     switch (addr) {
         case IO_GDSTAR:
-            std::printf("SB_GDSTAR write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDSTAR write32 = %08X\n", data);
 
             SB_GDSTAR = data;
             break;
         case IO_GDLEN:
-            std::printf("SB_GDLEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDLEN write32 = %08X\n", data);
 
             SB_GDLEN = data;
             break;
         case IO_GDDIR:
-            std::printf("SB_GDDIR write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDDIR write32 = %08X\n", data);
 
             SB_GDDIR = (data & 1) != 0;
             break;
         case IO_GDEN:
-            std::printf("SB_GDEN write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDEN write32 = %08X\n", data);
 
             SB_GDEN = (data & 1) != 0;
             break;
         case IO_GDST:
-            std::printf("SB_GDST write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDST write32 = %08X\n", data);
 
             SB_GDST = (data & 1) != 0;
 
@@ -297,54 +299,54 @@ void write(const u32 addr, const u32 data) {
             }
             break;
         case IO_G1RWC:
-            std::printf("SB_G1RWC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1RWC write32 = %08X\n", data);
 
             SB_G1RWC.raw = data;
             break;
         case IO_G1FRC:
-            std::printf("SB_G1FRC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1FRC write32 = %08X\n", data);
 
             SB_G1FRC.raw = data;
             break;
         case IO_G1FWC:
-            std::printf("SB_G1FWC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1FWC write32 = %08X\n", data);
 
             SB_G1FWC.raw = data;
             break;
         case IO_G1CRC:
-            std::printf("SB_G1CRC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1CRC write32 = %08X\n", data);
 
             SB_G1CRC.raw = data;
             break;
         case IO_G1CWC:
-            std::printf("SB_G1CWC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1CWC write32 = %08X\n", data);
 
             SB_G1CWC.raw = data;
             break;
         case IO_G1GDRC:
-            std::printf("SB_G1GDRC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1GDRC write32 = %08X\n", data);
 
             SB_G1GDRC.raw = data;
             break;
         case IO_G1GDWC:
-            std::printf("SB_G1GDWC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1GDWC write32 = %08X\n", data);
 
             SB_G1GDWC.raw = data;
             break;
         case IO_G1CRDYC:
-            std::printf("SB_G1CRDYC write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_G1CRDYC write32 = %08X\n", data);
 
             SB_G1CRDYC = (data & 1) != 0;
             break;
         case IO_GDAPRO:
-            std::printf("SB_GDAPRO write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDAPRO write32 = %08X\n", data);
 
             if ((data & ~0xFFFF) == 0x88430000) {
                 SB_GDAPRO.raw = (u16)data;
             }
             break;
         case IO_GDRPRO:
-            std::printf("SB_GDRPRO write32 = %08X\n", data);
+            if constexpr (!SILENT_G1) std::printf("SB_GDRPRO write32 = %08X\n", data);
 
             SB_GDRPRO = data;
             break;

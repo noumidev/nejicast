@@ -30,6 +30,9 @@ set(SOURCES
     src/common/cdi.cpp
     src/common/elf.cpp
     src/common/file.cpp
+    src/hw/aica/aica.cpp
+    src/hw/aica/arm.cpp
+    src/hw/aica/bus.cpp
     src/hw/cpu/bsc.cpp
     src/hw/cpu/ccn.cpp
     src/hw/cpu/cpg.cpp
@@ -45,7 +48,6 @@ set(SOURCES
     src/hw/g1/g1.cpp
     src/hw/g1/flash.cpp
     src/hw/g1/gdrom.cpp
-    src/hw/g2/aica.cpp
     src/hw/g2/g2.cpp
     src/hw/g2/modem.cpp
     src/hw/g2/rtc.cpp
@@ -69,6 +71,9 @@ set(HEADERS
     include/common/elf.hpp
     include/common/file.hpp
     include/common/types.hpp
+    include/hw/aica/aica.hpp
+    include/hw/aica/arm.hpp
+    include/hw/aica/bus.hpp
     include/hw/cpu/bsc.hpp
     include/hw/cpu/ccn.hpp
     include/hw/cpu/cpg.hpp
@@ -84,7 +89,6 @@ set(HEADERS
     include/hw/g1/g1.hpp
     include/hw/g1/flash.hpp
     include/hw/g1/gdrom.hpp
-    include/hw/g2/aica.hpp
     include/hw/g2/g2.hpp
     include/hw/g2/modem.hpp
     include/hw/g2/rtc.hpp

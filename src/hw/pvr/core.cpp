@@ -440,8 +440,8 @@ static void draw_background() {
         Vertex vertex{
             .x = to_f32(read_vram_linear<u32>(vertex_addr)),
             .y = to_f32(read_vram_linear<u32>(vertex_addr + 1 * sizeof(u32))),
-            // .z = to_f32(read_texture_memory<u32>(vertex_addr + 2 * sizeof(u32))),
-            .z = ISP_BACKGND_D,
+            .z = to_f32(read_vram_linear<u32>(vertex_addr + 2 * sizeof(u32))),
+            // .z = ISP_BACKGND_D,
             .color.raw = read_vram_linear<u32>(vertex_addr + 3 * sizeof(u32))
         };
 
@@ -450,9 +450,9 @@ static void draw_background() {
         if (i == 2) {
             background_strip.vertices.emplace_back(
                 Vertex{
-                    .x = background_strip.vertices[1].x,
-                    .y = background_strip.vertices[2].y,
-                    .z = background_strip.vertices[0].z,
+                    .x = to_f32(from_f32(background_strip.vertices[0].x) ^ from_f32(background_strip.vertices[1].x) ^ from_f32(background_strip.vertices[2].x)),
+                    .y = to_f32(from_f32(background_strip.vertices[0].y) ^ from_f32(background_strip.vertices[1].y) ^ from_f32(background_strip.vertices[2].y)),
+                    .z = to_f32(from_f32(background_strip.vertices[0].z) ^ from_f32(background_strip.vertices[1].z) ^ from_f32(background_strip.vertices[2].z)),
                     .color = background_strip.vertices[0].color
                 }
             );
@@ -496,7 +496,9 @@ static void start_render() {
     const auto& display_list = ctx.display_lists.front();
 
     for (const auto& strip : display_list.strips) {
-        assert(strip.vertices.size() > 2);
+        if (strip.vertices.size() < 3) {
+            continue;
+        }
 
         pvr::set_isp_instruction(strip.isp_instr);
         pvr::set_tsp_instruction(strip.tsp_instr);
@@ -545,43 +547,43 @@ template<>
 u32 read(const u32 addr) {
     switch (addr) {
         case IO_ID:
-            std::puts("ID read32");
+            if constexpr (!SILENT_CORE) std::puts("ID read32");
 
             return CORE_ID;
         case IO_REVISION:
-            std::puts("REVISION read32");
+            if constexpr (!SILENT_CORE) std::puts("REVISION read32");
 
             return CORE_REVISION;
         case IO_VO_BORDER_COLOR:
-            std::puts("VO_BORDER_COLOR read32");
+            if constexpr (!SILENT_CORE) std::puts("VO_BORDER_COLOR read32");
 
             return VO_BORDER_COLOR.raw;
         case IO_FB_R_CTRL:
-            std::puts("FB_R_CTRL read32");
+            if constexpr (!SILENT_CORE) std::puts("FB_R_CTRL read32");
 
             return FB_R_CTRL.raw;
         case IO_SPG_CONTROL:
-            std::puts("SPG_CONTROL read32");
+            if constexpr (!SILENT_CORE) std::puts("SPG_CONTROL read32");
 
             return spg::get_control();
         case IO_SPG_VBLANK:
-            std::puts("SPG_VBLANK read32");
+            if constexpr (!SILENT_CORE) std::puts("SPG_VBLANK read32");
 
             return spg::get_vblank_control();
         case IO_VO_CONTROL:
-            std::puts("VO_CONTROL read32");
+            if constexpr (!SILENT_CORE) std::puts("VO_CONTROL read32");
 
             return VO_CONTROL.raw;
         case IO_SPG_STATUS:
-            // std::puts("SPG_STATUS read32");
+            // if constexpr (!SILENT_CORE) std::puts("SPG_STATUS read32");
 
             return spg::get_status();
         case IO_TA_ITP_CURRENT:
-            std::puts("TA_ITP_CURRENT read32");
+            if constexpr (!SILENT_CORE) std::puts("TA_ITP_CURRENT read32");
 
             return ta::get_itp_current_address();
         case IO_TA_LIST_INIT:
-            std::puts("TA_LIST_INIT read32");
+            if constexpr (!SILENT_CORE) std::puts("TA_LIST_INIT read32");
 
             // Always returns 0?
             return 0;
@@ -608,286 +610,286 @@ void write(const u32 addr, const u32 data) {
 
         ctx.fog_table[idx] = data;
 
-        std::printf("FOG_TABLE[%03u] write32 = %08X\n", idx, data);
+        if constexpr (!SILENT_CORE) std::printf("FOG_TABLE[%03u] write32 = %08X\n", idx, data);
         return;
     }
 
     switch (addr) {
         case IO_ID: // ??
-            std::printf("ID write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("ID write32 = %08X\n", data);
             break;
         case IO_SOFTRESET:
-            std::printf("SOFTRESET write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SOFTRESET write32 = %08X\n", data);
             break;
         case IO_STARTRENDER:
-            std::printf("STARTRENDER write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("STARTRENDER write32 = %08X\n", data);
             
             start_render();
             break;
         case IO_PARAM_BASE:
-            std::printf("PARAM_BASE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("PARAM_BASE write32 = %08X\n", data);
         
             PARAM_BASE = data;
             break;
         case IO_REGION_BASE:
-            std::printf("REGION_BASE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("REGION_BASE write32 = %08X\n", data);
         
             REGION_BASE = data;
             break;
         case IO_SPAN_SORT_CFG:
-            std::printf("SPAN_SORT_CFG write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPAN_SORT_CFG write32 = %08X\n", data);
         
             SPAN_SORT_CFG.raw = data;
             break;
         case IO_VO_BORDER_COLOR:
-            std::printf("VO_BORDER_COLOR write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("VO_BORDER_COLOR write32 = %08X\n", data);
         
             VO_BORDER_COLOR.raw = data;
             break;
         case IO_FB_R_CTRL:
-            std::printf("FB_R_CTRL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_R_CTRL write32 = %08X\n", data);
         
             FB_R_CTRL.raw = data;
             break;
         case IO_FB_W_CTRL:
-            std::printf("FB_W_CTRL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_W_CTRL write32 = %08X\n", data);
         
             FB_W_CTRL.raw = data;
             break;
         case IO_FB_W_LINESTRIDE:
-            std::printf("FB_W_LINESTRIDE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_W_LINESTRIDE write32 = %08X\n", data);
         
             FB_W_LINESTRIDE = data;
             break;
         case IO_FB_R_SOF1:
-            std::printf("FB_R_SOF1 write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_R_SOF1 write32 = %08X\n", data);
         
             FB_R_SOF1 = data;
             break;
         case IO_FB_R_SOF2:
-            std::printf("FB_R_SOF2 write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_R_SOF2 write32 = %08X\n", data);
         
             FB_R_SOF2 = data;
             break;
         case IO_FB_R_SIZE:
-            std::printf("FB_R_SIZE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_R_SIZE write32 = %08X\n", data);
         
             FB_R_SIZE.raw = data;
             break;
         case IO_FB_W_SOF1:
-            std::printf("FB_W_SOF1 write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_W_SOF1 write32 = %08X\n", data);
         
             FB_W_SOF1 = data;
             break;
         case IO_FB_W_SOF2:
-            std::printf("FB_W_SOF2 write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_W_SOF2 write32 = %08X\n", data);
         
             FB_W_SOF2 = data;
             break;
         case IO_FB_X_CLIP:
-            std::printf("FB_X_CLIP write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_X_CLIP write32 = %08X\n", data);
         
             FB_X_CLIP.raw = data;
             break;
         case IO_FB_Y_CLIP:
-            std::printf("FB_Y_CLIP write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_Y_CLIP write32 = %08X\n", data);
         
             FB_Y_CLIP.raw = data;
             break;
         case IO_FPU_SHAD_SCALE:
-            std::printf("FPU_SHAD_SCALE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FPU_SHAD_SCALE write32 = %08X\n", data);
         
             FPU_SHAD_SCALE.raw = data;
             break;
         case IO_FPU_CULL_VAL:
-            std::printf("FPU_CULL_VAL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FPU_CULL_VAL write32 = %08X\n", data);
         
             FPU_CULL_VAL = to_f32(data);
             break;
         case IO_FPU_PARAM_CFG:
-            std::printf("FPU_PARAM_CFG write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FPU_PARAM_CFG write32 = %08X\n", data);
         
             FPU_PARAM_CFG.raw = data;
             break;
         case IO_HALF_OFFSET:
-            std::printf("HALF_OFFSET write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("HALF_OFFSET write32 = %08X\n", data);
         
             HALF_OFFSET.raw = data;
             break;
         case IO_FPU_PERP_VAL:
-            std::printf("FPU_PERP_VAL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FPU_PERP_VAL write32 = %08X\n", data);
         
             FPU_PERP_VAL = to_f32(data);
             break;
         case IO_ISP_BACKGND_D:
-            std::printf("ISP_BACKGND_D write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("ISP_BACKGND_D write32 = %08X\n", data);
         
             ISP_BACKGND_D = to_f32(data);
             break;
         case IO_ISP_BACKGND_T:
-            std::printf("ISP_BACKGND_T write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("ISP_BACKGND_T write32 = %08X\n", data);
         
             ISP_BACKGND_T.raw = data;
             break;
         case IO_ISP_FEED_CFG:
-            std::printf("ISP_FEED_CFG write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("ISP_FEED_CFG write32 = %08X\n", data);
         
             ISP_FEED_CFG.raw = data;
             break;
         case IO_SDRAM_REFRESH:
-            std::printf("SDRAM_REFRESH write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SDRAM_REFRESH write32 = %08X\n", data);
         
             SDRAM_REFRESH = data;
             break;
         case IO_SDRAM_CFG:
-            std::printf("SDRAM_CFG write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SDRAM_CFG write32 = %08X\n", data);
         
             SDRAM_CFG = data;
             break;
         case IO_FOG_COL_RAM:
-            std::printf("FOG_COL_RAM write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FOG_COL_RAM write32 = %08X\n", data);
         
             FOG_COL_RAM.raw = data;
             break;
         case IO_FOG_COL_VERT:
-            std::printf("FOG_COL_VERT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FOG_COL_VERT write32 = %08X\n", data);
         
             FOG_COL_VERT.raw = data;
             break;
         case IO_FOG_DENSITY:
-            std::printf("FOG_DENSITY write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FOG_DENSITY write32 = %08X\n", data);
         
             FOG_DENSITY.raw = data;
             break;
         case IO_FOG_CLAMP_MAX:
-            std::printf("FOG_CLAMP_MAX write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FOG_CLAMP_MAX write32 = %08X\n", data);
         
             FOG_CLAMP_MAX.raw = data;
             break;
         case IO_FOG_CLAMP_MIN:
-            std::printf("FOG_CLAMP_MIN write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FOG_CLAMP_MIN write32 = %08X\n", data);
         
             FOG_CLAMP_MIN.raw = data;
             break;
         case IO_SPG_HBLANK_INT:
-            std::printf("SPG_HBLANK_INT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_HBLANK_INT write32 = %08X\n", data);
         
             spg::set_hblank_interrupt(data);
             break;
         case IO_SPG_VBLANK_INT:
-            std::printf("SPG_VBLANK_INT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_VBLANK_INT write32 = %08X\n", data);
         
             spg::set_vblank_interrupt(data);
             break;
         case IO_SPG_CONTROL:
-            std::printf("SPG_CONTROL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_CONTROL write32 = %08X\n", data);
         
             spg::set_control(data);
             break;
         case IO_SPG_HBLANK:
-            std::printf("SPG_HBLANK write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_HBLANK write32 = %08X\n", data);
         
             spg::set_hblank_control(data);
             break;
         case IO_SPG_LOAD:
-            std::printf("SPG_LOAD write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_LOAD write32 = %08X\n", data);
         
             spg::set_load(data);
             break;
         case IO_SPG_VBLANK:
-            std::printf("SPG_VBLANK write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_VBLANK write32 = %08X\n", data);
         
             spg::set_vblank_control(data);
             break;
         case IO_SPG_WIDTH:
-            std::printf("SPG_WIDTH write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SPG_WIDTH write32 = %08X\n", data);
         
             spg::set_width(data);
             break;
         case IO_TEXT_CONTROL:
-            std::printf("TEXT_CONTROL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TEXT_CONTROL write32 = %08X\n", data);
         
             TEXT_CONTROL.raw = data;
             break;
         case IO_VO_CONTROL:
-            std::printf("VO_CONTROL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("VO_CONTROL write32 = %08X\n", data);
         
             VO_CONTROL.raw = data;
             break;
         case IO_VO_STARTX:
-            std::printf("VO_STARTX write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("VO_STARTX write32 = %08X\n", data);
         
             VO_STARTX = data;
             break;
         case IO_VO_STARTY:
-            std::printf("VO_STARTY write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("VO_STARTY write32 = %08X\n", data);
         
             VO_STARTY.raw = data;
             break;
         case IO_SCALER_CTL:
-            std::printf("SCALER_CTL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("SCALER_CTL write32 = %08X\n", data);
         
             SCALER_CTL.raw = data;
             break;
         case IO_PAL_RAM_CTRL:
-            std::printf("PAL_RAM_CTRL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("PAL_RAM_CTRL write32 = %08X\n", data);
         
             PAL_RAM_CTRL = data;
             break;
         case IO_FB_BURSTCTRL:
-            std::printf("FB_BURSTCTRL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("FB_BURSTCTRL write32 = %08X\n", data);
         
             FB_BURSTCTRL.raw = data;
             break;
         case IO_Y_COEFF:
-            std::printf("Y_COEFF write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("Y_COEFF write32 = %08X\n", data);
         
             Y_COEFF.raw = data;
             break;
         case IO_PT_ALPHA_REF:
-            std::printf("PT_ALPHA_REF write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("PT_ALPHA_REF write32 = %08X\n", data);
         
             pvr::set_alpha_reference(data);
             break;
         case IO_TA_OL_BASE:
-            std::printf("TA_OL_BASE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_OL_BASE write32 = %08X\n", data);
         
             ta::set_object_list_base(data);
             break;
         case IO_TA_ISP_BASE:
-            std::printf("TA_ISP_BASE write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_ISP_BASE write32 = %08X\n", data);
         
             ta::set_isp_list_base(data);
             break;
         case IO_TA_OL_LIMIT:
-            std::printf("TA_OL_LIMIT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_OL_LIMIT write32 = %08X\n", data);
         
             ta::set_object_list_limit(data);
             break;
         case IO_TA_ISP_LIMIT:
-            std::printf("TA_ISP_LIMIT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_ISP_LIMIT write32 = %08X\n", data);
         
             ta::set_isp_list_limit(data);
             break;
         case IO_TA_GLOB_TILE_CLIP:
-            std::printf("TA_GLOB_TILE_CLIP write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_GLOB_TILE_CLIP write32 = %08X\n", data);
         
             ta::set_global_tile_clip(data);
             break;
         case IO_TA_ALLOC_CTRL:
-            std::printf("TA_ALLOC_CTRL write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_ALLOC_CTRL write32 = %08X\n", data);
         
             ta::set_allocation_control(data);
             break;
         case IO_TA_LIST_INIT:
-            std::printf("TA_LIST_INIT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_LIST_INIT write32 = %08X\n", data);
         
             if ((data >> 31) != 0) {
                 ta::initialize_lists();
             }
             break;
         case IO_TA_NEXT_OPB_INIT:
-            std::printf("TA_NEXT_OPB_INIT write32 = %08X\n", data);
+            if constexpr (!SILENT_CORE) std::printf("TA_NEXT_OPB_INIT write32 = %08X\n", data);
         
             ta::set_next_object_pointer_block(data);
             break;
@@ -900,6 +902,14 @@ void write(const u32 addr, const u32 data) {
 template void write(u32, u8);
 template void write(u32, u16);
 template void write(u32, u64);
+
+u32 get_framebuffer_addr() {
+    return IO_FB_R_SOF1;
+}
+
+u32 get_stride() {
+    return 32 * TEXT_CONTROL.stride;
+}
 
 void begin_display_list() {
     ctx.display_lists.emplace(DisplayList{});
