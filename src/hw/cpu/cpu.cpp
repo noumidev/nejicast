@@ -2135,7 +2135,7 @@ void clear_interrupt(const int interrupt_level) {
 }
 
 void step() {
-    // ocio::tmu::step(ctx.cycles);
+    ocio::tmu::step(ctx.cycles);
 
     if (ctx.state == STATE_SLEEPING) {
         // Zzz...

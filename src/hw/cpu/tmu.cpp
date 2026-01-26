@@ -14,6 +14,8 @@
 
 namespace hw::cpu::ocio::tmu {
 
+constexpr bool TIMESTAMP_BASED_TIMERS = false;
+
 #define TOCR  ctx.timer_output_control
 #define TSTR  ctx.timer_start
 #define TCOR0 ctx.timers[TIMER_0].constant
@@ -92,7 +94,9 @@ u32 get_counter(const int channel) {
 
     assert(channel < NUM_CHANNELS);
 
-    return ctx.timers[channel].counter - ((scheduler::get_timestamp() - ctx.timers[channel].timestamp) / PRESCALERS[ctx.timers[channel].control.prescaler]);
+    if constexpr (TIMESTAMP_BASED_TIMERS) return ctx.timers[channel].counter - ((scheduler::get_timestamp() - ctx.timers[channel].timestamp) / PRESCALERS[ctx.timers[channel].control.prescaler]);
+
+    return ctx.timers[channel].counter;
 }
 
 u16 get_control(const int channel) {
@@ -110,10 +114,12 @@ void set_timer_start(const u8 data) {
 
     TSTR.raw = data;
 
-    for (int channel = 0; channel < NUM_CHANNELS; channel++) {
-        if (((old_start & (1 << channel)) == 0) && (((TSTR.raw & (1 << channel)) != 0))) {
-            // Timer is enabled
-            ctx.timers[channel].timestamp = scheduler::get_timestamp();
+    if constexpr (TIMESTAMP_BASED_TIMERS) {
+        for (int channel = 0; channel < NUM_CHANNELS; channel++) {
+            if (((old_start & (1 << channel)) == 0) && (((TSTR.raw & (1 << channel)) != 0))) {
+                // Timer is enabled
+                ctx.timers[channel].timestamp = scheduler::get_timestamp();
+            }
         }
     }
 }
@@ -129,8 +135,10 @@ void set_counter(const int channel, const u32 data) {
 
     ctx.timers[channel].counter = data;
 
-    if ((TSTR.raw & (1 << channel)) != 0) {
-        ctx.timers[channel].timestamp = scheduler::get_timestamp();
+    if constexpr (TIMESTAMP_BASED_TIMERS) {
+        if ((TSTR.raw & (1 << channel)) != 0) {
+            ctx.timers[channel].timestamp = scheduler::get_timestamp();
+        }
     }
 }
 
@@ -144,6 +152,10 @@ void step(const i64 cycles) {
     constexpr u32 PRESCALERS[5] = {
         4, 16, 64, 256, 1024,
     };
+
+    if (TIMESTAMP_BASED_TIMERS) {
+        return;
+    }
 
     for (int i = 0; i < NUM_CHANNELS; i++) {
         auto &timer = ctx.timers[i];
