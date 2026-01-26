@@ -34,6 +34,7 @@ struct Toc {
 } __attribute__((packed));
 
 void load(const char* path);
+bool is_mounted();
 
 SessionInfo request_session(const u8 num_session);
 Toc read_toc(const bool second_layer);

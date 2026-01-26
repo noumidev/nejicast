@@ -504,6 +504,8 @@ static void spi_req_stat() {
 
     ctx.data_out_bytes.resize(SPI_ALLOCATION_LENGTH_LO);
 
+    GD_SECTOR_NUMBER.disc_format = (common::cdi::is_mounted()) ? DISC_FORMAT_CDROM_XA : 0xF;
+
     ctx.data_in_bytes[0] = DRIVE_STATE_PAUSE;
     ctx.data_in_bytes[1] = GD_SECTOR_NUMBER.disc_format << 4;
 
@@ -785,8 +787,6 @@ void reset() {
 
     set_drive_state(DRIVE_STATE_PAUSE);
 
-    GD_SECTOR_NUMBER.disc_format = DISC_FORMAT_CDROM_XA;
-
     // TODO: set sense key "UNIT ATTENTION"?
 }
 
@@ -811,6 +811,8 @@ u8 read(const u32 addr) {
             return GD_ERROR.raw;
         case IO_GD_SECTOR_NUMBER:
             std::puts("GD_SECTOR_NUMBER read8");
+
+            GD_SECTOR_NUMBER.disc_format = (common::cdi::is_mounted()) ? DISC_FORMAT_CDROM_XA : 0xF;
 
             return GD_SECTOR_NUMBER.raw;
         case IO_GD_BYTE_COUNT_LO:

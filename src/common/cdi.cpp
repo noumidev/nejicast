@@ -222,6 +222,10 @@ void load(const char* path) {
     }
 }
 
+bool is_mounted() {
+    return ctx.cdi.file != nullptr;
+}
+
 enum {
     SUB_Q_NONE,
     SUB_Q_POSITION,
@@ -272,9 +276,10 @@ static inline u8 set_adr_control(const u8 adr, const u8 control) {
 }
 
 Toc read_toc(const bool second_layer) {
-    if (ctx.cdi.file == nullptr) {
+    if (!is_mounted()) {
         std::puts("CDI Failed to read TOC (CDI not loaded)");
-        exit(1);
+        
+        return Toc{};
     }
 
     Toc toc;
