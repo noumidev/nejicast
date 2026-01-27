@@ -3,7 +3,6 @@
  * Copyright (C) 2025  noumidev
  */
 
-#include "common/types.hpp"
 #include <hw/g1/gdrom.hpp>
 
 #include <cassert>
@@ -11,8 +10,9 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <nejicast.hpp>
 #include <scheduler.hpp>
-#include <common/cdi.hpp>
+#include <common/disc/disc.hpp>
 #include <hw/holly/intc.hpp>
 #include <hw/g1/g1.hpp>
 
@@ -98,8 +98,8 @@ struct {
         u8 raw;
 
         struct {
-            u8 status      : 4;
-            u8 disc_format : 4;
+            u8 status : 4;
+            u8        : 4; // Normally disc format, returned through a function here
         };
     } sector_number;
 
@@ -345,10 +345,6 @@ static void finish_dma_transfer(const int) {
     hw::holly::intc::assert_external_interrupt(GDROM_INTERRUPT);
 }
 
-enum {
-    DISC_FORMAT_CDROM_XA = 2,
-};
-
 static void spi_test_unit() {
     std::puts("SPI TEST_UNIT");
 
@@ -371,7 +367,7 @@ static void spi_cd_play() {
     // Dump CD-DA sectors
     /* FILE* file = std::fopen("cdda.bin", "w+b");
 
-    std::vector<u8> sector_bytes = common::cdi::read_sectors(start_fad, end_fad - start_fad - 150, true);
+    std::vector<u8> sector_bytes = nejicast::get_disc()->read_sectors(start_fad, end_fad - start_fad - 150, true);
 
     std::fwrite(sector_bytes.data(), 1, sector_bytes.size(), file);
     std::fclose(file); */
@@ -397,7 +393,7 @@ static void spi_cd_read() {
         num_sectors
     );
 
-    std::vector<u8> sector_bytes = common::cdi::read_sectors(fad, num_sectors);
+    std::vector<u8> sector_bytes = nejicast::get_disc()->read_sectors(fad, num_sectors);
 
     reset_data_out_buffer();
 
@@ -483,7 +479,7 @@ static void spi_req_ses() {
 
     reset_data_out_buffer();
 
-    common::cdi::SessionInfo session_info = common::cdi::request_session(SPI_SESSION_NUMBER);
+    common::disc::SessionInfo session_info = nejicast::get_disc()->request_session(SPI_SESSION_NUMBER);
 
     ctx.data_out_bytes.push_back(1);
     ctx.data_out_bytes.push_back(0);
@@ -504,10 +500,8 @@ static void spi_req_stat() {
 
     ctx.data_out_bytes.resize(SPI_ALLOCATION_LENGTH_LO);
 
-    GD_SECTOR_NUMBER.disc_format = (common::cdi::is_mounted()) ? DISC_FORMAT_CDROM_XA : 0xF;
-
     ctx.data_in_bytes[0] = DRIVE_STATE_PAUSE;
-    ctx.data_in_bytes[1] = GD_SECTOR_NUMBER.disc_format << 4;
+    ctx.data_in_bytes[1] = nejicast::get_disc()->get_disc_format() << 4;
 
     finish_spi_host_pio_command(SPI_ALLOCATION_LENGTH_LO);
 }
@@ -553,7 +547,7 @@ static void spi_get_toc() {
 
     reset_data_out_buffer();
 
-    const common::cdi::Toc toc = common::cdi::read_toc((ctx.data_in_bytes[1] & 1) != 0);
+    const common::disc::Toc toc = nejicast::get_disc()->read_toc((ctx.data_in_bytes[1] & 1) != 0);
 
     for (u16 i = 0; i < length; i++) {
         ctx.data_out_bytes.push_back(((u8*)&toc)[i]);
@@ -812,9 +806,7 @@ u8 read(const u32 addr) {
         case IO_GD_SECTOR_NUMBER:
             std::puts("GD_SECTOR_NUMBER read8");
 
-            GD_SECTOR_NUMBER.disc_format = (common::cdi::is_mounted()) ? DISC_FORMAT_CDROM_XA : 0xF;
-
-            return GD_SECTOR_NUMBER.raw;
+            return GD_SECTOR_NUMBER.raw | (nejicast::get_disc()->get_disc_format() << 4);
         case IO_GD_BYTE_COUNT_LO:
             std::puts("GD_BYTE_COUNT_LO read8");
 

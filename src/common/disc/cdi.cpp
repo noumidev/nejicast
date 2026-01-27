@@ -5,7 +5,7 @@
 
 // Thanks to washingtonDC for a lot of this code (https://github.com/washingtondc-emu/washingtondc/blob/master/src/libwashdc/cdi.c)
 
-#include <common/cdi.hpp>
+#include <common/disc/cdi.hpp>
 
 #include <cassert>
 #include <cstddef>
@@ -15,58 +15,29 @@
 #include <unistd.h>
 #include <vector>
 
-namespace common::cdi {
+namespace common::disc::cdi {
 
-struct Track {
-    u32 start;
-    u32 pregap_length;
-    u32 track_length;
-    u32 first_lba;
-    u32 total_length;
-    u32 sector_size;
-    u8 control;
-};
+Cdi::Cdi() {}
 
-struct Session {
-    u32 first_track;
+Cdi::~Cdi() {}
 
-    std::vector<Track> tracks;
-};
+void Cdi::seek_stream(const long offset, const int whence) {
+    assert(this->file != nullptr);
 
-struct Cdi {
-    FILE* file;
-
-    std::vector<Session> sessions;
-};
-
-struct {
-    Cdi cdi;
-} ctx;
-
-static void seek_stream(const long offset, const int whence = SEEK_CUR) {
-    if (ctx.cdi.file == nullptr) {
-        std::puts("Can't seek in unopened file");
-        exit(1);
-    }
-
-    std::fseek(ctx.cdi.file, offset, whence);
+    std::fseek(this->file, offset, whence);
 }
 
-static void read_stream(u8* bytes, const usize size, const long offset = 0, const int whence = SEEK_CUR) {
-    if (ctx.cdi.file == nullptr) {
-        std::puts("Can't read from unopened file");
-        exit(1);
-    }
+void Cdi::read_stream(u8* bytes, const usize size, const long offset, const int whence) {
+    assert(this->file != nullptr);
 
     seek_stream(offset, whence);
 
-    if (std::fread(bytes, sizeof(u8), size, ctx.cdi.file) != size) {
-        std::printf("Couldn't read %zu bytes @ %ld from CDI\n", size, offset);
-        exit(1);
-    }
+    const usize read_size = std::fread(bytes, sizeof(u8), size, this->file);
+
+    assert(read_size == size);
 }
 
-static long read_track(Track& track, long pos, const u32 cdi_version) {
+long Cdi::read_track(Track& track, long pos, const u32 cdi_version) {
     constexpr u8 TRACK_START[] = {
         0xFF, 0xFF, 0xFF, 0xFF,
         0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
@@ -77,21 +48,7 @@ static long read_track(Track& track, long pos, const u32 cdi_version) {
 
     read_stream(track_start, sizeof(track_start));
 
-    if (std::memcmp(track_start, TRACK_START, sizeof(track_start)) != 0) {
-        std::printf("CDI Invalid track start pattern (");
-
-        for (usize i = 0; i < sizeof(track_start); i++) {
-            std::printf("%02X", track_start[i]);
-
-            if (i == (sizeof(track_start) - 1)) {
-                std::printf(")\n");
-            } else {
-                std::printf(" ");
-            }
-        }
-
-        exit(1);
-    }
+    assert(std::memcmp(track_start, TRACK_START, sizeof(track_start)) == 0);
 
     track.start = pos;
 
@@ -111,17 +68,9 @@ static long read_track(Track& track, long pos, const u32 cdi_version) {
 
     read_stream((u8*)&select_sector_size, sizeof(select_sector_size), 16);
 
-    switch (select_sector_size) {
-        case 1:
-            track.sector_size = 2336;
-            break;
-        case 2:
-            track.sector_size = 2352;
-            break;
-        default:
-            std::printf("CDI Invalid sector size select byte %u\n", select_sector_size);
-            exit(1);
-    }
+    assert((select_sector_size == 1) || (select_sector_size == 2));
+
+    track.sector_size = (select_sector_size == 1) ? 2336 : 2352;
 
     read_stream(&track.control, sizeof(track.control), 3);
 
@@ -141,7 +90,7 @@ static long read_track(Track& track, long pos, const u32 cdi_version) {
     return pos + track.total_length * track.sector_size;
 }
 
-static long read_session(Session& session, long pos, const u32 cdi_version) {
+long Cdi::read_session(Session& session, long pos, const u32 cdi_version) {
     u16 num_tracks;
 
     read_stream((u8*)&num_tracks, sizeof(num_tracks));
@@ -160,14 +109,11 @@ static long read_session(Session& session, long pos, const u32 cdi_version) {
     return pos;
 }
 
-void load(const char* path) {
-    std::memset(&ctx, 0, sizeof(ctx));
+bool Cdi::load(const char* path) {
+    this->file = std::fopen(path, "rb");
 
-    ctx.cdi.file = std::fopen(path, "rb");
-
-    if (ctx.cdi.file == nullptr) {
-        std::puts("Failed to open CDI");
-        exit(1);
+    if (!is_mounted()) {
+        return false;
     }
 
     u32 version;
@@ -175,6 +121,10 @@ void load(const char* path) {
 
     read_stream((u8*)&version, sizeof(version), -8, SEEK_END);
     read_stream((u8*)&header_offset, sizeof(header_offset));
+
+    if ((version != 0x80000004) && (version != 0x80000005) && (version != 0x80000006)) {
+        return false;
+    }
 
     std::printf("CDI version = %08X, header offset = %08X\n", version, header_offset);
 
@@ -188,25 +138,22 @@ void load(const char* path) {
             // Header is at the end of the CDI file
             seek_stream(-header_offset, SEEK_END);
             break;
-        default:
-            std::printf("Unimplemented CDI version %08X\n", version);
-            exit(1);
     }
 
     u16 num_sessions;
 
     read_stream((u8*)&num_sessions, sizeof(num_sessions));
 
-    std::printf("Number of sessions = %u\n", num_sessions);
+    std::printf("CDI Number of sessions = %u\n", num_sessions);
 
-    ctx.cdi.sessions.resize(num_sessions);
+    this->sessions.resize(num_sessions);
 
     u32 num_tracks = 0;
 
     long pos = 0;
 
     for (u16 i = 0; i < num_sessions; i++) {
-        Session& session = ctx.cdi.sessions[i];
+        Session& session = this->sessions[i];
 
         if ((i != 0) && (version == 0x80000004)) {
             seek_stream(2);
@@ -220,10 +167,12 @@ void load(const char* path) {
 
         num_tracks += session.tracks.size();
     }
+
+    return true;
 }
 
-bool is_mounted() {
-    return ctx.cdi.file != nullptr;
+bool Cdi::is_mounted() {
+    return this->file != nullptr;
 }
 
 enum {
@@ -243,26 +192,19 @@ inline u32 lba_to_fad(const u32 lba) {
     return lba + PREGAP;
 }
 
-SessionInfo request_session(const u8 num_session) {
-    if (ctx.cdi.file == nullptr) {
-        std::puts("CDI Failed to request session info (CDI not loaded)");
-        exit(1);
-    }
-
-    if (num_session > ctx.cdi.sessions.size()) {
-        std::puts("CDI Session number out of bounds");
-        exit(1);
-    }
+SessionInfo Cdi::request_session(const u8 num_session) {
+    assert(is_mounted());
+    assert(num_session <= this->sessions.size());
 
     SessionInfo session_info;
 
     if (num_session == 0) {
-        const Track& leadout_track = ctx.cdi.sessions.back().tracks.back();
+        const Track& leadout_track = this->sessions.back().tracks.back();
     
-        session_info.start_track = ctx.cdi.sessions.size();
+        session_info.start_track = this->sessions.size();
         bswap24_to_buf(lba_to_fad(leadout_track.first_lba + leadout_track.track_length), session_info.leadout_fad);
     } else {
-        const Session& session = ctx.cdi.sessions[num_session - 1];
+        const Session& session = this->sessions[num_session - 1];
 
         session_info.start_track = session.first_track + 1;
         bswap24_to_buf(lba_to_fad(session.tracks.front().first_lba), session_info.leadout_fad);
@@ -275,21 +217,17 @@ static inline u8 set_adr_control(const u8 adr, const u8 control) {
     return (adr << 4) | control;
 }
 
-Toc read_toc(const bool second_layer) {
-    if (!is_mounted()) {
-        std::puts("CDI Failed to read TOC (CDI not loaded)");
-        
-        return Toc{};
-    }
+Toc Cdi::read_toc(const bool is_hd_region) {
+    assert(is_mounted());
 
     Toc toc;
 
     std::memset(&toc, 0, sizeof(toc));
 
-    if (!second_layer) {
+    if (!is_hd_region) {
         u32 num_tracks = 0;
 
-        for (const Session& session : ctx.cdi.sessions) {
+        for (const Session& session : this->sessions) {
             for (const Track& track : session.tracks) {
                 TocEntry& entry = toc.track_entries[num_tracks];
 
@@ -313,13 +251,10 @@ Toc read_toc(const bool second_layer) {
     return toc;
 }
 
-std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors, const bool is_cdda) {
+std::vector<u8> Cdi::read_sectors(const u32 fad, const u32 num_sectors, const bool is_cdda) {
     const u32 sector_size = is_cdda ? 2352 : 2048;
 
-    if (ctx.cdi.file == nullptr) {
-        std::puts("CDI Failed to read sectors (CDI not loaded)");
-        exit(1);
-    }
+    assert(is_mounted());
 
     // Prepare buffer for sector data
     std::vector<u8> sector_bytes;
@@ -329,16 +264,13 @@ std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors, const bool is
     const u32 lba = fad_to_lba(fad);
 
     // Find correct session/track
-    for (const Session& session : ctx.cdi.sessions) {
+    for (const Session& session : this->sessions) {
         for (const Track& track : session.tracks) {
             const u32 first_lba = track.first_lba;
             const u32 track_length = track.track_length;
 
             if ((lba >= first_lba) && (lba < (first_lba + track_length))) {
-                /* if ((lba + num_sectors) > (first_lba + track_length)) {
-                    std::puts("CDI LBA out of bounds");
-                    exit(1);
-                } */
+                assert((lba + num_sectors) < (first_lba + track_length));
 
                 for (u32 sector = 0; sector < num_sectors; sector++) {
                     read_stream(
@@ -354,8 +286,7 @@ std::vector<u8> read_sectors(const u32 fad, const u32 num_sectors, const bool is
         }
     }
 
-    std::puts("CDI Failed to read sectors");
-    exit(1);
+    assert(false);
 }
 
 }

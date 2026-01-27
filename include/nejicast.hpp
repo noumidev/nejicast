@@ -7,6 +7,7 @@
 
 #include <common/config.hpp>
 #include <common/types.hpp>
+#include <common/disc/disc.hpp>
 
 namespace nejicast {
 
@@ -18,6 +19,8 @@ u16 get_button_state();
 void initialize(const common::Config& config);
 void reset();
 void shutdown();
+
+common::disc::Disc* get_disc();
 
 void sideload(const u32 entry);
 

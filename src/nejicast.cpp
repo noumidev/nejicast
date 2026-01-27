@@ -14,9 +14,9 @@
 #include <cstring>
 
 #include <scheduler.hpp>
-#include <common/cdi.hpp>
 #include <common/elf.hpp>
 #include <common/file.hpp>
+#include <common/disc/dummy.hpp>
 #include <hw/aica/aica.hpp>
 #include <hw/cpu/cpu.hpp>
 #include <hw/g1/g1.hpp>
@@ -85,6 +85,8 @@ u16 get_button_state() {
     return BUTTON_STATE;
 }
 
+common::disc::Disc* disc = nullptr;
+
 void initialize(const common::Config& config) {
     scheduler::initialize();
 
@@ -99,9 +101,10 @@ void initialize(const common::Config& config) {
     if (config.app_path != nullptr) {
         if (common::elf::is_elf(config.app_path)) {
             common::elf::load(config.app_path);
+
+            disc = new common::disc::DummyDisc;
         } else {
-            // Assume CDI
-            common::cdi::load(config.app_path);
+            disc = common::disc::mount_disc(config.app_path);
         }
     }
 }
@@ -116,6 +119,8 @@ void shutdown() {
     hw::holly::shutdown();
     hw::maple::shutdown();
     hw::pvr::shutdown();
+
+    delete disc;
 }
 
 void reset() {
@@ -128,6 +133,10 @@ void reset() {
     hw::holly::reset();
     hw::maple::reset();
     hw::pvr::reset();
+}
+
+common::disc::Disc* get_disc() {
+    return disc;
 }
 
 void sideload(const u32 entry) {

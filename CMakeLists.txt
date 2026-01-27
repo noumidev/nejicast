@@ -27,9 +27,11 @@ add_subdirectory(external/SDL EXCLUDE_FROM_ALL)
 set(SOURCES
     src/nejicast.cpp
     src/scheduler.cpp
-    src/common/cdi.cpp
     src/common/elf.cpp
     src/common/file.cpp
+    src/common/disc/cdi.cpp
+    src/common/disc/disc.cpp
+    src/common/disc/gdi.cpp
     src/hw/aica/aica.cpp
     src/hw/aica/arm.cpp
     src/hw/aica/bus.cpp
@@ -66,11 +68,14 @@ set(SOURCES
 set(HEADERS
     include/nejicast.hpp
     include/scheduler.hpp
-    include/common/cdi.hpp
     include/common/config.hpp
     include/common/elf.hpp
     include/common/file.hpp
     include/common/types.hpp
+    include/common/disc/cdi.hpp
+    include/common/disc/disc.hpp
+    include/common/disc/dummy.hpp
+    include/common/disc/gdi.hpp
     include/hw/aica/aica.hpp
     include/hw/aica/arm.hpp
     include/hw/aica/bus.hpp
