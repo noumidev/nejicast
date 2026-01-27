@@ -1,6 +1,6 @@
 /*
  * nejicast is a Sega Dreamcast emulator.
- * Copyright (C) 2025  noumidev
+ * Copyright (C) 2025-2026  noumidev
  */
 
 #include <hw/g1/flash.hpp>

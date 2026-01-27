@@ -1,6 +1,6 @@
 /*
  * nejicast is a Sega Dreamcast emulator.
- * Copyright (C) 2025  noumidev
+ * Copyright (C) 2025-2026  noumidev
  */
 
 // Thanks to washingtonDC for a lot of this code (https://github.com/washingtondc-emu/washingtondc/blob/master/src/libwashdc/cdi.c)
